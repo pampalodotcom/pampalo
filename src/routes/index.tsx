@@ -1,87 +1,265 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { useEffect, useRef, useState } from 'react'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { Fingerprint, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { BeachScene } from '@/components/pampalo/BeachScene'
+import { BrandLockup } from '@/components/pampalo/BrandLockup'
+import { MnemonicReveal } from '@/components/pampalo/MnemonicReveal'
+import { PrimaryButton } from '@/components/pampalo/PrimaryButton'
+import { WarningChip } from '@/components/pampalo/WarningChip'
+import { useAuth } from '@/lib/auth'
+import {
+  completeConditionalSignIn,
+  finalizeNewWallet,
+  markMnemonicConfirmed,
+  registerNewWallet,
+  signInWithExistingPasskey,
+  type NewWalletDraft,
+} from '@/lib/auth-flow'
+import { isConditionalUIAvailable, startConditionalGet } from '@/lib/passkey'
+import { postJson } from '@/lib/http'
 
-export const Route = createFileRoute('/')({ component: App })
+export const Route = createFileRoute('/')({ component: Landing })
 
-function App() {
+type LocalUiState =
+  | { kind: 'idle' }
+  | { kind: 'registering' }
+  | { kind: 'signing-in' }
+  | { kind: 'reveal'; draft: NewWalletDraft }
+
+function Landing() {
+  const navigate = useNavigate()
+  const auth = useAuth()
+  const [ui, setUi] = useState<LocalUiState>({ kind: 'idle' })
+  const conditionalAbortRef = useRef<AbortController | null>(null)
+
+  // Already authenticated → bounce to /wallet.
+  useEffect(() => {
+    if (auth.state.status === 'authenticated') {
+      void navigate({ to: '/wallet' })
+    }
+  }, [auth.state.status, navigate])
+
+  // Conditional-mediation autofill ceremony, AUTH.md §6.5. Best-effort.
+  useEffect(() => {
+    if (auth.state.status !== 'anonymous') return
+    const lifecycle = new AbortController()
+    ;(async () => {
+      try {
+        if (!(await isConditionalUIAvailable())) return
+        const start = await postJson<
+          Record<string, never>,
+          { challenge: string; rpId: string }
+        >('/auth/authentication/start', {})
+        if (lifecycle.signal.aborted) return
+
+        const ceremony = new AbortController()
+        conditionalAbortRef.current = ceremony
+        const { assertion } = await startConditionalGet({
+          challenge: start.challenge,
+          rpId: start.rpId,
+          signal: ceremony.signal,
+        })
+        // TS narrows .aborted to false after the prior check; the lint
+        // believes that, but it can flip mid-await.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (lifecycle.signal.aborted) return
+
+        const address = await completeConditionalSignIn(assertion)
+        finalizeAddressIntoState(address)
+        toast(`Signed in as ${shortAddress(address)}`)
+        void navigate({ to: '/wallet' })
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') return
+        // Conditional ceremony silently no-ops on most failures (no creds, etc).
+      }
+    })()
+    return () => {
+      lifecycle.abort()
+      conditionalAbortRef.current?.abort()
+      conditionalAbortRef.current = null
+    }
+    // The conditional ceremony only needs to be re-armed when auth status
+    // changes (e.g. after sign-out). React-hooks/exhaustive-deps isn't part
+    // of the local config but the disable comment is harmless.
+  }, [auth.state.status])
+
+  function finalizeAddressIntoState(_address: string) {
+    auth.refreshAddress()
+  }
+
+  async function onSignIn() {
+    conditionalAbortRef.current?.abort()
+    setUi({ kind: 'signing-in' })
+    try {
+      const address = await signInWithExistingPasskey()
+      finalizeAddressIntoState(address)
+      toast(`Signed in as ${shortAddress(address)}`)
+      void navigate({ to: '/wallet' })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Sign-in failed.'
+      if (msg.toLowerCase().includes('not allowed')) {
+        toast('No passkeys available on this device.')
+      } else {
+        toast.error(msg)
+      }
+      setUi({ kind: 'idle' })
+    }
+  }
+
+  async function onCreate() {
+    conditionalAbortRef.current?.abort()
+    setUi({ kind: 'registering' })
+    try {
+      const draft = await registerNewWallet('My Pampalo wallet')
+      setUi({ kind: 'reveal', draft })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Wallet creation failed.'
+      toast.error(msg)
+      setUi({ kind: 'idle' })
+    }
+  }
+
+  function onMnemonicConfirmed() {
+    if (ui.kind !== 'reveal') return
+    const draft = ui.draft
+    finalizeNewWallet(draft)
+    finalizeAddressIntoState(draft.address)
+    // Fire-and-forget: nav to wallet immediately; the mutation runs in the
+    // background. If it fails we surface a toast but don't block the UX.
+    markMnemonicConfirmed(draft.sessionToken).catch((e: unknown) => {
+      const msg =
+        e instanceof Error ? e.message : 'Couldn’t save backup status.'
+      toast.error(msg)
+    })
+    void navigate({ to: '/wallet' })
+  }
+
+  function onMnemonicSkipped() {
+    if (ui.kind !== 'reveal') return
+    finalizeNewWallet(ui.draft)
+    finalizeAddressIntoState(ui.draft.address)
+    // No mutation — wallet.mnemonicConfirmedAt stays null on the server.
+    void navigate({ to: '/wallet' })
+  }
+
+  const knownDevice =
+    auth.state.status === 'anonymous' ? auth.state.knownDevice : false
+
   return (
-    <main className="page-wrap px-4 pb-8 pt-14">
-      <section className="island-shell rise-in relative overflow-hidden rounded-[2rem] px-6 py-10 sm:px-10 sm:py-14">
-        <div className="pointer-events-none absolute -left-20 -top-24 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(79,184,178,0.32),transparent_66%)]" />
-        <div className="pointer-events-none absolute -bottom-20 -right-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(47,106,74,0.18),transparent_66%)]" />
-        <p className="island-kicker mb-3">TanStack Start Base Template</p>
-        <h1 className="display-title mb-5 max-w-3xl text-4xl leading-[1.02] font-bold tracking-tight text-[var(--sea-ink)] sm:text-6xl">
-          Start simple, ship quickly.
-        </h1>
-        <p className="mb-8 max-w-2xl text-base text-[var(--sea-ink-soft)] sm:text-lg">
-          This base starter intentionally keeps things light: two routes, clean
-          structure, and the essentials you need to build from scratch.
-        </p>
-        <div className="flex flex-wrap gap-3">
+    <main className="phone-shell flex min-h-dvh flex-col">
+      {/* Full-width beach band; brand floats over it inside the centered column */}
+      <div className="relative shrink-0 w-full">
+        <BeachScene height={420} />
+        <div className="absolute inset-x-0 top-12 z-10">
+          <div className="phone-column px-6">
+            <BrandLockup />
+          </div>
+        </div>
+      </div>
+
+      {/* Centered foreground column */}
+      <div className="phone-column flex flex-1 flex-col">
+        {/* Hero card overlaps the scene's bottom fade */}
+        <section className="relative z-10 -mt-10 mx-4 mb-8 rise-in rounded-3xl card-cream px-5 pt-6 pb-5">
+          {ui.kind === 'reveal' ? (
+            <MnemonicReveal
+              mnemonic={ui.draft.mnemonic}
+              address={ui.draft.address}
+              onConfirmed={onMnemonicConfirmed}
+              onSkip={onMnemonicSkipped}
+            />
+          ) : (
+            <>
+              <p className="eyebrow mb-3">Pampalo · Private Money</p>
+              <h1 className="display-xl mb-4">
+                Easy
+                <br />
+                Money.
+              </h1>
+              <p className="mb-5 text-[14.5px] leading-relaxed text-ink-soft">
+                Pampalo uses passkey for your account, no passwords. Once you
+                create your account, you can utilise the next generation of
+                privacy enhancing financial technologies.
+              </p>
+
+              <div className="flex flex-col gap-3">
+                {auth.state.status === 'loading' ? (
+                  // Hold a neutral loading state until the cookie bootstrap
+                  // resolves; otherwise the button label snaps from
+                  // "Get started" to "Sign in with Passkey" on mount.
+                  <PrimaryButton disabled aria-busy="true">
+                    <Loader2 className="size-[18px] animate-spin" />
+                    <span className="opacity-0">Sign in with Passkey</span>
+                  </PrimaryButton>
+                ) : knownDevice ? (
+                  <PrimaryButton onClick={onSignIn} disabled={busy(ui)}>
+                    {ui.kind === 'signing-in' ? (
+                      <>
+                        <Loader2 className="size-[18px] animate-spin" />
+                        Signing in with Passkey…
+                      </>
+                    ) : (
+                      <>
+                        <Fingerprint className="size-[18px]" />
+                        Sign in with Passkey
+                      </>
+                    )}
+                  </PrimaryButton>
+                ) : (
+                  <PrimaryButton onClick={onCreate} disabled={busy(ui)}>
+                    {ui.kind === 'registering' ? (
+                      <>
+                        <Loader2 className="size-[18px] animate-spin" />
+                        Registering passkey…
+                      </>
+                    ) : (
+                      <>
+                        <Fingerprint className="size-[18px]" />
+                        Get started
+                      </>
+                    )}
+                  </PrimaryButton>
+                )}
+              </div>
+
+              <div className="mt-3">
+                <WarningChip />
+              </div>
+            </>
+          )}
+        </section>
+
+        <p className="mt-auto pb-6 text-center text-[11px] text-ink-mute">
+          By continuing you agree to the{' '}
           <a
-            href="/about"
-            className="rounded-full border border-[rgba(50,143,151,0.3)] bg-[rgba(79,184,178,0.14)] px-5 py-2.5 text-sm font-semibold text-[var(--lagoon-deep)] no-underline transition hover:-translate-y-0.5 hover:bg-[rgba(79,184,178,0.24)]"
-          >
-            About This Starter
-          </a>
-          <a
-            href="https://tanstack.com/router"
+            href="/Pampalo-Terms-of-Service.pdf"
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-full border border-[rgba(23,58,64,0.2)] bg-white/50 px-5 py-2.5 text-sm font-semibold text-[var(--sea-ink)] no-underline transition hover:-translate-y-0.5 hover:border-[rgba(23,58,64,0.35)]"
+            className="underline"
           >
-            Router Guide
+            Terms and Conditions
           </a>
-        </div>
-      </section>
+        </p>
+      </div>
 
-      <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          [
-            'Type-Safe Routing',
-            'Routes and links stay in sync across every page.',
-          ],
-          [
-            'Server Functions',
-            'Call server code from your UI without creating API boilerplate.',
-          ],
-          [
-            'Streaming by Default',
-            'Ship progressively rendered responses for faster experiences.',
-          ],
-          [
-            'Tailwind Native',
-            'Design quickly with utility-first styling and reusable tokens.',
-          ],
-        ].map(([title, desc], index) => (
-          <article
-            key={title}
-            className="island-shell feature-card rise-in rounded-2xl p-5"
-            style={{ animationDelay: `${index * 90 + 80}ms` }}
-          >
-            <h2 className="mb-2 text-base font-semibold text-[var(--sea-ink)]">
-              {title}
-            </h2>
-            <p className="m-0 text-sm text-[var(--sea-ink-soft)]">{desc}</p>
-          </article>
-        ))}
-      </section>
-
-      <section className="island-shell mt-8 rounded-2xl p-6">
-        <p className="island-kicker mb-2">Quick Start</p>
-        <ul className="m-0 list-disc space-y-2 pl-5 text-sm text-[var(--sea-ink-soft)]">
-          <li>
-            Edit <code>src/routes/index.tsx</code> to customize the home page.
-          </li>
-          <li>
-            Update <code>src/components/Header.tsx</code> and{' '}
-            <code>src/components/Footer.tsx</code> for brand links.
-          </li>
-          <li>
-            Add routes in <code>src/routes</code> and tweak visual tokens in{' '}
-            <code>src/styles.css</code>.
-          </li>
-        </ul>
-      </section>
+      {/* Anchor for conditional mediation autofill on browsers that need it. */}
+      <input
+        aria-hidden
+        type="text"
+        autoComplete="username webauthn"
+        tabIndex={-1}
+        className="sr-only"
+      />
     </main>
   )
+}
+
+function busy(ui: LocalUiState): boolean {
+  return ui.kind === 'registering' || ui.kind === 'signing-in'
+}
+
+function shortAddress(addr: string): string {
+  if (!addr || addr.length < 10) return addr
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`
 }

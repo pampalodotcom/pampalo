@@ -1,40 +1,43 @@
-import { type QueryClient } from '@tanstack/react-query'
+import { type QueryClient } from "@tanstack/react-query";
 import {
+  createRootRouteWithContext,
+  HeadContent,
   Outlet,
   Scripts,
-  HeadContent,
-  createRootRouteWithContext,
-} from '@tanstack/react-router'
-import * as React from 'react'
-import appCss from '../styles.css?url'
+} from "@tanstack/react-router";
+import * as React from "react";
+import appCss from "../styles.css?url";
+import { AuthProvider } from "@/lib/auth";
+import { Toaster } from "@/components/ui/sonner";
 
 export const Route = createRootRouteWithContext<{
-  queryClient: QueryClient
+  queryClient: QueryClient;
 }>()({
   head: () => ({
     meta: [
+      { charSet: "utf-8" },
       {
-        charSet: 'utf-8',
+        name: "viewport",
+        content:
+          "width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1",
       },
-      {
-        name: 'viewport',
-        content: 'width=device-width, initial-scale=1',
-      },
-      {
-        title: 'TanStack Start Starter',
-      },
+      { name: "theme-color", content: "#faf6ea" },
+      { title: "Pampalo" },
     ],
-    links: [{ rel: 'stylesheet', href: appCss }],
+    links: [{ rel: "stylesheet", href: appCss }],
   }),
   component: RootComponent,
-})
+});
 
 function RootComponent() {
   return (
     <RootDocument>
-      <Outlet />
+      <AuthProvider>
+        <Outlet />
+        <Toaster position="top-center" />
+      </AuthProvider>
     </RootDocument>
-  )
+  );
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {
@@ -43,10 +46,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <head>
         <HeadContent />
       </head>
-      <body suppressHydrationWarning>
+      <body suppressHydrationWarning className="bg-paper text-ink">
         {children}
         <Scripts />
       </body>
     </html>
-  )
+  );
 }
