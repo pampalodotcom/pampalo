@@ -19,12 +19,14 @@ import {
   importDekBytes,
   zeroBytes,
 } from "./crypto";
+import { deriveAddresses } from "./derive-addresses";
+import type { DerivedAddresses } from "./derive-addresses";
 import { base64UrlToBuffer, bufferToBase64Url, utf8ToBuffer, bufferToUtf8 } from "./encoding";
 import { postJson } from "./http";
 import {
   clearAll,
   getBlob,
-  setAddress,
+  setAddresses,
   setBlob,
   setSessionToken,
 } from "./keystore";
@@ -69,7 +71,7 @@ type BootstrapRes = {
 
 export type NewWalletDraft = {
   mnemonic: string;
-  address: string;
+  addresses: DerivedAddresses;
   sessionToken: string;
 };
 
@@ -81,7 +83,7 @@ export async function registerNewWallet(_unusedLabel?: string): Promise<NewWalle
   const wallet = Wallet.createRandom();
   const mnemonic = wallet.mnemonic?.phrase;
   if (!mnemonic) throw new Error("ethers did not return a mnemonic");
-  const address = wallet.address;
+  const addresses = deriveAddresses(wallet);
   const passkeyDisplayName = "Pampalo";
 
   // 2. Server start (records the random userIdBytes + challenge).
@@ -150,10 +152,10 @@ export async function registerNewWallet(_unusedLabel?: string): Promise<NewWalle
       completeBody,
     );
 
-    // 6. Address is already derived above; surface it back to the caller.
+    // 6. Addresses are already derived above; surface them back to the caller.
     return {
       mnemonic,
-      address,
+      addresses,
       sessionToken: complete.sessionToken,
     };
   } finally {
@@ -179,7 +181,7 @@ export function finalizeNewWallet(draft: NewWalletDraft): void {
   // Mnemonic is intentionally NOT cached. The blob is repopulated via
   // /auth/bootstrap on the next page navigation.
   setSessionToken(draft.sessionToken);
-  setAddress(draft.address);
+  setAddresses(draft.addresses);
 }
 
 // Marks the wallet's mnemonic as confirmed server-side. Called when the
@@ -281,9 +283,9 @@ export async function reAuthenticate(): Promise<string> {
   let wallet: HDNodeWallet | null = null;
   try {
     wallet = Wallet.fromPhrase(mnemonic);
-    const address = wallet.address;
-    setAddress(address);
-    return address;
+    const addresses = deriveAddresses(wallet);
+    setAddresses(addresses);
+    return addresses.evm;
   } finally {
     new Uint8Array(dekBytes).fill(0);
     new Uint8Array(mnemonicBuf).fill(0);
@@ -373,10 +375,10 @@ async function unlockWith(
   let wallet: HDNodeWallet | null = null;
   try {
     wallet = Wallet.fromPhrase(mnemonic);
-    const address = wallet.address;
-    setAddress(address);
+    const addresses = deriveAddresses(wallet);
+    setAddresses(addresses);
     setSessionToken(sessionToken);
-    return address;
+    return addresses.evm;
   } finally {
     // Best-effort scrub.
     new Uint8Array(dekBytes).fill(0);

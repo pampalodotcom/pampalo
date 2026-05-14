@@ -18,9 +18,10 @@ import {
   reAuthenticate as runReAuthenticate,
   signOut as runSignOut,
 } from "./auth-flow";
+import type { DerivedAddresses } from "./derive-addresses";
 import {
   clearAll,
-  getAddress,
+  getAddresses,
   getSessionToken,
   setBlob,
   type EncryptedBlob,
@@ -29,12 +30,16 @@ import {
 type AuthState =
   | { status: "loading" }
   | { status: "anonymous"; knownDevice: boolean }
-  | { status: "authenticated"; sessionToken: string; address: string | null };
+  | {
+      status: "authenticated";
+      sessionToken: string;
+      addresses: DerivedAddresses | null;
+    };
 
 type AuthContextValue = {
   state: AuthState;
   refreshAddress: () => void;
-  reAuth: () => Promise<string>;
+  reAuth: () => Promise<DerivedAddresses>;
   signOut: () => Promise<void>;
 };
 
@@ -65,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setState({
           status: "authenticated",
           sessionToken: boot.sessionToken,
-          address: getAddress(),
+          addresses: getAddresses(),
         });
       } catch {
         if (ac.signal.aborted) return;
@@ -110,16 +115,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthContextValue = {
     state,
     refreshAddress: () => {
-      // Pull authoritative session+address from the keystore. Used after
-      // registration / sign-in to promote the React state into authenticated
-      // even if it was previously anonymous.
+      // Pull authoritative session + derived addresses from the keystore.
+      // Used after registration / sign-in to promote the React state into
+      // authenticated even if it was previously anonymous.
       const token = getSessionToken();
-      const addr = getAddress();
+      const a = getAddresses();
       if (token) {
         setState({
           status: "authenticated",
           sessionToken: token,
-          address: addr,
+          addresses: a,
         });
       } else {
         setState({
@@ -129,17 +134,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     },
     reAuth: async () => {
-      const address = await runReAuthenticate();
-      // Promote the React state so the wallet view picks up the address.
+      await runReAuthenticate();
+      const a = getAddresses();
       const token = getSessionToken();
       if (token) {
         setState({
           status: "authenticated",
           sessionToken: token,
-          address,
+          addresses: a,
         });
       }
-      return address;
+      if (!a) throw new Error("Addresses missing after re-auth");
+      return a;
     },
     signOut: async () => {
       await runSignOut();

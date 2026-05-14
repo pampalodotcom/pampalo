@@ -127,7 +127,7 @@ function Landing() {
     if (ui.kind !== 'reveal') return
     const draft = ui.draft
     finalizeNewWallet(draft)
-    finalizeAddressIntoState(draft.address)
+    finalizeAddressIntoState(draft.addresses.evm)
     // Fire-and-forget: nav to wallet immediately; the mutation runs in the
     // background. If it fails we surface a toast but don't block the UX.
     markMnemonicConfirmed(draft.sessionToken).catch((e: unknown) => {
@@ -141,7 +141,7 @@ function Landing() {
   function onMnemonicSkipped() {
     if (ui.kind !== 'reveal') return
     finalizeNewWallet(ui.draft)
-    finalizeAddressIntoState(ui.draft.address)
+    finalizeAddressIntoState(ui.draft.addresses.evm)
     // No mutation — wallet.mnemonicConfirmedAt stays null on the server.
     void navigate({ to: '/wallet' })
   }
@@ -173,7 +173,7 @@ function Landing() {
           {ui.kind === 'reveal' ? (
             <MnemonicReveal
               mnemonic={ui.draft.mnemonic}
-              address={ui.draft.address}
+              address={ui.draft.addresses.evm}
               onConfirmed={onMnemonicConfirmed}
               onSkip={onMnemonicSkipped}
             />
