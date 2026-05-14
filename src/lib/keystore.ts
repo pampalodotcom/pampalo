@@ -9,15 +9,20 @@ import type { DerivedAddresses } from "./derive-addresses";
 
 export type EncryptedBlobCredential = {
   credentialId: ArrayBuffer;
-  prfSalt: ArrayBuffer;
-  wrappedDek: ArrayBuffer;
-  wrappedDekIv: ArrayBuffer;
+  // PRF-only fields. Absent for credentials bound to passphrase wallets.
+  prfSalt: ArrayBuffer | null;
+  wrappedDek: ArrayBuffer | null;
+  wrappedDekIv: ArrayBuffer | null;
   label: string;
 };
 
 export type EncryptedBlob = {
-  mnemonicCiphertext: ArrayBuffer;
-  mnemonicIv: ArrayBuffer;
+  protectionScheme: "prf" | "passphrase";
+  // PRF-only fields.
+  mnemonicCiphertext: ArrayBuffer | null;
+  mnemonicIv: ArrayBuffer | null;
+  // Passphrase-only field — ethers encrypted JSON keystore string.
+  encryptedJson: string | null;
   credentials: Array<EncryptedBlobCredential>;
 };
 

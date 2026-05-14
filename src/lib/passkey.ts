@@ -72,7 +72,10 @@ export async function runGetForPrf(opts: {
   challenge: string; // base64url
   rpId: string;
   allowCredentialId?: string; // base64url; required to scope to a specific cred
-}): Promise<{ assertion: AuthenticationResponseJSON; prfOutput: ArrayBuffer }> {
+}): Promise<{
+  assertion: AuthenticationResponseJSON;
+  prfOutput: ArrayBuffer | null;
+}> {
   const salt = await getGlobalPrfSalt();
 
   const assertion = await swaStartAuthentication({
@@ -97,13 +100,7 @@ export async function runGetForPrf(opts: {
     },
   });
 
-  const prfOutput = extractPrfFirst(assertion);
-  if (!prfOutput) {
-    throw new Error(
-      "Authenticator did not return a PRF output. Your device or browser may not support the PRF extension.",
-    );
-  }
-  return { assertion, prfOutput };
+  return { assertion, prfOutput: extractPrfFirst(assertion) };
 }
 
 export function extractPrfFirst(

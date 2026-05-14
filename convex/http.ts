@@ -152,14 +152,21 @@ http.route({
     type Body = {
       userIdBytes: string;
       attestation: unknown;
-      walletPayload: {
-        mnemonicCiphertext: string;
-        mnemonicIv: string;
-        wrappedDek: string;
-        wrappedDekIv: string;
-        prfSalt: string;
-        label?: string;
-      };
+      walletPayload:
+        | {
+            scheme: "prf";
+            mnemonicCiphertext: string;
+            mnemonicIv: string;
+            wrappedDek: string;
+            wrappedDekIv: string;
+            prfSalt: string;
+            label?: string;
+          }
+        | {
+            scheme: "passphrase";
+            encryptedJson: string;
+            label?: string;
+          };
     };
     let body: Body;
     try {
@@ -170,6 +177,7 @@ http.route({
 
     let result: { sessionToken: string; expiresAt: number };
     try {
+      const wp = body.walletPayload;
       result = await ctx.runAction(
         internal.authNode.verifyAndCompleteRegistration,
         {
@@ -179,18 +187,24 @@ http.route({
             req.headers.get("Origin") ??
             (allowedOrigins()[0] ?? "http://localhost:3000"),
           attestation: body.attestation,
-          walletPayload: {
-            mnemonicCiphertext: base64UrlToArrayBuffer(
-              body.walletPayload.mnemonicCiphertext,
-            ),
-            mnemonicIv: base64UrlToArrayBuffer(body.walletPayload.mnemonicIv),
-            wrappedDek: base64UrlToArrayBuffer(body.walletPayload.wrappedDek),
-            wrappedDekIv: base64UrlToArrayBuffer(
-              body.walletPayload.wrappedDekIv,
-            ),
-            prfSalt: base64UrlToArrayBuffer(body.walletPayload.prfSalt),
-            label: body.walletPayload.label ?? "Primary passkey",
-          },
+          walletPayload:
+            wp.scheme === "prf"
+              ? {
+                  scheme: "prf" as const,
+                  mnemonicCiphertext: base64UrlToArrayBuffer(
+                    wp.mnemonicCiphertext,
+                  ),
+                  mnemonicIv: base64UrlToArrayBuffer(wp.mnemonicIv),
+                  wrappedDek: base64UrlToArrayBuffer(wp.wrappedDek),
+                  wrappedDekIv: base64UrlToArrayBuffer(wp.wrappedDekIv),
+                  prfSalt: base64UrlToArrayBuffer(wp.prfSalt),
+                  label: wp.label ?? "Primary passkey",
+                }
+              : {
+                  scheme: "passphrase" as const,
+                  encryptedJson: wp.encryptedJson,
+                  label: wp.label ?? "Primary passkey",
+                },
         },
       );
     } catch (e) {
@@ -351,17 +365,25 @@ http.route({
       sessionToken: blob.sessionToken,
       sessionExpiresAt: blob.sessionExpiresAt,
       wallet: {
-        mnemonicCiphertext: arrayBufferToBase64Url(
-          blob.wallet.mnemonicCiphertext,
-        ),
-        mnemonicIv: arrayBufferToBase64Url(blob.wallet.mnemonicIv),
+        protectionScheme: blob.wallet.protectionScheme,
+        mnemonicCiphertext: blob.wallet.mnemonicCiphertext
+          ? arrayBufferToBase64Url(blob.wallet.mnemonicCiphertext)
+          : null,
+        mnemonicIv: blob.wallet.mnemonicIv
+          ? arrayBufferToBase64Url(blob.wallet.mnemonicIv)
+          : null,
+        encryptedJson: blob.wallet.encryptedJson,
         mnemonicConfirmedAt: blob.wallet.mnemonicConfirmedAt,
       },
       credentials: blob.credentials.map((c) => ({
         credentialId: arrayBufferToBase64Url(c.credentialId),
-        prfSalt: arrayBufferToBase64Url(c.prfSalt),
-        wrappedDek: arrayBufferToBase64Url(c.wrappedDek),
-        wrappedDekIv: arrayBufferToBase64Url(c.wrappedDekIv),
+        prfSalt: c.prfSalt ? arrayBufferToBase64Url(c.prfSalt) : null,
+        wrappedDek: c.wrappedDek
+          ? arrayBufferToBase64Url(c.wrappedDek)
+          : null,
+        wrappedDekIv: c.wrappedDekIv
+          ? arrayBufferToBase64Url(c.wrappedDekIv)
+          : null,
         label: c.label,
       })),
     });

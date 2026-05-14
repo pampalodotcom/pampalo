@@ -11,8 +11,23 @@ export default defineSchema({
 
   wallets: defineTable({
     userId: v.id("users"),
-    mnemonicCiphertext: v.bytes(),
-    mnemonicIv: v.bytes(),
+    // Encryption scheme.
+    //   - "prf": mnemonic encrypted with a DEK; DEK wrapped under each
+    //     credential's PRF-derived KEK. Uses mnemonicCiphertext/mnemonicIv.
+    //   - "passphrase": ethers' encrypted JSON keystore (scrypt + AES-CTR),
+    //     used when the passkey provider doesn't expose the PRF extension
+    //     (e.g. some 1Password configurations on iOS). Uses encryptedJson.
+    // Optional + missing → treat as "prf" for back-compat with rows written
+    // before this column existed.
+    protectionScheme: v.optional(
+      v.union(v.literal("prf"), v.literal("passphrase")),
+    ),
+    // PRF-protected wallets only.
+    mnemonicCiphertext: v.optional(v.bytes()),
+    mnemonicIv: v.optional(v.bytes()),
+    // Passphrase-protected wallets only. JSON string per the EIP-2335
+    // (ethers) keystore format; produced by `wallet.encrypt(passphrase)`.
+    encryptedJson: v.optional(v.string()),
     createdAt: v.number(),
     // Set when the user successfully completes the 3-word confirmation
     // step. Absent if they skipped it ("Do it later") or haven't seen it.
@@ -26,9 +41,10 @@ export default defineSchema({
     publicKey: v.bytes(), // COSE-encoded
     counter: v.number(),
     transports: v.array(v.string()),
-    prfSalt: v.bytes(),
-    wrappedDek: v.bytes(),
-    wrappedDekIv: v.bytes(),
+    // PRF-only fields; absent for credentials bound to passphrase wallets.
+    prfSalt: v.optional(v.bytes()),
+    wrappedDek: v.optional(v.bytes()),
+    wrappedDekIv: v.optional(v.bytes()),
     label: v.string(),
     createdAt: v.number(),
     lastUsedAt: v.optional(v.number()),

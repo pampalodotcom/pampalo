@@ -238,3 +238,27 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Used by <PageLoading /> — overlay fades in, icon pulses. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes brand-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+    filter: drop-shadow(0 12px 32px rgba(232, 85, 58, 0.18));
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+    filter: drop-shadow(0 16px 40px rgba(232, 85, 58, 0.32));
+  }
+}
