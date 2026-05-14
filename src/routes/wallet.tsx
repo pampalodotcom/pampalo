@@ -34,7 +34,7 @@ function Wallet() {
     );
   }
 
-  const address = auth.state.address;
+  const addresses = auth.state.addresses;
   // We never keep the mnemonic in memory between signings — every tx
   // re-derives it via PRF. So the re-auth button is always available
   // when there's an address; the user taps it whenever they want to
@@ -75,38 +75,81 @@ function Wallet() {
 
       {/* Centered foreground column */}
       <div className="phone-column flex flex-1 flex-col">
-      <section className="relative z-10 -mt-10 mx-4 rise-in rounded-3xl card-cream px-5 py-5">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="eyebrow">Your Wallet</p>
-          {address && <ReAuthButton onClick={onReAuth} loading={reauthing} />}
-        </div>
+        <section className="relative z-10 -mt-10 mx-4 rise-in rounded-3xl card-cream px-5 py-5">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="eyebrow">Your Wallet</p>
+            {addresses && (
+              <ReAuthButton onClick={onReAuth} loading={reauthing} />
+            )}
+          </div>
 
-        {address ? (
-          <>
-            <AddressPill address={address} className="mb-4" />
-            <AddressWell address={address} />
-          </>
-        ) : (
-          <NoAddressNotice
-            onUnlock={onReAuth}
-            loading={reauthing}
-            canReAuth={getBlob() !== null}
-          />
-        )}
-      </section>
+          {addresses ? (
+            <>
+              <AddressPill address={addresses.evm} className="mb-5" />
 
-      <div className="mx-4 mt-auto mb-12">
-        <SecondaryButton onClick={onSignOut} disabled={signingOut}>
-          {signingOut ? (
-            <Loader2 className="size-4 animate-spin" />
+              <LabeledAddress
+                label="Ethereum"
+                hint="Public on-chain address"
+                value={addresses.evm}
+              />
+              <LabeledAddress
+                label="Envelope"
+                hint="Note encryption (secp256k1 public key)"
+                value={addresses.envelope}
+                className="mt-3"
+              />
+              <LabeledAddress
+                label="Private"
+                hint="Poseidon2 (ZK identity)"
+                value={addresses.poseidon}
+                className="mt-3"
+              />
+            </>
           ) : (
-            <LogOut className="size-4" />
+            <NoAddressNotice
+              onUnlock={onReAuth}
+              loading={reauthing}
+              canReAuth={getBlob() !== null}
+            />
           )}
-          Sign out
-        </SecondaryButton>
-      </div>
+        </section>
+
+        <div className="mx-4 mt-auto mb-12">
+          <SecondaryButton onClick={onSignOut} disabled={signingOut}>
+            {signingOut ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <LogOut className="size-4" />
+            )}
+            Sign out
+          </SecondaryButton>
+        </div>
       </div>
     </main>
+  );
+}
+
+function LabeledAddress({
+  label,
+  hint,
+  value,
+  className,
+}: {
+  label: string;
+  hint: string;
+  value: string;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <div className="mb-1.5 flex items-baseline gap-2">
+        <p className="text-[11.5px] font-bold uppercase tracking-[0.1em] text-ink">
+          {label}
+        </p>
+        <p className="text-[11px] text-ink-mute">{hint}</p>
+      </div>
+      <AddressWell address={value} />
+    </div>
   );
 }
 
@@ -153,8 +196,8 @@ function NoAddressNotice({
   return (
     <div className="flex flex-col gap-3 text-[14px] text-ink-soft">
       <p>
-        Your wallet address isn’t cached on this device. Unlock with your
-        passkey to view it.
+        Your wallet addresses aren’t cached on this device. Unlock with your
+        passkey to view them.
       </p>
       <button
         type="button"
