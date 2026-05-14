@@ -3,6 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
   internalQuery,
+  mutation,
   query,
 } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -65,6 +66,7 @@ export const getEncryptedBlob = query({
       wallet: {
         mnemonicCiphertext: wallet.mnemonicCiphertext,
         mnemonicIv: wallet.mnemonicIv,
+        mnemonicConfirmedAt: wallet.mnemonicConfirmedAt ?? null,
       },
       credentials: credentials.map((c) => ({
         credentialId: c.credentialId,
@@ -74,6 +76,25 @@ export const getEncryptedBlob = query({
         label: c.label,
       })),
     };
+  },
+});
+
+// Public mutation: marks the wallet's mnemonic as confirmed by the user.
+// Idempotent — calling it twice is fine.
+export const confirmMnemonic = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, args) => {
+    const session = await sessionByTokenOrNull(ctx, args.sessionToken);
+    if (!session) throw new Error("invalid session");
+    const wallet = await ctx.db
+      .query("wallets")
+      .withIndex("by_userId", (q) => q.eq("userId", session.userId))
+      .first();
+    if (!wallet) throw new Error("no wallet for this session");
+    if (wallet.mnemonicConfirmedAt) return { confirmedAt: wallet.mnemonicConfirmedAt };
+    const confirmedAt = Date.now();
+    await ctx.db.patch(wallet._id, { mnemonicConfirmedAt: confirmedAt });
+    return { confirmedAt };
   },
 });
 
@@ -247,6 +268,7 @@ export const _bootstrapBlob = internalQuery({
       wallet: {
         mnemonicCiphertext: wallet.mnemonicCiphertext,
         mnemonicIv: wallet.mnemonicIv,
+        mnemonicConfirmedAt: wallet.mnemonicConfirmedAt ?? null,
       },
       credentials: credentials.map((c) => ({
         credentialId: c.credentialId,

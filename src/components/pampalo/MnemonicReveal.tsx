@@ -19,9 +19,10 @@ type Props = {
   mnemonic: string;
   address: string;
   onConfirmed: () => void;
+  onSkip: () => void;
 };
 
-export function MnemonicReveal({ mnemonic, address, onConfirmed }: Props) {
+export function MnemonicReveal({ mnemonic, address, onConfirmed, onSkip }: Props) {
   const [stage, setStage] = useState<"reveal" | "confirm">("reveal");
   const [revealed, setRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -142,19 +143,31 @@ export function MnemonicReveal({ mnemonic, address, onConfirmed }: Props) {
         >
           I’ve saved it
         </PrimaryButton>
+
+        <button
+          type="button"
+          onClick={onSkip}
+          className="self-center text-[13px] font-medium text-ink-mute underline underline-offset-2 hover:text-ink-soft"
+        >
+          Do it later
+        </button>
       </div>
     );
   }
 
-  return <ConfirmStep words={words} onConfirmed={onConfirmed} />;
+  return (
+    <ConfirmStep words={words} onConfirmed={onConfirmed} onSkip={onSkip} />
+  );
 }
 
 function ConfirmStep({
   words,
   onConfirmed,
+  onSkip,
 }: {
   words: Array<string>;
   onConfirmed: () => void;
+  onSkip: () => void;
 }) {
   const positions = useMemo(() => pickThreeDistinct(words.length), [words.length]);
   const [values, setValues] = useState<Array<string>>(["", "", ""]);
@@ -216,6 +229,14 @@ function ConfirmStep({
       )}
 
       <PrimaryButton onClick={onSubmit}>Continue</PrimaryButton>
+
+      <button
+        type="button"
+        onClick={onSkip}
+        className="self-center text-[13px] font-medium text-ink-mute underline underline-offset-2 hover:text-ink-soft"
+      >
+        Do it later
+      </button>
     </div>
   );
 }

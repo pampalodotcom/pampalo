@@ -14,6 +14,9 @@ export default defineSchema({
     mnemonicCiphertext: v.bytes(),
     mnemonicIv: v.bytes(),
     createdAt: v.number(),
+    // Set when the user successfully completes the 3-word confirmation
+    // step. Absent if they skipped it ("Do it later") or haven't seen it.
+    mnemonicConfirmedAt: v.optional(v.number()),
   }).index("by_userId", ["userId"]),
 
   credentials: defineTable({

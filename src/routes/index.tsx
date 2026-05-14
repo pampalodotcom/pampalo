@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Fingerprint, Loader2, Plus } from "lucide-react";
+import { Fingerprint, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { BeachScene } from "@/components/pampalo/BeachScene";
 import { BrandLockup } from "@/components/pampalo/BrandLockup";
 import { MnemonicReveal } from "@/components/pampalo/MnemonicReveal";
 import { PrimaryButton } from "@/components/pampalo/PrimaryButton";
-import { SecondaryButton } from "@/components/pampalo/SecondaryButton";
 import { WarningChip } from "@/components/pampalo/WarningChip";
 import { useAuth } from "@/lib/auth";
 import {
   completeConditionalSignIn,
   finalizeNewWallet,
+  markMnemonicConfirmed,
   registerNewWallet,
   signInWithExistingPasskey,
   type NewWalletDraft,
@@ -125,8 +125,23 @@ function Landing() {
 
   function onMnemonicConfirmed() {
     if (ui.kind !== "reveal") return;
+    const draft = ui.draft;
+    finalizeNewWallet(draft);
+    finalizeAddressIntoState(draft.address);
+    // Fire-and-forget: nav to wallet immediately; the mutation runs in the
+    // background. If it fails we surface a toast but don't block the UX.
+    markMnemonicConfirmed(draft.sessionToken).catch((e: unknown) => {
+      const msg = e instanceof Error ? e.message : "Couldn’t save backup status.";
+      toast.error(msg);
+    });
+    void navigate({ to: "/wallet" });
+  }
+
+  function onMnemonicSkipped() {
+    if (ui.kind !== "reveal") return;
     finalizeNewWallet(ui.draft);
     finalizeAddressIntoState(ui.draft.address);
+    // No mutation — wallet.mnemonicConfirmedAt stays null on the server.
     void navigate({ to: "/wallet" });
   }
 
@@ -152,6 +167,7 @@ function Landing() {
             mnemonic={ui.draft.mnemonic}
             address={ui.draft.address}
             onConfirmed={onMnemonicConfirmed}
+            onSkip={onMnemonicSkipped}
           />
         ) : (
           <>
@@ -168,43 +184,33 @@ function Landing() {
 
             <div className="flex flex-col gap-3">
               {knownDevice ? (
-                <>
-                  <PrimaryButton onClick={onSignIn} disabled={busy(ui)}>
-                    {ui.kind === "signing-in" ? (
+                <PrimaryButton onClick={onSignIn} disabled={busy(ui)}>
+                  {ui.kind === "signing-in" ? (
+                    <>
                       <Loader2 className="size-[18px] animate-spin" />
-                    ) : (
+                      Signing in with Passkey…
+                    </>
+                  ) : (
+                    <>
                       <Fingerprint className="size-[18px]" />
-                    )}
-                    Sign in with Passkey
-                  </PrimaryButton>
-                  <SecondaryButton onClick={onCreate} disabled={busy(ui)}>
-                    {ui.kind === "registering" ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Plus className="size-4" />
-                    )}
-                    Get started (new wallet)
-                  </SecondaryButton>
-                </>
+                      Sign in with Passkey
+                    </>
+                  )}
+                </PrimaryButton>
               ) : (
-                <>
-                  <PrimaryButton onClick={onCreate} disabled={busy(ui)}>
-                    {ui.kind === "registering" ? (
+                <PrimaryButton onClick={onCreate} disabled={busy(ui)}>
+                  {ui.kind === "registering" ? (
+                    <>
                       <Loader2 className="size-[18px] animate-spin" />
-                    ) : (
+                      Registering passkey…
+                    </>
+                  ) : (
+                    <>
                       <Fingerprint className="size-[18px]" />
-                    )}
-                    Get started
-                  </PrimaryButton>
-                  <SecondaryButton onClick={onSignIn} disabled={busy(ui)}>
-                    {ui.kind === "signing-in" ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Fingerprint className="size-4" />
-                    )}
-                    I already have a passkey
-                  </SecondaryButton>
-                </>
+                      Get started
+                    </>
+                  )}
+                </PrimaryButton>
               )}
             </div>
 

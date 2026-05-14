@@ -51,7 +51,11 @@ type AuthCompleteRes = { sessionToken: string; expiresAt: number };
 type BootstrapRes = {
   sessionToken: string;
   sessionExpiresAt: number;
-  wallet: { mnemonicCiphertext: string; mnemonicIv: string };
+  wallet: {
+    mnemonicCiphertext: string;
+    mnemonicIv: string;
+    mnemonicConfirmedAt: number | null;
+  };
   credentials: Array<{
     credentialId: string;
     prfSalt: string;
@@ -70,16 +74,15 @@ export type NewWalletDraft = {
 };
 
 export async function registerNewWallet(_unusedLabel?: string): Promise<NewWalletDraft> {
-  // 1. Generate wallet first so we can use the short address as the
-  //    WebAuthn user.name — that's what shows up in the OS keychain picker
-  //    and lets multiple wallets on the same RP be told apart.
+  // 1. Generate wallet locally; nothing about it leaks into the WebAuthn
+  //    user record (label is just "Pampalo" — the OS keychain disambiguates
+  //    by credential id / creation time).
   const dekBytes = generateDekBytes();
   const wallet = Wallet.createRandom();
   const mnemonic = wallet.mnemonic?.phrase;
   if (!mnemonic) throw new Error("ethers did not return a mnemonic");
   const address = wallet.address;
-  const short = `${address.slice(0, 6)}…${address.slice(-4)}`;
-  const passkeyDisplayName = `Pampalo · ${short}`;
+  const passkeyDisplayName = "Pampalo";
 
   // 2. Server start (records the random userIdBytes + challenge).
   const start = await postJson<{ displayName: string }, RegStartRes>(
@@ -177,6 +180,20 @@ export function finalizeNewWallet(draft: NewWalletDraft): void {
   // /auth/bootstrap on the next page navigation.
   setSessionToken(draft.sessionToken);
   setAddress(draft.address);
+}
+
+// Marks the wallet's mnemonic as confirmed server-side. Called when the
+// user completes the 3-word confirmation step. Skipping ("Do it later")
+// just doesn't call this; the wallet's mnemonicConfirmedAt stays null.
+export async function markMnemonicConfirmed(
+  sessionToken: string,
+): Promise<void> {
+  const { ConvexHttpClient } = await import("convex/browser");
+  const { api } = await import("../../convex/_generated/api");
+  const url = import.meta.env.VITE_CONVEX_URL as string | undefined;
+  if (!url) throw new Error("VITE_CONVEX_URL is not set");
+  const client = new ConvexHttpClient(url);
+  await client.mutation(api.auth.confirmMnemonic, { sessionToken });
 }
 
 // ─── Sign in ─────────────────────────────────────────────────────────────

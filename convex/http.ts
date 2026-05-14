@@ -17,6 +17,25 @@ function allowedOrigins(): Array<string> {
     .filter(Boolean);
 }
 
+// WebAuthn requires the RP ID to match the browser's origin (or be a
+// registrable suffix). If the request comes from localhost, no production
+// RP ID will work — the browser refuses. So pick `localhost` when the
+// caller is local, and fall back to the configured env var otherwise.
+// This lets a single Convex deployment serve both local dev and the
+// cloud-hosted environment.
+function rpIdForRequest(req: Request): string {
+  const origin = req.headers.get("Origin") ?? "";
+  try {
+    const url = new URL(origin);
+    if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+      return "localhost";
+    }
+  } catch {
+    /* empty/malformed Origin — fall through to env default */
+  }
+  return process.env.PAMPALO_RP_ID ?? "localhost";
+}
+
 function corsHeaders(req: Request): HeadersInit {
   const reqOrigin = req.headers.get("Origin") ?? "";
   const allow = allowedOrigins();
@@ -118,7 +137,7 @@ http.route({
     return jsonResponse(req, {
       userIdBytes: arrayBufferToBase64Url(result.userIdBytes),
       challenge: arrayBufferToBase64Url(result.challenge),
-      rpId: process.env.PAMPALO_RP_ID ?? "localhost",
+      rpId: rpIdForRequest(req),
       rpName: process.env.PAMPALO_RP_NAME ?? "Pampalo",
     });
   }),
@@ -155,7 +174,7 @@ http.route({
         internal.authNode.verifyAndCompleteRegistration,
         {
           userIdBytes: base64UrlToArrayBuffer(body.userIdBytes),
-          expectedRPID: process.env.PAMPALO_RP_ID ?? "localhost",
+          expectedRPID: rpIdForRequest(req),
           expectedOrigin:
             req.headers.get("Origin") ??
             (allowedOrigins()[0] ?? "http://localhost:3000"),
@@ -223,7 +242,7 @@ http.route({
     );
     return jsonResponse(req, {
       challenge: arrayBufferToBase64Url(result.challenge),
-      rpId: process.env.PAMPALO_RP_ID ?? "localhost",
+      rpId: rpIdForRequest(req),
     });
   }),
 });
@@ -247,7 +266,7 @@ http.route({
       result = await ctx.runAction(
         internal.authNode.verifyAndCompleteAuthentication,
         {
-          expectedRPID: process.env.PAMPALO_RP_ID ?? "localhost",
+          expectedRPID: rpIdForRequest(req),
           expectedOrigin:
             req.headers.get("Origin") ??
             (allowedOrigins()[0] ?? "http://localhost:3000"),
@@ -336,6 +355,7 @@ http.route({
           blob.wallet.mnemonicCiphertext,
         ),
         mnemonicIv: arrayBufferToBase64Url(blob.wallet.mnemonicIv),
+        mnemonicConfirmedAt: blob.wallet.mnemonicConfirmedAt,
       },
       credentials: blob.credentials.map((c) => ({
         credentialId: arrayBufferToBase64Url(c.credentialId),
