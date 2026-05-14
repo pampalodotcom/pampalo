@@ -1,29 +1,29 @@
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils'
 
 export function WarningChip({
-  children = "Experimental",
+  children = 'Pampalo is Experimental',
   className,
 }: {
-  children?: React.ReactNode;
-  className?: string;
+  children?: React.ReactNode
+  className?: string
 }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5",
-        "border text-[11.5px] font-semibold tracking-[0.01em]",
+        'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5',
+        'border text-[11.5px] font-semibold tracking-[0.01em]',
         className,
       )}
       style={{
-        background: "var(--color-warn-bg)",
-        borderColor: "var(--color-warn-bd)",
-        color: "var(--color-warn-fg)",
+        background: 'var(--color-warn-bg)',
+        borderColor: 'var(--color-warn-bd)',
+        color: 'var(--color-warn-fg)',
       }}
     >
       <WarnTriangle className="size-3.5" />
       {children}
     </span>
-  );
+  )
 }
 
 function WarnTriangle({ className }: { className?: string }) {
@@ -50,5 +50,5 @@ function WarnTriangle({ className }: { className?: string }) {
       />
       <circle cx="8" cy="11.4" r="0.85" fill="#faf6ea" />
     </svg>
-  );
+  )
 }

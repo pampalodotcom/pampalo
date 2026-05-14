@@ -39,7 +39,11 @@ export function BeachScene({ height = 420, className }: Props) {
     camera.lookAt(0, 1.7, 0);
 
     // ─── Sky gradient (large back plane) ────────────────────────────────
-    const skyGeo = new THREE.PlaneGeometry(120, 60);
+    // Geometry widths picked so the scene fills very wide aspect ratios
+    // (desktop full-width). Vertical FOV stays the same; horizontal FOV
+    // scales with viewport width, so the planes need to be much wider
+    // than the original mockup canvas (402px).
+    const skyGeo = new THREE.PlaneGeometry(400, 60);
     const skyMat = new THREE.ShaderMaterial({
       uniforms: {
         topColor: { value: new THREE.Color(0x6cb8ff) },
@@ -99,10 +103,12 @@ export function BeachScene({ height = 420, className }: Props) {
     });
     const clouds: THREE.Sprite[] = [];
     const cloudPositions: Array<[number, number, number, number]> = [
-      [-3, 6.4, -16, 4.5],
-      [2.5, 6.0, -14, 5.2],
+      [-14, 6.4, -16, 4.5],
+      [-3, 6.0, -14, 5.2],
       [5, 5.4, -18, 4.0],
-      [-6, 5.0, -19, 3.4],
+      [13, 5.0, -19, 3.4],
+      [-22, 5.6, -17, 4.2],
+      [22, 6.2, -16, 4.8],
     ];
     for (const [x, y, z, s] of cloudPositions) {
       const sprite = new THREE.Sprite(cloudMat);
@@ -113,7 +119,7 @@ export function BeachScene({ height = 420, className }: Props) {
     }
 
     // ─── Sea ────────────────────────────────────────────────────────────
-    const seaGeo = new THREE.PlaneGeometry(60, 30, 80, 40);
+    const seaGeo = new THREE.PlaneGeometry(300, 30, 200, 40);
     const seaMat = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0 },
@@ -153,7 +159,7 @@ export function BeachScene({ height = 420, className }: Props) {
     scene.add(sea);
 
     // ─── Sand ──────────────────────────────────────────────────────────
-    const sandGeo = new THREE.PlaneGeometry(60, 14);
+    const sandGeo = new THREE.PlaneGeometry(200, 14);
     const sandMat = new THREE.MeshBasicMaterial({ color: 0xd9c79a });
     const sand = new THREE.Mesh(sandGeo, sandMat);
     sand.rotation.x = -Math.PI / 2;
@@ -173,12 +179,12 @@ export function BeachScene({ height = 420, className }: Props) {
       if (disposed) return;
       const t = (performance.now() - start) / 1000;
       seaMat.uniforms.time.value = t;
-      // Slow cloud drift
+      // Slow cloud drift across the wider viewport.
       for (let i = 0; i < clouds.length; i++) {
         const c = clouds[i];
         c.position.x += 0.0006 * (i % 2 === 0 ? 1 : -1);
-        if (c.position.x > 10) c.position.x = -10;
-        if (c.position.x < -10) c.position.x = 10;
+        if (c.position.x > 30) c.position.x = -30;
+        if (c.position.x < -30) c.position.x = 30;
       }
       renderer.render(scene, camera);
       raf = requestAnimationFrame(tick);

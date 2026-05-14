@@ -68,16 +68,21 @@ function Wallet() {
 
   return (
     <main className="phone-shell flex min-h-dvh flex-col">
-      <div className="relative shrink-0">
+      {/* Full-width beach band */}
+      <div className="relative shrink-0 w-full">
         <BeachScene height={260} />
-        <div className="absolute left-6 top-12 z-10">
-          <BrandLockup />
-        </div>
-        <div className="absolute right-6 top-[78px] z-10">
-          <StatusDot label="Signed in" />
+        <div className="absolute inset-x-0 top-12 z-10">
+          <div className="phone-column flex items-start justify-between px-6">
+            <BrandLockup />
+            <div className="pt-2">
+              <StatusDot label="Signed in" />
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* Centered foreground column */}
+      <div className="phone-column flex flex-1 flex-col">
       <section className="relative z-10 -mt-10 mx-4 rise-in rounded-3xl card-cream px-5 py-5">
         <div className="mb-3 flex items-center justify-between">
           <p className="eyebrow">Your Wallet</p>
@@ -107,6 +112,7 @@ function Wallet() {
           )}
           Sign out
         </SecondaryButton>
+      </div>
       </div>
     </main>
   );

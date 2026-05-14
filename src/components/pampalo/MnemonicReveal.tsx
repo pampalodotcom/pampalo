@@ -9,79 +9,88 @@
 //   - 60s timer overwrites clipboard if Copy was used.
 //   - Mnemonic is overwritten in memory and dropped.
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, Eye, EyeOff, Copy as CopyIcon, Check } from "lucide-react";
-import { toast } from "sonner";
-import { PrimaryButton } from "./PrimaryButton";
-import { cn } from "@/lib/utils";
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Download, Eye, EyeOff, Copy as CopyIcon, Check } from 'lucide-react'
+import { toast } from 'sonner'
+import { PrimaryButton } from './PrimaryButton'
+import { cn } from '@/lib/utils'
 
 type Props = {
-  mnemonic: string;
-  address: string;
-  onConfirmed: () => void;
-  onSkip: () => void;
-};
+  mnemonic: string
+  address: string
+  onConfirmed: () => void
+  onSkip: () => void
+}
 
-export function MnemonicReveal({ mnemonic, address, onConfirmed, onSkip }: Props) {
-  const [stage, setStage] = useState<"reveal" | "confirm">("reveal");
-  const [revealed, setRevealed] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const words = useMemo(() => mnemonic.split(/\s+/).filter(Boolean), [mnemonic]);
-  const clipboardClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+export function MnemonicReveal({
+  mnemonic,
+  address,
+  onConfirmed,
+  onSkip,
+}: Props) {
+  const [stage, setStage] = useState<'reveal' | 'confirm'>('reveal')
+  const [revealed, setRevealed] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const words = useMemo(() => mnemonic.split(/\s+/).filter(Boolean), [mnemonic])
+  const clipboardClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  )
 
   useEffect(() => {
     return () => {
-      if (clipboardClearTimerRef.current) clearTimeout(clipboardClearTimerRef.current);
-    };
-  }, []);
+      if (clipboardClearTimerRef.current)
+        clearTimeout(clipboardClearTimerRef.current)
+    }
+  }, [])
 
   async function onCopy() {
     try {
-      await navigator.clipboard.writeText(mnemonic);
-      setCopied(true);
-      toast("Recovery phrase copied", { duration: 2000 });
-      if (clipboardClearTimerRef.current) clearTimeout(clipboardClearTimerRef.current);
+      await navigator.clipboard.writeText(mnemonic)
+      setCopied(true)
+      toast('Recovery phrase copied', { duration: 2000 })
+      if (clipboardClearTimerRef.current)
+        clearTimeout(clipboardClearTimerRef.current)
       clipboardClearTimerRef.current = setTimeout(() => {
-        navigator.clipboard.writeText("").catch(() => {
+        navigator.clipboard.writeText('').catch(() => {
           /* some browsers refuse async clipboard writes */
-        });
-        setCopied(false);
-      }, 60_000);
+        })
+        setCopied(false)
+      }, 60_000)
     } catch {
-      toast.error("Couldn’t copy — write it down instead.");
+      toast.error('Couldn’t copy — write it down instead.')
     }
   }
 
   function onDownload() {
-    const first6 = address.slice(2, 8);
+    const first6 = address.slice(2, 8)
     const blob = new Blob(
       [`# Recovery phrase for 0x${first6}…\n${mnemonic}\n`],
-      { type: "text/plain" },
-    );
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `wallet-recovery-${first6}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+      { type: 'text/plain' },
+    )
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `wallet-recovery-${first6}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
-  if (stage === "reveal") {
+  if (stage === 'reveal') {
     return (
       <div className="flex flex-col gap-4">
         <h2 className="font-serif text-[26px] font-bold leading-tight text-ink">
           Your recovery phrase
         </h2>
         <p className="text-[14px] leading-relaxed text-ink-soft">
-          Write these 12 words down somewhere private. They’re the only way
-          to recover your wallet if you lose access to your passkey.
+          Write these 12 words down somewhere private. They’re the only way to
+          recover your wallet if you lose access to your passkey.
         </p>
 
         <div className="relative">
           <div
             className={cn(
-              "grid grid-cols-3 gap-2 rounded-2xl bg-paper-lo border border-line p-3",
-              !revealed && "blur-sm select-none",
+              'grid grid-cols-3 gap-2 rounded-2xl bg-paper-lo border border-line p-3',
+              !revealed && 'blur-sm select-none',
             )}
           >
             {words.map((w, i) => (
@@ -90,7 +99,7 @@ export function MnemonicReveal({ mnemonic, address, onConfirmed, onSkip }: Props
                 className="rounded-xl bg-card px-2.5 py-2 text-[13px] font-medium text-ink"
               >
                 <span className="text-ink-mute mr-1.5 font-mono text-[11px]">
-                  {String(i + 1).padStart(2, "0")}
+                  {String(i + 1).padStart(2, '0')}
                 </span>
                 {w}
               </div>
@@ -115,8 +124,12 @@ export function MnemonicReveal({ mnemonic, address, onConfirmed, onSkip }: Props
             onClick={() => setRevealed((v) => !v)}
             className="flex-1 inline-flex items-center justify-center gap-2 rounded-full border border-line bg-card px-3 py-2.5 text-[13px] font-semibold text-ink"
           >
-            {revealed ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            {revealed ? "Hide" : "Reveal"}
+            {revealed ? (
+              <EyeOff className="size-4" />
+            ) : (
+              <Eye className="size-4" />
+            )}
+            {revealed ? 'Hide' : 'Reveal'}
           </button>
           <button
             type="button"
@@ -124,8 +137,12 @@ export function MnemonicReveal({ mnemonic, address, onConfirmed, onSkip }: Props
             disabled={!revealed}
             className="flex-1 inline-flex items-center justify-center gap-2 rounded-full border border-line bg-card px-3 py-2.5 text-[13px] font-semibold text-ink disabled:opacity-50"
           >
-            {copied ? <Check className="size-4" /> : <CopyIcon className="size-4" />}
-            {copied ? "Copied" : "Copy"}
+            {copied ? (
+              <Check className="size-4" />
+            ) : (
+              <CopyIcon className="size-4" />
+            )}
+            {copied ? 'Copied' : 'Copy'}
           </button>
           <button
             type="button"
@@ -137,10 +154,7 @@ export function MnemonicReveal({ mnemonic, address, onConfirmed, onSkip }: Props
           </button>
         </div>
 
-        <PrimaryButton
-          disabled={!revealed}
-          onClick={() => setStage("confirm")}
-        >
+        <PrimaryButton disabled={!revealed} onClick={() => setStage('confirm')}>
           I’ve saved it
         </PrimaryButton>
 
@@ -149,15 +163,13 @@ export function MnemonicReveal({ mnemonic, address, onConfirmed, onSkip }: Props
           onClick={onSkip}
           className="self-center text-[13px] font-medium text-ink-mute underline underline-offset-2 hover:text-ink-soft"
         >
-          Do it later
+          I&apos;ll do this later
         </button>
       </div>
-    );
+    )
   }
 
-  return (
-    <ConfirmStep words={words} onConfirmed={onConfirmed} onSkip={onSkip} />
-  );
+  return <ConfirmStep words={words} onConfirmed={onConfirmed} onSkip={onSkip} />
 }
 
 function ConfirmStep({
@@ -165,23 +177,26 @@ function ConfirmStep({
   onConfirmed,
   onSkip,
 }: {
-  words: Array<string>;
-  onConfirmed: () => void;
-  onSkip: () => void;
+  words: Array<string>
+  onConfirmed: () => void
+  onSkip: () => void
 }) {
-  const positions = useMemo(() => pickThreeDistinct(words.length), [words.length]);
-  const [values, setValues] = useState<Array<string>>(["", "", ""]);
-  const [error, setError] = useState<string | null>(null);
+  const positions = useMemo(
+    () => pickThreeDistinct(words.length),
+    [words.length],
+  )
+  const [values, setValues] = useState<Array<string>>(['', '', ''])
+  const [error, setError] = useState<string | null>(null)
 
   function onSubmit() {
     for (let i = 0; i < 3; i++) {
       if (values[i].trim().toLowerCase() !== words[positions[i] - 1]) {
-        setError("That’s not quite right — check the words and try again.");
-        return;
+        setError('That’s not quite right — check the words and try again.')
+        return
       }
     }
-    setError(null);
-    onConfirmed();
+    setError(null)
+    onConfirmed()
   }
 
   return (
@@ -200,16 +215,16 @@ function ConfirmStep({
             className="flex items-center gap-3 rounded-2xl bg-paper-lo border border-line px-3 py-2"
           >
             <span className="font-mono text-[12px] text-ink-mute w-7 shrink-0">
-              {String(p).padStart(2, "0")}
+              {String(p).padStart(2, '0')}
             </span>
             <input
               type="text"
               value={values[i]}
               onChange={(e) =>
                 setValues((v) => {
-                  const next = [...v];
-                  next[i] = e.target.value;
-                  return next;
+                  const next = [...v]
+                  next[i] = e.target.value
+                  return next
                 })
               }
               className="flex-1 bg-transparent text-[14px] font-medium text-ink placeholder:text-ink-mute focus:outline-none"
@@ -235,16 +250,16 @@ function ConfirmStep({
         onClick={onSkip}
         className="self-center text-[13px] font-medium text-ink-mute underline underline-offset-2 hover:text-ink-soft"
       >
-        Do it later
+        I&apos;ll do this later
       </button>
     </div>
-  );
+  )
 }
 
 function pickThreeDistinct(n: number): Array<number> {
-  const set = new Set<number>();
+  const set = new Set<number>()
   while (set.size < 3) {
-    set.add(1 + Math.floor(Math.random() * n));
+    set.add(1 + Math.floor(Math.random() * n))
   }
-  return Array.from(set).sort((a, b) => a - b);
+  return Array.from(set).sort((a, b) => a - b)
 }

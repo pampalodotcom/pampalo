@@ -95,17 +95,23 @@ body {
   overflow-x: hidden;
 }
 
-/* Mobile-first phone shell. The mockup uses 402x874 (iPhone 16). */
+/* Outer container — full-width, full-height, paper background.
+   Lets full-bleed sections (BeachScene) span the desktop window. */
 .phone-shell {
   position: relative;
-  margin-inline: auto;
   width: 100%;
   min-height: 100dvh;
-  max-width: 28rem; /* 448px — slightly wider than 402, looks fine on tablet */
   background: var(--color-paper);
   /* Allow vertical scroll for tall content (mnemonic reveal, etc).
      Body already clips overflow-x. */
   overflow-x: hidden;
+}
+
+/* Centered foreground column, mobile width (mockup is 402x874 iPhone 16). */
+.phone-column {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 28rem;
 }
 
 .eyebrow {
