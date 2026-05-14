@@ -335,6 +335,18 @@ export function BeachScene({ height = 420, className, theme = "light" }: Props) 
       umbrella.group.position.x = THREE.MathUtils.lerp(0.4, 3.4, tWide);
       umbrella.group.position.z = THREE.MathUtils.lerp(5.2, 4.8, tWide);
       umbrella.group.scale.setScalar(THREE.MathUtils.lerp(0.78, 0.95, tWide));
+
+      // Rotate the canopy around Y so its forward Z-tilt leans toward the
+      // camera. Without this, the lean direction (world -X) is fixed and
+      // doesn't track the camera-to-umbrella line as the umbrella shifts
+      // across aspect ratios — making the visible left/right panels look
+      // asymmetric. Derivation: the Z-tilt rotates +Y to (-sin tilt, cos
+      // tilt, 0). Rotating that around Y by θ gives XZ direction
+      // (-sin tilt · cos θ, sin tilt · sin θ); we solve for θ such that
+      // this points along (camera − umbrella) in the XZ plane.
+      const camDx = camera.position.x - umbrella.group.position.x;
+      const camDz = camera.position.z - umbrella.group.position.z;
+      umbrella.group.rotation.y = Math.atan2(camDz, -camDx);
     };
     positionUmbrella(width);
 
@@ -496,10 +508,12 @@ function buildUmbrella(): Umbrella {
   // Pulled forward (higher z) so the umbrella sits well clear of the
   // water line. The resize handler lerps z for narrow vs wide viewports.
   group.position.set(3.0, 0, 5.0);
-  const tilt = 0.22;
+  // Subtle lean — the dynamic rotation.y (set in positionUmbrella) aims the
+  // tilt straight at the camera, so this value reads stronger than it would
+  // if the tilt were viewed from the side. 0.10 (~5.7°) keeps the umbrella
+  // standing mostly upright with just a hint of beach-day slouch.
+  const tilt = 0.1;
   group.rotation.z = tilt;
-  // No twist around Y — keeps the visible left/right canopy panels
-  // mirror-symmetric. The forward Z tilt is enough lean for character.
   group.rotation.y = 0;
 
   // Canopy.
