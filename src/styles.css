@@ -9,21 +9,24 @@
   --font-serif: "Fraunces", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  --color-paper: #faf6ea;
-  --color-paper-lo: #f1ebda;
-  --color-ink: #0c2236;
-  --color-ink-soft: rgba(12, 34, 54, 0.72);
-  --color-ink-mute: rgba(12, 34, 54, 0.55);
-  --color-line: rgba(12, 34, 54, 0.1);
+  /* These map Tailwind tokens (text-ink, bg-paper, etc.) to CSS variables
+     that flip between light and dark via the :root and
+     html[data-theme="dark"] blocks below. */
+  --color-paper: var(--paper);
+  --color-paper-lo: var(--paper-lo);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-mute: var(--ink-mute);
+  --color-line: var(--line);
   --color-accent: #ff7c4d;
   --color-accent-d: #e8553a;
   --color-sea: #2eb6c2;
   --color-sea-deep: #0e5266;
   --color-sun: #ffd45e;
   --color-shield: #1c8a5e;
-  --color-warn-bg: rgba(214, 138, 22, 0.1);
-  --color-warn-bd: rgba(214, 138, 22, 0.28);
-  --color-warn-fg: #8a5410;
+  --color-warn-bg: var(--warn-bg);
+  --color-warn-bd: var(--warn-bd);
+  --color-warn-fg: var(--warn-fg);
 }
 
 @theme inline {
@@ -53,26 +56,68 @@
 }
 
 :root {
-  --background: #faf6ea;
-  --foreground: #0c2236;
+  /* Light-mode brand tokens (mirrored to Tailwind via @theme above). */
+  --paper: #faf6ea;
+  --paper-lo: #f1ebda;
+  --ink: #0c2236;
+  --ink-soft: rgba(12, 34, 54, 0.72);
+  --ink-mute: rgba(12, 34, 54, 0.55);
+  --line: rgba(12, 34, 54, 0.1);
+  --card-bg: rgba(255, 251, 240, 0.94);
+  --card-bd: rgba(255, 255, 255, 0.7);
+  --card-shadow: 0 24px 64px rgba(12, 34, 54, 0.18);
+  --warn-bg: rgba(214, 138, 22, 0.1);
+  --warn-bd: rgba(214, 138, 22, 0.28);
+  --warn-fg: #8a5410;
+
+  /* shadcn semantic tokens, mostly used by ui/* primitives. */
+  --background: var(--paper);
+  --foreground: var(--ink);
   --card: #fffbf0;
-  --card-foreground: #0c2236;
+  --card-foreground: var(--ink);
   --popover: #fffbf0;
-  --popover-foreground: #0c2236;
+  --popover-foreground: var(--ink);
   --primary: #ff7c4d;
   --primary-foreground: #ffffff;
-  --secondary: #f1ebda;
-  --secondary-foreground: #0c2236;
-  --muted: #f1ebda;
-  --muted-foreground: rgba(12, 34, 54, 0.55);
+  --secondary: var(--paper-lo);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-lo);
+  --muted-foreground: var(--ink-mute);
   --accent-ui: #2eb6c2;
-  --accent-foreground: #0c2236;
+  --accent-foreground: var(--ink);
   --destructive: #e8553a;
   --destructive-foreground: #ffffff;
-  --border: rgba(12, 34, 54, 0.1);
+  --border: var(--line);
   --input: rgba(12, 34, 54, 0.12);
   --ring: rgba(255, 124, 77, 0.55);
   --radius: 0.875rem;
+}
+
+html[data-theme="dark"] {
+  --paper: #0b1a2a;
+  --paper-lo: #122438;
+  --ink: #f1eee3;
+  --ink-soft: rgba(241, 238, 227, 0.78);
+  --ink-mute: rgba(241, 238, 227, 0.55);
+  --line: rgba(241, 238, 227, 0.12);
+  --card-bg: rgba(18, 36, 56, 0.78);
+  --card-bd: rgba(241, 238, 227, 0.1);
+  --card-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  --warn-bg: rgba(255, 206, 120, 0.1);
+  --warn-bd: rgba(255, 206, 120, 0.28);
+  --warn-fg: #ffce78;
+
+  --card: rgba(18, 36, 56, 0.96);
+  --popover: rgba(18, 36, 56, 0.96);
+  --input: rgba(241, 238, 227, 0.18);
+  --ring: rgba(255, 124, 77, 0.65);
+}
+
+html,
+body {
+  transition:
+    background-color 1.2s ease,
+    color 0.6s ease;
 }
 
 * {
@@ -158,11 +203,15 @@ body {
 }
 
 .card-cream {
-  background: rgba(255, 251, 240, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: var(--card-bg);
+  border: 1px solid var(--card-bd);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 24px 64px rgba(12, 34, 54, 0.18);
+  box-shadow: var(--card-shadow);
+  transition:
+    background-color 1.2s ease,
+    border-color 0.6s ease,
+    box-shadow 0.6s ease;
 }
 
 .scene-fade {

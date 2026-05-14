@@ -8,6 +8,7 @@ import {
 import * as React from "react";
 import appCss from "../styles.css?url";
 import { AuthProvider } from "@/lib/auth";
+import { ThemeProvider } from "@/lib/theme";
 import { Toaster } from "@/components/ui/sonner";
 
 export const Route = createRootRouteWithContext<{
@@ -24,7 +25,11 @@ export const Route = createRootRouteWithContext<{
       { name: "theme-color", content: "#faf6ea" },
       { title: "Pampalo" },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", type: "image/png", href: "/new-favicon.png" },
+      { rel: "apple-touch-icon", href: "/new-favicon.png" },
+    ],
   }),
   component: RootComponent,
 });
@@ -32,10 +37,12 @@ export const Route = createRootRouteWithContext<{
 function RootComponent() {
   return (
     <RootDocument>
-      <AuthProvider>
-        <Outlet />
-        <Toaster position="top-center" />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <Outlet />
+          <Toaster position="top-center" />
+        </AuthProvider>
+      </ThemeProvider>
     </RootDocument>
   );
 }
