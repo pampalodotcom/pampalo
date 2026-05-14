@@ -111,15 +111,26 @@ function readRequestBody(req: IncomingMessage): Promise<Buffer> {
 }
 
 const config = defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
+  // Vite reads .env files; Vercel exposes its UI-configured env vars on
+  // process.env at build time. Merge so both work.
+  const env = { ...process.env, ...loadEnv(mode, process.cwd(), '') }
+  const convexSite = env.VITE_CONVEX_SITE_URL?.replace(/\/$/, '')
+
   return {
     resolve: { tsconfigPaths: true },
     plugins: [
-      convexHttpProxy(env.VITE_CONVEX_SITE_URL),
+      // Local-dev proxy (vite dev only).
+      convexHttpProxy(convexSite),
       devtools(),
       nitro({
         preset: 'vercel',
         rollupConfig: { external: [/^@sentry\//] },
+        // Production proxy: Nitro routeRules translate to Vercel rewrites
+        // at build time. The destination is baked from VITE_CONVEX_SITE_URL,
+        // which Vercel sets per-environment (Production / Preview / etc.).
+        routeRules: convexSite
+          ? { '/_convex/**': { proxy: `${convexSite}/**` } }
+          : undefined,
       }),
       tailwindcss(),
       tanstackStart(),

@@ -1,8 +1,0 @@
-{
-  "rewrites": [
-    {
-      "source": "/_convex/:path*",
-      "destination": "https://healthy-cuttlefish-707.convex.site/:path*"
-    }
-  ]
-}
