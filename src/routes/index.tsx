@@ -178,12 +178,21 @@ function Landing() {
                 Money.
               </h1>
               <p className="mb-5 text-[14.5px] leading-relaxed text-ink-soft">
-                Pampalo uses passkey to secure your account credentials. We only
-                store your encrypted data — that’s it.
+                Pampalo uses passkey for your account, no passwords. Once you
+                create your account, you can utilise the next generation of
+                privacy enhancing financial technologies.
               </p>
 
               <div className="flex flex-col gap-3">
-                {knownDevice ? (
+                {auth.state.status === 'loading' ? (
+                  // Hold a neutral loading state until the cookie bootstrap
+                  // resolves; otherwise the button label snaps from
+                  // "Get started" to "Sign in with Passkey" on mount.
+                  <PrimaryButton disabled aria-busy="true">
+                    <Loader2 className="size-[18px] animate-spin" />
+                    <span className="opacity-0">Sign in with Passkey</span>
+                  </PrimaryButton>
+                ) : knownDevice ? (
                   <PrimaryButton onClick={onSignIn} disabled={busy(ui)}>
                     {ui.kind === 'signing-in' ? (
                       <>
@@ -223,8 +232,13 @@ function Landing() {
 
         <p className="mt-auto pb-6 text-center text-[11px] text-ink-mute">
           By continuing you agree to the{' '}
-          <a href="#terms" className="underline">
-            Terms
+          <a
+            href="/Pampalo-Terms-of-Service.pdf"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            Terms and Conditions
           </a>
         </p>
       </div>

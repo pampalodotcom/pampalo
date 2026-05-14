@@ -5,9 +5,7 @@ import { toast } from "sonner";
 import { AddressPill } from "@/components/pampalo/AddressPill";
 import { AddressWell } from "@/components/pampalo/AddressWell";
 import { BeachScene } from "@/components/pampalo/BeachScene";
-import { BrandLockup } from "@/components/pampalo/BrandLockup";
 import { SecondaryButton } from "@/components/pampalo/SecondaryButton";
-import { StatusDot } from "@/components/pampalo/StatusDot";
 import { useAuth } from "@/lib/auth";
 import { getBlob } from "@/lib/keystore";
 import { cn } from "@/lib/utils";
@@ -71,14 +69,6 @@ function Wallet() {
       {/* Full-width beach band */}
       <div className="relative shrink-0 w-full">
         <BeachScene height={260} />
-        <div className="absolute inset-x-0 top-12 z-10">
-          <div className="phone-column flex items-start justify-between px-6">
-            <BrandLockup />
-            <div className="pt-2">
-              <StatusDot label="Signed in" />
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Centered foreground column */}
