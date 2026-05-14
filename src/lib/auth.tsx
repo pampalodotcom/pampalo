@@ -17,6 +17,7 @@ import {
   bootstrapFromCookie,
   reAuthenticate as runReAuthenticate,
   signOut as runSignOut,
+  type ReAuthOutcome,
 } from "./auth-flow";
 import type { DerivedAddresses } from "./derive-addresses";
 import {
@@ -39,7 +40,7 @@ type AuthState =
 type AuthContextValue = {
   state: AuthState;
   refreshAddress: () => void;
-  reAuth: () => Promise<DerivedAddresses>;
+  reAuth: () => Promise<ReAuthOutcome>;
   signOut: () => Promise<void>;
 };
 
@@ -94,18 +95,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
   useEffect(() => {
     if (!blobQuery) return;
+    const w = blobQuery.wallet;
     const blob: EncryptedBlob = {
-      mnemonicCiphertext: base64UrlToBuffer(
-        bufferToB64UrlIfNeeded(blobQuery.wallet.mnemonicCiphertext),
-      ),
-      mnemonicIv: base64UrlToBuffer(
-        bufferToB64UrlIfNeeded(blobQuery.wallet.mnemonicIv),
-      ),
+      protectionScheme: w.protectionScheme,
+      mnemonicCiphertext: w.mnemonicCiphertext
+        ? base64UrlToBuffer(bufferToB64UrlIfNeeded(w.mnemonicCiphertext))
+        : null,
+      mnemonicIv: w.mnemonicIv
+        ? base64UrlToBuffer(bufferToB64UrlIfNeeded(w.mnemonicIv))
+        : null,
+      encryptedJson: w.encryptedJson,
       credentials: blobQuery.credentials.map((c) => ({
         credentialId: base64UrlToBuffer(bufferToB64UrlIfNeeded(c.credentialId)),
-        prfSalt: base64UrlToBuffer(bufferToB64UrlIfNeeded(c.prfSalt)),
-        wrappedDek: base64UrlToBuffer(bufferToB64UrlIfNeeded(c.wrappedDek)),
-        wrappedDekIv: base64UrlToBuffer(bufferToB64UrlIfNeeded(c.wrappedDekIv)),
+        prfSalt: c.prfSalt
+          ? base64UrlToBuffer(bufferToB64UrlIfNeeded(c.prfSalt))
+          : null,
+        wrappedDek: c.wrappedDek
+          ? base64UrlToBuffer(bufferToB64UrlIfNeeded(c.wrappedDek))
+          : null,
+        wrappedDekIv: c.wrappedDekIv
+          ? base64UrlToBuffer(bufferToB64UrlIfNeeded(c.wrappedDekIv))
+          : null,
         label: c.label,
       })),
     };
@@ -134,18 +144,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     },
     reAuth: async () => {
-      await runReAuthenticate();
-      const a = getAddresses();
+      const outcome = await runReAuthenticate();
       const token = getSessionToken();
+      if (outcome.kind === "needs-passphrase") {
+        // Cookie session is still valid; surface the prompt requirement
+        // to the caller without touching auth state.
+        return outcome;
+      }
       if (token) {
         setState({
           status: "authenticated",
           sessionToken: token,
-          addresses: a,
+          addresses: outcome.addresses,
         });
       }
-      if (!a) throw new Error("Addresses missing after re-auth");
-      return a;
+      return outcome;
     },
     signOut: async () => {
       await runSignOut();

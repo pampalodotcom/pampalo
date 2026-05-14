@@ -62,17 +62,20 @@ export const getEncryptedBlob = query({
       .withIndex("by_userId", (q) => q.eq("userId", session.userId))
       .take(16);
 
+    const scheme = wallet.protectionScheme ?? "prf";
     return {
       wallet: {
-        mnemonicCiphertext: wallet.mnemonicCiphertext,
-        mnemonicIv: wallet.mnemonicIv,
+        protectionScheme: scheme,
+        mnemonicCiphertext: wallet.mnemonicCiphertext ?? null,
+        mnemonicIv: wallet.mnemonicIv ?? null,
+        encryptedJson: wallet.encryptedJson ?? null,
         mnemonicConfirmedAt: wallet.mnemonicConfirmedAt ?? null,
       },
       credentials: credentials.map((c) => ({
         credentialId: c.credentialId,
-        prfSalt: c.prfSalt,
-        wrappedDek: c.wrappedDek,
-        wrappedDekIv: c.wrappedDekIv,
+        prfSalt: c.prfSalt ?? null,
+        wrappedDek: c.wrappedDek ?? null,
+        wrappedDekIv: c.wrappedDekIv ?? null,
         label: c.label,
       })),
     };
@@ -143,27 +146,49 @@ export const _completeRegistration = internalMutation({
     pendingId: v.id("pendingRegistrations"),
     userIdBytes: v.bytes(),
     displayName: v.string(),
-    credential: v.object({
-      credentialId: v.bytes(),
-      publicKey: v.bytes(),
-      counter: v.number(),
-      transports: v.array(v.string()),
-      prfSalt: v.bytes(),
-      wrappedDek: v.bytes(),
-      wrappedDekIv: v.bytes(),
-      label: v.string(),
-    }),
-    wallet: v.object({
-      mnemonicCiphertext: v.bytes(),
-      mnemonicIv: v.bytes(),
-    }),
+    // Discriminated union: PRF-protected wallets carry the per-credential
+    // wrapped DEK + the wallet's mnemonic ciphertext + IV; passphrase
+    // wallets carry only the ethers encrypted-JSON keystore string and
+    // omit the PRF fields on both the wallet and the credential.
+    payload: v.union(
+      v.object({
+        scheme: v.literal("prf"),
+        credential: v.object({
+          credentialId: v.bytes(),
+          publicKey: v.bytes(),
+          counter: v.number(),
+          transports: v.array(v.string()),
+          prfSalt: v.bytes(),
+          wrappedDek: v.bytes(),
+          wrappedDekIv: v.bytes(),
+          label: v.string(),
+        }),
+        wallet: v.object({
+          mnemonicCiphertext: v.bytes(),
+          mnemonicIv: v.bytes(),
+        }),
+      }),
+      v.object({
+        scheme: v.literal("passphrase"),
+        credential: v.object({
+          credentialId: v.bytes(),
+          publicKey: v.bytes(),
+          counter: v.number(),
+          transports: v.array(v.string()),
+          label: v.string(),
+        }),
+        wallet: v.object({
+          encryptedJson: v.string(),
+        }),
+      }),
+    ),
   },
   handler: async (ctx, args) => {
     // Idempotency: if the credentialId already exists, this is a retry.
     const existing = await ctx.db
       .query("credentials")
       .withIndex("by_credentialId", (q) =>
-        q.eq("credentialId", args.credential.credentialId),
+        q.eq("credentialId", args.payload.credential.credentialId),
       )
       .first();
     if (existing) {
@@ -181,25 +206,47 @@ export const _completeRegistration = internalMutation({
       displayName: args.displayName,
       createdAt: now,
     });
-    const walletId: Id<"wallets"> = await ctx.db.insert("wallets", {
-      userId,
-      mnemonicCiphertext: args.wallet.mnemonicCiphertext,
-      mnemonicIv: args.wallet.mnemonicIv,
-      createdAt: now,
-    });
-    await ctx.db.insert("credentials", {
-      userId,
-      walletId,
-      credentialId: args.credential.credentialId,
-      publicKey: args.credential.publicKey,
-      counter: args.credential.counter,
-      transports: args.credential.transports,
-      prfSalt: args.credential.prfSalt,
-      wrappedDek: args.credential.wrappedDek,
-      wrappedDekIv: args.credential.wrappedDekIv,
-      label: args.credential.label,
-      createdAt: now,
-    });
+
+    let walletId: Id<"wallets">;
+    if (args.payload.scheme === "prf") {
+      walletId = await ctx.db.insert("wallets", {
+        userId,
+        protectionScheme: "prf",
+        mnemonicCiphertext: args.payload.wallet.mnemonicCiphertext,
+        mnemonicIv: args.payload.wallet.mnemonicIv,
+        createdAt: now,
+      });
+      await ctx.db.insert("credentials", {
+        userId,
+        walletId,
+        credentialId: args.payload.credential.credentialId,
+        publicKey: args.payload.credential.publicKey,
+        counter: args.payload.credential.counter,
+        transports: args.payload.credential.transports,
+        prfSalt: args.payload.credential.prfSalt,
+        wrappedDek: args.payload.credential.wrappedDek,
+        wrappedDekIv: args.payload.credential.wrappedDekIv,
+        label: args.payload.credential.label,
+        createdAt: now,
+      });
+    } else {
+      walletId = await ctx.db.insert("wallets", {
+        userId,
+        protectionScheme: "passphrase",
+        encryptedJson: args.payload.wallet.encryptedJson,
+        createdAt: now,
+      });
+      await ctx.db.insert("credentials", {
+        userId,
+        walletId,
+        credentialId: args.payload.credential.credentialId,
+        publicKey: args.payload.credential.publicKey,
+        counter: args.payload.credential.counter,
+        transports: args.payload.credential.transports,
+        label: args.payload.credential.label,
+        createdAt: now,
+      });
+    }
     await ctx.db.delete(args.pendingId);
 
     const token = await issueSession(ctx, userId);
@@ -262,19 +309,25 @@ export const _bootstrapBlob = internalQuery({
       .query("credentials")
       .withIndex("by_userId", (q) => q.eq("userId", session.userId))
       .take(16);
+    const scheme = wallet.protectionScheme ?? "prf";
     return {
       sessionToken: session.token,
       sessionExpiresAt: session.expiresAt,
       wallet: {
-        mnemonicCiphertext: wallet.mnemonicCiphertext,
-        mnemonicIv: wallet.mnemonicIv,
+        protectionScheme: scheme,
+        // PRF wallets carry the DEK-encrypted mnemonic; passphrase wallets
+        // carry the ethers encrypted-JSON keystore string. Both are sent
+        // so the client can decide which path to take based on the scheme.
+        mnemonicCiphertext: wallet.mnemonicCiphertext ?? null,
+        mnemonicIv: wallet.mnemonicIv ?? null,
+        encryptedJson: wallet.encryptedJson ?? null,
         mnemonicConfirmedAt: wallet.mnemonicConfirmedAt ?? null,
       },
       credentials: credentials.map((c) => ({
         credentialId: c.credentialId,
-        prfSalt: c.prfSalt,
-        wrappedDek: c.wrappedDek,
-        wrappedDekIv: c.wrappedDekIv,
+        prfSalt: c.prfSalt ?? null,
+        wrappedDek: c.wrappedDek ?? null,
+        wrappedDekIv: c.wrappedDekIv ?? null,
         label: c.label,
       })),
     };

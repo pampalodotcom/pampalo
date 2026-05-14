@@ -1,3 +1,27 @@
+# Project brief
+
+**This project is client-first.** With the user's configured passkey, they
+can store anything in the Convex database — **but it must be encrypted**.
+
+Concretely:
+
+- The server (Convex) holds only ciphertext and public material. A full
+  database leak should not reveal any user's mnemonic, transaction inputs,
+  notes, or any other private data.
+- Encryption keys are derived client-side from the user's passkey
+  (preferred: WebAuthn PRF; fallback: ethers' passphrase-encrypted JSON
+  keystore). The server never sees plaintext keys or the values needed to
+  derive them.
+- Any new field added to a Convex table that holds user data must either
+  be (a) public by intent (EVM address, public keys, opaque counters), or
+  (b) encrypted on the client before being written. There is no "trusted
+  server" middle ground.
+- New mutations and queries should be designed assuming the server is
+  hostile: never accept plaintext that could be encrypted client-side
+  instead, never return decryptable data, and gate writes on the session
+  token (which is itself opaque, not a JWT carrying claims).
+- See `AUTH.md` for the canonical encryption / passkey architecture.
+
 <!-- convex-ai-start -->
 
 This project uses [Convex](https://convex.dev) as its backend.
