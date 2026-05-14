@@ -28,7 +28,7 @@ function Wallet() {
 
   if (auth.state.status !== "authenticated") {
     return (
-      <main className="phone-shell flex items-center justify-center">
+      <main className="phone-shell flex min-h-dvh items-center justify-center">
         <Loader2 className="size-6 animate-spin text-ink-mute" />
       </main>
     );
@@ -67,18 +67,18 @@ function Wallet() {
   }
 
   return (
-    <main className="phone-shell">
-      <BeachScene height={260} className="absolute inset-x-0 top-0" />
-
-      <div className="absolute left-6 top-12 z-10">
-        <BrandLockup />
+    <main className="phone-shell flex min-h-dvh flex-col">
+      <div className="relative shrink-0">
+        <BeachScene height={260} />
+        <div className="absolute left-6 top-12 z-10">
+          <BrandLockup />
+        </div>
+        <div className="absolute right-6 top-[78px] z-10">
+          <StatusDot label="Signed in" />
+        </div>
       </div>
 
-      <div className="absolute right-6 top-[78px] z-10">
-        <StatusDot label="Signed in" />
-      </div>
-
-      <section className="absolute inset-x-4 top-[320px] rise-in rounded-3xl card-cream px-5 py-5">
+      <section className="relative z-10 -mt-10 mx-4 rise-in rounded-3xl card-cream px-5 py-5">
         <div className="mb-3 flex items-center justify-between">
           <p className="eyebrow">Your Wallet</p>
           {address && <ReAuthButton onClick={onReAuth} loading={reauthing} />}
@@ -98,7 +98,7 @@ function Wallet() {
         )}
       </section>
 
-      <div className="absolute inset-x-4 bottom-12">
+      <div className="mx-4 mt-auto mb-12">
         <SecondaryButton onClick={onSignOut} disabled={signingOut}>
           {signingOut ? (
             <Loader2 className="size-4 animate-spin" />

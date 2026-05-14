@@ -134,19 +134,18 @@ function Landing() {
     auth.state.status === "anonymous" ? auth.state.knownDevice : false;
 
   return (
-    <main className="phone-shell">
-      <BeachScene height={420} className="absolute inset-x-0 top-0" />
-
-      <div className="absolute left-6 top-12 z-10">
-        <BrandLockup />
+    <main className="phone-shell flex min-h-dvh flex-col">
+      {/* Beach scene with brand overlay */}
+      <div className="relative shrink-0">
+        <BeachScene height={420} />
+        <div className="absolute left-6 top-12 z-10">
+          <BrandLockup />
+        </div>
       </div>
 
-      {/* Hero card */}
+      {/* Hero card overlaps the scene's bottom fade */}
       <section
-        className={
-          "absolute inset-x-4 top-[380px] rise-in rounded-3xl card-cream " +
-          "px-5 pt-6 pb-5"
-        }
+        className="relative z-10 -mt-10 mx-4 mb-8 rise-in rounded-3xl card-cream px-5 pt-6 pb-5"
       >
         {ui.kind === "reveal" ? (
           <MnemonicReveal
@@ -216,7 +215,7 @@ function Landing() {
         )}
       </section>
 
-      <p className="absolute bottom-6 left-0 right-0 text-center text-[11px] text-ink-mute">
+      <p className="mt-auto pb-6 text-center text-[11px] text-ink-mute">
         By continuing you agree to the{" "}
         <a href="#terms" className="underline">
           Terms
