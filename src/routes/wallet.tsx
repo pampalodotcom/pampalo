@@ -8,6 +8,7 @@ import { BeachScene } from "@/components/pampalo/BeachScene";
 import { SecondaryButton } from "@/components/pampalo/SecondaryButton";
 import { useAuth } from "@/lib/auth";
 import { getBlob } from "@/lib/keystore";
+import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/wallet")({ component: Wallet });
@@ -15,6 +16,7 @@ export const Route = createFileRoute("/wallet")({ component: Wallet });
 function Wallet() {
   const auth = useAuth();
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const [signingOut, setSigningOut] = useState(false);
   const [reauthing, setReauthing] = useState(false);
 
@@ -68,7 +70,7 @@ function Wallet() {
     <main className="phone-shell flex min-h-dvh flex-col">
       {/* Full-width beach band */}
       <div className="relative shrink-0 w-full">
-        <BeachScene height={260} />
+        <BeachScene height={260} theme={theme} />
       </div>
 
       {/* Centered foreground column */}

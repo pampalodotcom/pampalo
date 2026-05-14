@@ -6,8 +6,10 @@ import { BeachScene } from '@/components/pampalo/BeachScene'
 import { BrandLockup } from '@/components/pampalo/BrandLockup'
 import { MnemonicReveal } from '@/components/pampalo/MnemonicReveal'
 import { PrimaryButton } from '@/components/pampalo/PrimaryButton'
+import { ThemeToggle } from '@/components/pampalo/ThemeToggle'
 import { WarningChip } from '@/components/pampalo/WarningChip'
 import { useAuth } from '@/lib/auth'
+import { useTheme } from '@/lib/theme'
 import {
   completeConditionalSignIn,
   finalizeNewWallet,
@@ -30,6 +32,7 @@ type LocalUiState =
 function Landing() {
   const navigate = useNavigate()
   const auth = useAuth()
+  const { theme } = useTheme()
   const [ui, setUi] = useState<LocalUiState>({ kind: 'idle' })
   const conditionalAbortRef = useRef<AbortController | null>(null)
 
@@ -150,10 +153,15 @@ function Landing() {
     <main className="phone-shell flex min-h-dvh flex-col">
       {/* Full-width beach band; brand floats over it inside the centered column */}
       <div className="relative shrink-0 w-full">
-        <BeachScene height={420} />
-        <div className="absolute inset-x-0 top-12 z-10">
-          <div className="phone-column px-6">
-            <BrandLockup />
+        <BeachScene height={420} theme={theme} />
+        <div className="absolute inset-x-0 top-12 z-10 pointer-events-none">
+          <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6">
+            <div className="pointer-events-auto">
+              <BrandLockup />
+            </div>
+            <div className="pointer-events-auto">
+              <ThemeToggle />
+            </div>
           </div>
         </div>
       </div>
@@ -207,19 +215,36 @@ function Landing() {
                     )}
                   </PrimaryButton>
                 ) : (
-                  <PrimaryButton onClick={onCreate} disabled={busy(ui)}>
-                    {ui.kind === 'registering' ? (
-                      <>
-                        <Loader2 className="size-[18px] animate-spin" />
-                        Registering passkey…
-                      </>
-                    ) : (
-                      <>
-                        <Fingerprint className="size-[18px]" />
-                        Get started
-                      </>
-                    )}
-                  </PrimaryButton>
+                  <>
+                    <PrimaryButton onClick={onCreate} disabled={busy(ui)}>
+                      {ui.kind === 'registering' ? (
+                        <>
+                          <Loader2 className="size-[18px] animate-spin" />
+                          Registering passkey…
+                        </>
+                      ) : (
+                        <>
+                          <Fingerprint className="size-[18px]" />
+                          Get started
+                        </>
+                      )}
+                    </PrimaryButton>
+                    {/* Cold-start escape hatch: on a new device the
+                        `wallet_known_device` cookie isn't set, but a synced
+                        passkey may already exist in the OS keychain. Without
+                        this link the only option is "Get started", which
+                        would create a duplicate wallet. */}
+                    <button
+                      type="button"
+                      onClick={onSignIn}
+                      disabled={busy(ui)}
+                      className="self-center text-[13px] font-medium text-ink-mute underline underline-offset-2 hover:text-ink-soft disabled:opacity-50"
+                    >
+                      {ui.kind === 'signing-in'
+                        ? 'Signing in with Passkey…'
+                        : 'Already have a wallet? Sign in'}
+                    </button>
+                  </>
                 )}
               </div>
 
