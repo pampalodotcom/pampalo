@@ -146,25 +146,20 @@ export async function registerNewWallet(
     { displayName: passkeyDisplayName },
   )
 
-  // 3. Browser create(). PRF is requested; check whether it was honoured.
+  // 3. Browser create(). We don't gate on prf.enabled here — iOS Safari +
+  //    1Password (and some other providers) routinely signal
+  //    enabled:false / undefined on create even when the credential will
+  //    happily produce PRF output on a subsequent get(). We log the value
+  //    for diagnostics but always proceed to the get() and let *its*
+  //    result decide whether we have a usable PRF or need to fall back.
   const attestation = await runRegistrationCeremony(start, passkeyDisplayName)
-  if (!prfEnabledOnRegistration(attestation)) {
-    // Return everything the passphrase finisher needs. The passkey is
-    // already created in the user's authenticator — we can still use it
-    // for authentication (the encryption will use a passphrase instead).
-    return {
-      kind: 'needs-passphrase',
-      ctx: {
-        attestation,
-        userIdBytes: start.userIdBytes,
-        rpId: start.rpId,
-        mnemonic,
-        addresses,
-      },
-    }
-  }
+  console.log(
+    '[pampalo:auth] register: create() prf.enabled =',
+    prfEnabledOnRegistration(attestation),
+  )
 
-  // 4. Browser get() to actually derive PRF output.
+  // 4. Browser get() to actually derive PRF output. This is the
+  //    authoritative capability check.
   const fakeChallengeForPrf = bufferToBase64Url(
     crypto.getRandomValues(new Uint8Array(32)),
   )
@@ -173,9 +168,15 @@ export async function registerNewWallet(
     rpId: start.rpId,
     allowCredentialId: attestation.id,
   })
+  console.log(
+    '[pampalo:auth] register: get() prfOutput =',
+    prfOutput ? 'present' : 'null',
+  )
   if (!prfOutput) {
-    // Authenticator advertised PRF at create() but failed to produce a
-    // value on get(). Fall back to passphrase so the user isn't stranded.
+    // Credential genuinely doesn't support PRF on either ceremony — fall
+    // back to passphrase. The passkey itself still works for
+    // authentication (sign-in challenges); we just can't use it to
+    // derive an encryption key.
     return {
       kind: 'needs-passphrase',
       ctx: {

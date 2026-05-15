@@ -65,6 +65,22 @@ export function PassphraseEntry({ mode, onSubmit, onBack, busy }: Props) {
         )}
       </p>
 
+      {isSetup && (
+        <div className="rounded-2xl bg-paper-lo border border-line px-3.5 py-3 text-[13px] leading-relaxed text-ink-soft">
+          <p className="mb-1.5 text-[12px] font-bold uppercase tracking-[0.1em] text-ink">
+            Tip
+          </p>
+          <p>
+            You’re probably using 1Password — save this as a website login so
+            you can autofill it next time with Face ID.
+          </p>
+          <p className="mt-1.5">
+            Pampalo will never store this passphrase on any backend server,
+            encrypted or otherwise.
+          </p>
+        </div>
+      )}
+
       <label className="flex flex-col gap-1.5">
         <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-ink">
           Passphrase

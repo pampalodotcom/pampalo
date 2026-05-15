@@ -46,9 +46,29 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function readKnownDeviceCookie(): boolean {
+// "Have we seen this browser before?" — used to decide whether the landing
+// page shows "Sign in with Passkey" or "Get started". The Convex response
+// sets a `wallet_known_device` cookie for this, but on iOS Safari with
+// some passkey providers (notably 1Password) the cookie doesn't reliably
+// survive the WebAuthn ceremony / Safari's storage caps, even though the
+// user clearly registered. The `pampalo:addresses` localStorage key is
+// written on every registration / unlock completion (`setAddresses` →
+// keystore.writePersistedAddresses) and survives these quirks, so we OR
+// it with the cookie check.
+function readKnownDeviceSignal(): boolean {
   if (typeof document === "undefined") return false;
-  return /(^|;\s*)wallet_known_device=1(;|$)/.test(document.cookie);
+  if (/(^|;\s*)wallet_known_device=1(;|$)/.test(document.cookie)) return true;
+  try {
+    if (
+      typeof localStorage !== "undefined" &&
+      localStorage.getItem("pampalo:addresses")
+    ) {
+      return true;
+    }
+  } catch {
+    /* localStorage disabled (private mode etc) — fall through */
+  }
+  return false;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -58,13 +78,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const ac = new AbortController();
     (async () => {
+      // Diagnostic: dump what storage is visible on this device. Helps
+      // debug iOS Safari + 1Password cookie loss without needing remote
+      // tooling. Cheap and once-per-mount.
+      if (typeof window !== "undefined") {
+        const cookieKeys = (document.cookie || "")
+          .split(";")
+          .map((s) => s.trim().split("=")[0])
+          .filter(Boolean);
+        let lsKeys: Array<string> = [];
+        try {
+          lsKeys = Object.keys(window.localStorage).filter((k) =>
+            k.startsWith("pampalo:"),
+          );
+        } catch {
+          /* localStorage disabled (private mode etc) */
+        }
+        console.log("[pampalo:auth] visible storage", { cookieKeys, lsKeys });
+      }
       try {
         const boot = await bootstrapFromCookie();
         if (ac.signal.aborted) return;
         if (!boot) {
           setState({
             status: "anonymous",
-            knownDevice: readKnownDeviceCookie(),
+            knownDevice: readKnownDeviceSignal(),
           });
           return;
         }
@@ -77,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (ac.signal.aborted) return;
         setState({
           status: "anonymous",
-          knownDevice: readKnownDeviceCookie(),
+          knownDevice: readKnownDeviceSignal(),
         });
       }
     })();
@@ -139,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setState({
           status: "anonymous",
-          knownDevice: readKnownDeviceCookie(),
+          knownDevice: readKnownDeviceSignal(),
         });
       }
     },
@@ -163,7 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut: async () => {
       await runSignOut();
       clearAll();
-      setState({ status: "anonymous", knownDevice: readKnownDeviceCookie() });
+      setState({ status: "anonymous", knownDevice: readKnownDeviceSignal() });
     },
   };
 
