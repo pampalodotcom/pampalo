@@ -93,6 +93,10 @@ export default defineSchema({
     // ETH-balance UI (Ethereum, Optimism, Arbitrum, Base, …); false for
     // L1s with non-ETH gas tokens (Polygon, etc.).
     isNative: v.boolean(),
+    // LayerZero endpoint id for this chain (e.g. mainnet=30101, Sepolia=
+    // 40101, Arb Sepolia=40231). Optional because future networks may be
+    // seeded before LZ exists for them.
+    lzEndpointId: v.optional(v.number()),
     enabled: v.boolean(),
   }).index("by_chainId", ["chainId"]),
 
@@ -101,8 +105,15 @@ export default defineSchema({
     // Lowercased hex. Use "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" as
     // the sentinel for the native token (matches 1inch / OKX convention).
     address: v.string(),
+    name: v.string(), // "USD Coin", "Ethereum", …
     symbol: v.string(),
     decimals: v.number(),
+    // True only for the chain-native token row (ETH on mainnet, etc.).
+    // Redundant with the sentinel address but cheaper to query.
+    isNative: v.optional(v.boolean()),
+    // UI display precision (e.g. USDC → 2, ETH → 5). Optional; client
+    // defaults sensibly when absent.
+    roundTo: v.optional(v.number()),
     // Optional FK into priceFeeds.shortId. Lets the client price token
     // balances using the same feed catalog as native ETH.
     priceFeedShortId: v.optional(v.string()),

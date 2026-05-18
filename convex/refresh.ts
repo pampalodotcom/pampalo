@@ -1,3 +1,4 @@
+import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
@@ -78,9 +79,22 @@ type RefreshSummary = {
   dedupedHistory?: number;
 };
 
+// Convex `crons.interval` has a 1-minute floor. To run prices every 30s,
+// the cron fires once a minute and this action self-schedules a second
+// copy 30s in. Two ticks per minute, no further cron config needed.
+//
+// If a tick errors, the scheduler chain isn't broken — the cron will
+// still fire the next minute and reset the cadence. The 30s shadow is
+// "best effort", not load-bearing.
+const SHADOW_DELAY_MS = 30_000;
+
 export const refreshPrices = internalAction({
-  args: {},
-  handler: async (ctx): Promise<RefreshSummary> => {
+  args: {
+    // When true, this invocation skips scheduling its own shadow copy.
+    // The cron-triggered tick always schedules; the shadow tick doesn't.
+    skipShadow: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args): Promise<RefreshSummary> => {
     const feeds: Array<{
       shortId: string;
       aggregator: string;
@@ -145,6 +159,16 @@ export const refreshPrices = internalAction({
           console.warn(`Decode failed for ${f.shortId}:`, e);
         }
       }
+    }
+
+    // Schedule the +30s shadow tick before writing, so a write hiccup
+    // doesn't break the cadence. Skip if this *is* the shadow tick.
+    if (!args.skipShadow) {
+      await ctx.scheduler.runAfter(
+        SHADOW_DELAY_MS,
+        internal.refresh.refreshPrices,
+        { skipShadow: true },
+      );
     }
 
     if (results.length === 0) return { fetched: feeds.length, written: 0 };
@@ -257,7 +281,8 @@ export const refreshGas = internalAction({
 export const refreshPricesNow = internalAction({
   args: {},
   handler: async (ctx): Promise<unknown> =>
-    await ctx.runAction(internal.refresh.refreshPrices, {}),
+    // skipShadow so manual runs don't spawn a self-scheduling chain.
+    await ctx.runAction(internal.refresh.refreshPrices, { skipShadow: true }),
 });
 
 export const refreshGasNow = internalAction({

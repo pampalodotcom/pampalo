@@ -10,13 +10,13 @@ crons.interval(
   {},
 );
 
-// Chainlink fiat-pair feeds rarely move faster than this — 5 min keeps
-// the latest row fresh without burning RPC budget. Dedupe in
-// prices._writeRefresh skips writing history rows when the answer is
-// unchanged.
+// Convex's cron floor is 1 min; refreshPrices self-schedules a +30s
+// shadow tick so we effectively poll every 30s. See refresh.ts for the
+// SHADOW_DELAY_MS comment. Dedupe in prices._writeRefresh skips writing
+// history rows when the answer is unchanged.
 crons.interval(
   "refresh chainlink prices",
-  { minutes: 5 },
+  { minutes: 1 },
   internal.refresh.refreshPrices,
   {},
 );
