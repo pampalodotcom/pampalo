@@ -11,7 +11,14 @@
 import type * as auth from "../auth.js";
 import type * as authNode from "../authNode.js";
 import type * as crons from "../crons.js";
+import type * as gas from "../gas.js";
 import type * as http from "../http.js";
+import type * as networks from "../networks.js";
+import type * as prices from "../prices.js";
+import type * as refresh from "../refresh.js";
+import type * as rpcProxy from "../rpcProxy.js";
+import type * as seed from "../seed.js";
+import type * as tokens from "../tokens.js";
 
 import type {
   ApiFromModules,
@@ -23,7 +30,14 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   authNode: typeof authNode;
   crons: typeof crons;
+  gas: typeof gas;
   http: typeof http;
+  networks: typeof networks;
+  prices: typeof prices;
+  refresh: typeof refresh;
+  rpcProxy: typeof rpcProxy;
+  seed: typeof seed;
+  tokens: typeof tokens;
 }>;
 
 /**

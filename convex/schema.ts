@@ -75,4 +75,82 @@ export default defineSchema({
   })
     .index("by_token", ["token"])
     .index("by_expiresAt", ["expiresAt"]),
+
+  // ─── Public market data ─────────────────────────────────────────────────
+  // Everything below is global, public information. No user data.
+  // BYO-RPC design note: networks store only `alchemySubdomain` (e.g.
+  // "eth-mainnet"), never a full URL. The proxy action composes the URL
+  // from process.env.ALCHEMY_API_KEY. When BYO RPC lands, the client picks
+  // its own URL per-chainId; the catalog stays unchanged.
+
+  supportedNetworks: defineTable({
+    chainId: v.number(),
+    name: v.string(),
+    alchemySubdomain: v.string(),
+    nativeSymbol: v.string(),
+    nativeDecimals: v.number(),
+    // True when this network's native token represents "ETH" for the
+    // ETH-balance UI (Ethereum, Optimism, Arbitrum, Base, …); false for
+    // L1s with non-ETH gas tokens (Polygon, etc.).
+    isNative: v.boolean(),
+    enabled: v.boolean(),
+  }).index("by_chainId", ["chainId"]),
+
+  supportedTokens: defineTable({
+    networkId: v.id("supportedNetworks"),
+    // Lowercased hex. Use "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" as
+    // the sentinel for the native token (matches 1inch / OKX convention).
+    address: v.string(),
+    symbol: v.string(),
+    decimals: v.number(),
+    // Optional FK into priceFeeds.shortId. Lets the client price token
+    // balances using the same feed catalog as native ETH.
+    priceFeedShortId: v.optional(v.string()),
+  })
+    .index("by_networkId", ["networkId"])
+    .index("by_networkId_and_address", ["networkId", "address"]),
+
+  priceFeeds: defineTable({
+    // Short id used everywhere downstream — fixed lowercase "base/quote".
+    // e.g. "eth/usd", "usd/aud", "usd/cad", "usd/gbp".
+    shortId: v.string(),
+    // All fiat-pair feeds we read live on Ethereum mainnet (per design
+    // decision); networkId points at that row. Keeping this as an FK
+    // avoids hard-coding chainId 1 anywhere.
+    networkId: v.id("supportedNetworks"),
+    aggregator: v.string(), // 0x… AggregatorV3Interface address
+    feedDecimals: v.number(), // usually 8
+    enabled: v.boolean(),
+  }).index("by_shortId", ["shortId"]),
+
+  // One row per feed; upserted on every refresh.
+  latestPrices: defineTable({
+    shortId: v.string(),
+    answer: v.string(), // raw int256 as decimal string
+    feedDecimals: v.number(),
+    feedUpdatedAt: v.number(), // on-chain roundData.updatedAt (seconds)
+    fetchedAt: v.number(), // wall clock at fetch (ms)
+  }).index("by_shortId", ["shortId"]),
+
+  // Append-only history. Field names are 1–2 chars to save bytes — this
+  // table grows fast and will eventually be archived to file storage.
+  priceHistory: defineTable({
+    s: v.string(), // shortId
+    a: v.string(), // answer
+    t: v.number(), // fetchedAt (ms)
+  }).index("by_s_t", ["s", "t"]),
+
+  latestGas: defineTable({
+    networkId: v.id("supportedNetworks"),
+    gasPriceWei: v.string(),
+    baseFeeWei: v.optional(v.string()),
+    priorityFeeWei: v.optional(v.string()),
+    fetchedAt: v.number(),
+  }).index("by_networkId", ["networkId"]),
+
+  gasHistory: defineTable({
+    n: v.id("supportedNetworks"),
+    g: v.string(), // gasPriceWei
+    t: v.number(),
+  }).index("by_n_t", ["n", "t"]),
 });
