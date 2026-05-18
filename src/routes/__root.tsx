@@ -23,12 +23,56 @@ export const Route = createRootRouteWithContext<{
           "width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1",
       },
       { name: "theme-color", content: "#faf6ea" },
-      { title: "Pampalo" },
+      { title: "Pampalo · Private Money" },
+      {
+        name: "description",
+        content:
+          "Pampalo uses passkey PRF to encrypt and decrypt all application data. Any data stored in the database is encrypted with (pass)keys that you control.",
+      },
+
+      { property: "og:type", content: "website" },
+      { property: "og:site_name", content: "Pampalo" },
+      { property: "og:title", content: "Pampalo · Private Money" },
+      {
+        property: "og:description",
+        content:
+          "Passkey-encrypted private money. Your keys, your data — encrypted client-side, stored as ciphertext.",
+      },
+      { property: "og:image", content: "/og-image.png" },
+      { property: "og:image:type", content: "image/png" },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      {
+        property: "og:image:alt",
+        content: "Pampalo — a beach scene with the Pampalo wordmark.",
+      },
+
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Pampalo · Private Money" },
+      {
+        name: "twitter:description",
+        content:
+          "Passkey-encrypted private money. Your keys, your data — encrypted client-side, stored as ciphertext.",
+      },
+      { name: "twitter:image", content: "/og-image.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", type: "image/png", href: "/new-favicon.png" },
-      { rel: "apple-touch-icon", href: "/new-favicon.png" },
+      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+      {
+        rel: "icon",
+        type: "image/png",
+        sizes: "192x192",
+        href: "/favicon-192.png",
+      },
+      {
+        rel: "icon",
+        type: "image/png",
+        sizes: "512x512",
+        href: "/favicon-512.png",
+      },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "manifest", href: "/manifest.json" },
     ],
   }),
   component: RootComponent,

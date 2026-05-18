@@ -3,7 +3,6 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { AlertTriangle, ArrowLeft, Fingerprint, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { BeachScene } from '@/components/pampalo/BeachScene'
-import { BrandLockup } from '@/components/pampalo/BrandLockup'
 import { MnemonicReveal } from '@/components/pampalo/MnemonicReveal'
 import { PageLoading } from '@/components/pampalo/PageLoading'
 import { PassphraseEntry } from '@/components/pampalo/PassphraseEntry'
@@ -223,10 +222,7 @@ function Landing() {
       <div className="relative shrink-0 w-full">
         <BeachScene height={420} theme={theme} />
         <div className="absolute inset-x-0 top-12 z-10 pointer-events-none">
-          <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6">
-            <div className="pointer-events-auto">
-              <BrandLockup />
-            </div>
+          <div className="mx-auto flex w-full max-w-7xl items-center justify-end px-6">
             <div className="pointer-events-auto">
               <ThemeToggle />
             </div>
@@ -273,9 +269,12 @@ function Landing() {
                 Money.
               </h1>
               <p className="mb-5 text-[14.5px] leading-relaxed text-ink-soft">
-                Pampalo uses passkey for your account, no passwords. Once you
-                create your account, you can utilise the next generation of
-                privacy enhancing financial technologies.
+                Pampalo uses passkey PRF (Pseudo-Random Function) to encrypt
+                and decrypt all application data.
+              </p>
+              <p className="mb-5 text-[14.5px] leading-relaxed text-ink-soft">
+                Any data stored in the database is encrypted with (pass)keys
+                that you control.
               </p>
 
               <div className="flex flex-col gap-3">
