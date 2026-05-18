@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" viewBox="0 0 1200 630">
+  <!-- Generator: Adobe Illustrator 30.4.0, SVG Export Plug-In . SVG Version: 2.1.4 Build 226)  -->
+  <defs>
+    <style>
+      .st0 {
+        stroke-width: 3px;
+      }
+
+      .st0, .st1, .st2, .st3 {
+        fill: none;
+        stroke-linecap: round;
+      }
+
+      .st0, .st3 {
+        stroke: #fff;
+      }
+
+      .st4 {
+        fill: url(#linear-gradient2);
+      }
+
+      .st5 {
+        fill: url(#linear-gradient1);
+      }
+
+      .st6 {
+        fill: #13491c;
+      }
+
+      .st7 {
+        fill: #b07a44;
+      }
+
+      .st8 {
+        font-family: Helvetica-Bold, Helvetica;
+        font-size: 20px;
+        opacity: .6;
+      }
+
+      .st8, .st9, .st10 {
+        fill: #0c2236;
+        font-weight: 700;
+      }
+
+      .st8, .st9, .st10, .st3 {
+        isolation: isolate;
+      }
+
+      .st11 {
+        fill: url(#linear-gradient);
+      }
+
+      .st12 {
+        fill: #2a8b3e;
+      }
+
+      .st9 {
+        font-size: 118px;
+      }
+
+      .st9, .st10 {
+        font-family: Georgia-Bold, Georgia;
+      }
+
+      .st13 {
+        filter: url(#card-shadow);
+      }
+
+      .st14 {
+        fill: #fff;
+      }
+
+      .st15 {
+        fill: #8a5224;
+      }
+
+      .st1 {
+        stroke: #d65442;
+        stroke-width: 6.6px;
+      }
+
+      .st1, .st2 {
+        stroke-miterlimit: 8.8;
+      }
+
+      .st16 {
+        fill: #faf6ea;
+      }
+
+      .st17 {
+        fill: #f0d650;
+      }
+
+      .st18, .st10 {
+        opacity: .85;
+      }
+
+      .st19 {
+        opacity: .55;
+      }
+
+      .st10 {
+        font-size: 34px;
+        letter-spacing: -.02em;
+      }
+
+      .st2 {
+        stroke: #5c3514;
+        stroke-width: 4.4px;
+      }
+
+      .st3 {
+        opacity: .7;
+        stroke-width: 2.4px;
+      }
+    </style>
+    <linearGradient id="linear-gradient" x1="600" y1="632" x2="600" y2="372" gradientTransform="translate(0 632) scale(1 -1)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6cb8ff"/>
+      <stop offset="1" stop-color="#d8eeff"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient1" x1="600" y1="372" x2="600" y2="252" gradientTransform="translate(0 632) scale(1 -1)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2eb6c2"/>
+      <stop offset="1" stop-color="#0e5266"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient2" x1="600" y1="252" x2="600" y2="2" gradientTransform="translate(0 632) scale(1 -1)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d9c79a"/>
+      <stop offset=".4" stop-color="#e3d3aa"/>
+      <stop offset="1" stop-color="#faf6ea"/>
+    </linearGradient>
+    <filter id="card-shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="16"/>
+      <feOffset dx="0" dy="14" result="off"/>
+      <feComponentTransfer>
+        <feFuncA slope="0.18" type="linear"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g id="Layer_1" shape-rendering="geometricPrecision">
+    <rect class="st16" width="1200" height="630"/>
+    <rect class="st11" width="1200" height="260"/>
+    <rect class="st5" y="260" width="1200" height="120"/>
+    <rect class="st4" y="380" width="1200" height="250"/>
+    <g class="st18">
+      <ellipse class="st14" cx="540" cy="80" rx="60" ry="13"/>
+      <ellipse class="st14" cx="565" cy="72" rx="32" ry="11"/>
+      <ellipse class="st14" cx="820" cy="60" rx="52" ry="12"/>
+      <ellipse class="st14" cx="840" cy="54" rx="28" ry="10"/>
+    </g>
+    <g class="st19">
+      <line class="st0" x1="380" y1="312" x2="540" y2="312"/>
+      <line class="st0" x1="700" y1="305" x2="860" y2="305"/>
+      <line class="st0" x1="980" y1="312" x2="1140" y2="312"/>
+      <line class="st3" x1="460" y1="350" x2="640" y2="350"/>
+      <line class="st3" x1="820" y1="345" x2="1000" y2="345"/>
+    </g>
+    <g class="st13">
+      <rect class="st16" x="340" y="180" width="760" height="380" rx="32" ry="32"/>
+    </g>
+    <g>
+      <path class="st15" d="M147.34,175.73c-14.78,106.19-22.16,210.61-22.16,313.27h77.57c-14.78-102.65-22.16-207.07-22.16-313.27h-33.25Z"/>
+      <line class="st2" x1="151.52" y1="234.14" x2="176.4" y2="234.14"/>
+      <line class="st2" x1="145.87" y1="313.78" x2="182.05" y2="313.78"/>
+      <line class="st2" x1="140.25" y1="393.43" x2="187.68" y2="393.43"/>
+      <ellipse class="st17" cx="302.49" cy="175.73" rx="116.36" ry="111.5"/>
+      <path class="st17" d="M302.49,60.25c66.56,0,120.51,51.7,120.51,115.48s-53.96,115.48-120.51,115.48V60.25Z"/>
+      <path class="st6" d="M163.96,175.73c90.57-81.71,120.18-102.34,116.36-106.19-57.32-45.72-120.18,102.34-116.36,106.19Z"/>
+      <path class="st6" d="M163.96,175.73c90.79-15.32,200.52-31.96,199.47-37.17-63.08-48.4-200.52,31.96-199.47,37.17Z"/>
+      <path class="st6" d="M163.96,175.73c74.39,90.66,198.28,47.65,199.47,42.48-46.68-26.95-198.28-47.65-199.47-42.48Z"/>
+      <path class="st6" d="M163.96,175.73c30.59,145.91,112.45,115.24,116.36,111.5,2.66-7.86-112.45-115.24-116.36-111.5Z"/>
+      <path class="st6" d="M163.96,175.73c-83.11-51.77-144.06-5.31-144.06,0,27.7,35.84,144.06,5.31,144.06,0Z"/>
+      <path class="st6" d="M163.96,175.73c-20.5-102.53-78.4-130.24-83.11-127.43-18.28,33.5,78.4,130.24,83.11,127.43Z"/>
+      <path class="st6" d="M163.96,175.73c-77.38,69.58-82.37,124.75-77.57,127.43,38.59-.56,82.37-124.75,77.57-127.43Z"/>
+      <path class="st1" d="M262.7,70.95c60.39-21.05,127.16,8.8,149.12,66.67,21.97,57.87-9.18,121.85-69.57,142.9-25.69,8.96-53.86,8.96-79.55,0"/>
+      <path class="st12" d="M163.96,175.73c87.71-84.58,120.18-102.34,116.36-106.19-54.47-42.85-120.18,102.34-116.36,106.19Z"/>
+      <path class="st12" d="M163.96,175.73c89.98-19.22,200.52-31.96,199.47-37.17-62.28-44.49-200.52,31.96-199.47,37.17Z"/>
+      <path class="st12" d="M163.96,175.73c75.3,86.79,198.28,47.65,199.47,42.48-47.6-23.07-198.28-47.65-199.47-42.48Z"/>
+      <path class="st12" d="M163.96,175.73c33.52,143.09,112.45,115.24,116.36,111.5-.28-5.04-112.45-115.24-116.36-111.5Z"/>
+      <path class="st12" d="M163.96,175.73c-83.11-47.79-144.06-5.31-144.06,0,27.7,31.86,144.06,5.31,144.06,0Z"/>
+      <path class="st12" d="M163.96,175.73c-24.02-100.43-78.4-130.24-83.11-127.43-14.77,31.41,78.4,130.24,83.11,127.43Z"/>
+      <path class="st12" d="M163.96,175.73c-73.8,71.57-82.37,124.75-77.57,127.43,35.02-2.55,82.37-124.75,77.57-127.43Z"/>
+      <ellipse class="st7" cx="169.5" cy="204.94" rx="12.47" ry="11.95"/>
+    </g>
+    <text class="st9" transform="translate(451.79 320)"><tspan x="0" y="0">Pampalo</tspan></text>
+    <text class="st10" transform="translate(364.73 398.78)"><tspan x="0" y="0">Private Money · Easy Money · Your Money</tspan></text>
+    <text class="st8" transform="translate(567.75 522.2)"><tspan x="0" y="0">powered by commbank.eth.limo</tspan></text>
+  </g>
+</svg>
