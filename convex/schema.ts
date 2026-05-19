@@ -5,7 +5,9 @@ import { v } from "convex/values";
 export default defineSchema({
   users: defineTable({
     userIdBytes: v.bytes(), // 16 random bytes; used as WebAuthn user.id
-    displayName: v.string(),
+    // Existing rows may carry a string; new rows do not write this field.
+    // See docs/adr/0001-encrypted-mnemonic-and-nothing-else.md.
+    displayName: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_userIdBytes", ["userIdBytes"]),
 
@@ -41,12 +43,19 @@ export default defineSchema({
     publicKey: v.bytes(), // COSE-encoded
     counter: v.number(),
     transports: v.array(v.string()),
-    // PRF-only fields; absent for credentials bound to passphrase wallets.
+    // Per-credential PRF salt — historical column, no longer written.
+    // The client uses a single deterministic global salt; see
+    // docs/adr/0001-encrypted-mnemonic-and-nothing-else.md.
     prfSalt: v.optional(v.bytes()),
+    // Wrapped DEK is required for new PRF wallets; v.optional only because
+    // historical rows may carry a passphrase-protected credential without
+    // these fields (see docs/adr/0002-prf-required-no-passphrase-fallback.md).
     wrappedDek: v.optional(v.bytes()),
     wrappedDekIv: v.optional(v.bytes()),
-    label: v.string(),
+    // Device label — historical column, no longer written.
+    label: v.optional(v.string()),
     createdAt: v.number(),
+    // Historical column, no longer written.
     lastUsedAt: v.optional(v.number()),
   })
     .index("by_credentialId", ["credentialId"])
@@ -55,7 +64,10 @@ export default defineSchema({
   pendingRegistrations: defineTable({
     userIdBytes: v.bytes(),
     challenge: v.bytes(),
-    displayName: v.string(),
+    // Historical column, no longer written. New flows pass the WebAuthn
+    // displayName from the client directly without round-tripping it
+    // through the database.
+    displayName: v.optional(v.string()),
     expiresAt: v.number(),
   })
     .index("by_userIdBytes", ["userIdBytes"])

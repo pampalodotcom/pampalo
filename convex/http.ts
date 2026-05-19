@@ -20,9 +20,9 @@ function allowedOrigins(): Array<string> {
 // WebAuthn requires the RP ID to match the browser's origin (or be a
 // registrable suffix). If the request comes from localhost, no production
 // RP ID will work — the browser refuses. So pick `localhost` when the
-// caller is local, and fall back to the configured env var otherwise.
-// This lets a single Convex deployment serve both local dev and the
-// cloud-hosted environment.
+// caller is local, and require an explicit env var otherwise. Preview
+// deployments without PAMPALO_RP_ID set will fail loudly on the first
+// auth call — that's intentional.
 function rpIdForRequest(req: Request): string {
   const origin = req.headers.get("Origin") ?? "";
   try {
@@ -33,7 +33,13 @@ function rpIdForRequest(req: Request): string {
   } catch {
     /* empty/malformed Origin — fall through to env default */
   }
-  return process.env.PAMPALO_RP_ID ?? "localhost";
+  const rpId = process.env.PAMPALO_RP_ID;
+  if (!rpId) {
+    throw new Error(
+      "PAMPALO_RP_ID is not set on this Convex deployment. Set it to the registrable domain that serves the app (e.g. pampalo.com).",
+    );
+  }
+  return rpId;
 }
 
 function corsHeaders(req: Request): HeadersInit {
@@ -125,15 +131,8 @@ http.route({
   path: "/auth/registration/start",
   method: "POST",
   handler: httpAction(async (ctx, req) => {
-    let body: { displayName?: string };
-    try {
-      body = (await req.json()) as { displayName?: string };
-    } catch {
-      return errorResponse(req, 400, "invalid JSON");
-    }
-    const displayName = body.displayName?.slice(0, 100) ?? "Pampalo wallet";
     const result: { userIdBytes: ArrayBuffer; challenge: ArrayBuffer } =
-      await ctx.runMutation(internal.auth._startRegistration, { displayName });
+      await ctx.runMutation(internal.auth._startRegistration, {});
     return jsonResponse(req, {
       userIdBytes: arrayBufferToBase64Url(result.userIdBytes),
       challenge: arrayBufferToBase64Url(result.challenge),
@@ -152,21 +151,12 @@ http.route({
     type Body = {
       userIdBytes: string;
       attestation: unknown;
-      walletPayload:
-        | {
-            scheme: "prf";
-            mnemonicCiphertext: string;
-            mnemonicIv: string;
-            wrappedDek: string;
-            wrappedDekIv: string;
-            prfSalt: string;
-            label?: string;
-          }
-        | {
-            scheme: "passphrase";
-            encryptedJson: string;
-            label?: string;
-          };
+      walletPayload: {
+        mnemonicCiphertext: string;
+        mnemonicIv: string;
+        wrappedDek: string;
+        wrappedDekIv: string;
+      };
     };
     let body: Body;
     try {
@@ -187,24 +177,12 @@ http.route({
             req.headers.get("Origin") ??
             (allowedOrigins()[0] ?? "http://localhost:3000"),
           attestation: body.attestation,
-          walletPayload:
-            wp.scheme === "prf"
-              ? {
-                  scheme: "prf" as const,
-                  mnemonicCiphertext: base64UrlToArrayBuffer(
-                    wp.mnemonicCiphertext,
-                  ),
-                  mnemonicIv: base64UrlToArrayBuffer(wp.mnemonicIv),
-                  wrappedDek: base64UrlToArrayBuffer(wp.wrappedDek),
-                  wrappedDekIv: base64UrlToArrayBuffer(wp.wrappedDekIv),
-                  prfSalt: base64UrlToArrayBuffer(wp.prfSalt),
-                  label: wp.label ?? "Primary passkey",
-                }
-              : {
-                  scheme: "passphrase" as const,
-                  encryptedJson: wp.encryptedJson,
-                  label: wp.label ?? "Primary passkey",
-                },
+          walletPayload: {
+            mnemonicCiphertext: base64UrlToArrayBuffer(wp.mnemonicCiphertext),
+            mnemonicIv: base64UrlToArrayBuffer(wp.mnemonicIv),
+            wrappedDek: base64UrlToArrayBuffer(wp.wrappedDek),
+            wrappedDekIv: base64UrlToArrayBuffer(wp.wrappedDekIv),
+          },
         },
       );
     } catch (e) {
@@ -365,26 +343,13 @@ http.route({
       sessionToken: blob.sessionToken,
       sessionExpiresAt: blob.sessionExpiresAt,
       wallet: {
-        protectionScheme: blob.wallet.protectionScheme,
-        mnemonicCiphertext: blob.wallet.mnemonicCiphertext
-          ? arrayBufferToBase64Url(blob.wallet.mnemonicCiphertext)
-          : null,
-        mnemonicIv: blob.wallet.mnemonicIv
-          ? arrayBufferToBase64Url(blob.wallet.mnemonicIv)
-          : null,
-        encryptedJson: blob.wallet.encryptedJson,
-        mnemonicConfirmedAt: blob.wallet.mnemonicConfirmedAt,
+        mnemonicCiphertext: arrayBufferToBase64Url(blob.wallet.mnemonicCiphertext),
+        mnemonicIv: arrayBufferToBase64Url(blob.wallet.mnemonicIv),
       },
       credentials: blob.credentials.map((c) => ({
         credentialId: arrayBufferToBase64Url(c.credentialId),
-        prfSalt: c.prfSalt ? arrayBufferToBase64Url(c.prfSalt) : null,
-        wrappedDek: c.wrappedDek
-          ? arrayBufferToBase64Url(c.wrappedDek)
-          : null,
-        wrappedDekIv: c.wrappedDekIv
-          ? arrayBufferToBase64Url(c.wrappedDekIv)
-          : null,
-        label: c.label,
+        wrappedDek: arrayBufferToBase64Url(c.wrappedDek),
+        wrappedDekIv: arrayBufferToBase64Url(c.wrappedDekIv),
       })),
     });
   }),

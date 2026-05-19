@@ -10,10 +10,7 @@
 
 import { Wallet } from 'ethers'
 import type { HDNodeWallet } from 'ethers'
-import type {
-  AuthenticationResponseJSON,
-  RegistrationResponseJSON,
-} from '@simplewebauthn/browser'
+import type { AuthenticationResponseJSON } from '@simplewebauthn/browser'
 import {
   aesGcmDecrypt,
   aesGcmEncrypt,
@@ -41,7 +38,6 @@ import {
 import type { EncryptedBlob } from './keystore'
 import {
   extractPrfFirst,
-  getGlobalPrfSalt,
   prfEnabledOnRegistration,
   runGetForPrf,
   runRegistrationCeremony,
@@ -87,18 +83,13 @@ type BootstrapRes = {
   sessionToken: string
   sessionExpiresAt: number
   wallet: {
-    protectionScheme: 'prf' | 'passphrase'
-    mnemonicCiphertext: string | null
-    mnemonicIv: string | null
-    encryptedJson: string | null
-    mnemonicConfirmedAt: number | null
+    mnemonicCiphertext: string
+    mnemonicIv: string
   }
   credentials: Array<{
     credentialId: string
-    prfSalt: string | null
-    wrappedDek: string | null
-    wrappedDekIv: string | null
-    label: string
+    wrappedDek: string
+    wrappedDekIv: string
   }>
 }
 
@@ -110,29 +101,10 @@ export type NewWalletDraft = {
   sessionToken: string
 }
 
-// On PRF failure we don't throw — we return everything the second-step
-// passphrase flow needs so the user only ever sees one OS passkey prompt.
-export type PassphraseSetupContext = {
-  attestation: RegistrationResponseJSON
-  userIdBytes: string
-  rpId: string
-  // The wallet has already been generated client-side; we hold it here
-  // until the user supplies a passphrase to encrypt it. Mnemonic lives in
-  // memory only for the duration of this object.
-  mnemonic: string
-  addresses: DerivedAddresses
-}
-
-export type RegistrationOutcome =
-  | { kind: 'success'; draft: NewWalletDraft }
-  | { kind: 'needs-passphrase'; ctx: PassphraseSetupContext }
-
-export async function registerNewWallet(
-  _unusedLabel?: string,
-): Promise<RegistrationOutcome> {
-  // 1. Generate wallet locally; nothing about it leaks into the WebAuthn
-  //    user record (label is just "Pampalo" — the OS keychain disambiguates
-  //    by credential id / creation time).
+export async function registerNewWallet(): Promise<NewWalletDraft> {
+  // 1. Generate wallet locally. The WebAuthn user record only carries a
+  //    static "Pampalo" label — the OS keychain disambiguates by
+  //    credential id / creation time.
   const dekBytes = generateDekBytes()
   const wallet = Wallet.createRandom()
   const mnemonic = wallet.mnemonic?.phrase
@@ -141,17 +113,16 @@ export async function registerNewWallet(
   const passkeyDisplayName = 'Pampalo'
 
   // 2. Server start (records the random userIdBytes + challenge).
-  const start = await postJson<{ displayName: string }, RegStartRes>(
+  const start = await postJson<Record<string, never>, RegStartRes>(
     '/auth/registration/start',
-    { displayName: passkeyDisplayName },
+    {},
   )
 
   // 3. Browser create(). We don't gate on prf.enabled here — iOS Safari +
-  //    1Password (and some other providers) routinely signal
-  //    enabled:false / undefined on create even when the credential will
-  //    happily produce PRF output on a subsequent get(). We log the value
-  //    for diagnostics but always proceed to the get() and let *its*
-  //    result decide whether we have a usable PRF or need to fall back.
+  //    1Password routinely signal enabled:false / undefined on create
+  //    even when the credential will happily produce PRF output on a
+  //    subsequent get(). We log the value for diagnostics but always
+  //    proceed to the get() and let *its* result decide.
   const attestation = await runRegistrationCeremony(start, passkeyDisplayName)
   console.log(
     '[pampalo:auth] register: create() prf.enabled =',
@@ -159,7 +130,8 @@ export async function registerNewWallet(
   )
 
   // 4. Browser get() to actually derive PRF output. This is the
-  //    authoritative capability check.
+  //    authoritative capability check. PRF-less providers are rejected
+  //    here — there is no passphrase fallback. See ADR 0002.
   const fakeChallengeForPrf = bufferToBase64Url(
     crypto.getRandomValues(new Uint8Array(32)),
   )
@@ -173,20 +145,7 @@ export async function registerNewWallet(
     prfOutput ? 'present' : 'null',
   )
   if (!prfOutput) {
-    // Credential genuinely doesn't support PRF on either ceremony — fall
-    // back to passphrase. The passkey itself still works for
-    // authentication (sign-in challenges); we just can't use it to
-    // derive an encryption key.
-    return {
-      kind: 'needs-passphrase',
-      ctx: {
-        attestation,
-        userIdBytes: start.userIdBytes,
-        rpId: start.rpId,
-        mnemonic,
-        addresses,
-      },
-    }
+    throw new PrfNotSupportedError()
   }
 
   let kek: CryptoKey | null = null
@@ -195,7 +154,6 @@ export async function registerNewWallet(
   let mnemonicIv: ArrayBuffer | null = null
   let wrappedDek: ArrayBuffer | null = null
   let wrappedDekIv: ArrayBuffer | null = null
-  let saltCopy: Uint8Array | null = null
 
   try {
     kek = await deriveKekFromPrfOutput(prfOutput)
@@ -209,22 +167,14 @@ export async function registerNewWallet(
     wrappedDek = wrapped.ciphertext
     wrappedDekIv = wrapped.iv
 
-    // 5. Server complete.
-    const saltAB = await getGlobalPrfSalt()
-    saltCopy = new Uint8Array(saltAB.byteLength)
-    saltCopy.set(new Uint8Array(saltAB))
-
     const completeBody = {
       userIdBytes: start.userIdBytes,
       attestation,
       walletPayload: {
-        scheme: 'prf' as const,
         mnemonicCiphertext: bufferToBase64Url(mnemonicCiphertext),
         mnemonicIv: bufferToBase64Url(mnemonicIv),
         wrappedDek: bufferToBase64Url(wrappedDek),
         wrappedDekIv: bufferToBase64Url(wrappedDekIv),
-        prfSalt: bufferToBase64Url(saltCopy),
-        label: defaultPasskeyLabel(),
       },
     }
     const complete = await postJson<typeof completeBody, RegCompleteRes>(
@@ -232,19 +182,13 @@ export async function registerNewWallet(
       completeBody,
     )
 
-    // 6. Addresses are already derived above; surface them back to the caller.
     return {
-      kind: 'success' as const,
-      draft: {
-        mnemonic,
-        addresses,
-        sessionToken: complete.sessionToken,
-      },
+      mnemonic,
+      addresses,
+      sessionToken: complete.sessionToken,
     }
   } finally {
-    // Best-effort wipe of in-memory key material. References to CryptoKey are
-    // dropped; raw byte arrays are zeroed.
-    zeroBytes(dekBytes, saltCopy ?? undefined)
+    zeroBytes(dekBytes)
     kek = null
     dekKey = null
     mnemonicCiphertext = null
@@ -267,104 +211,12 @@ export function finalizeNewWallet(draft: NewWalletDraft): void {
   setAddresses(draft.addresses)
 }
 
-// Second step of registration when PRF wasn't available. Takes the
-// user-supplied passphrase, encrypts the wallet with ethers' scrypt-backed
-// keystore format, and finishes registration with the server.
-export async function completePassphraseRegistration(
-  ctx: PassphraseSetupContext,
-  passphrase: string,
-): Promise<NewWalletDraft> {
-  // Re-hydrate the wallet from the mnemonic so we can use ethers' encrypt.
-  // (We never persist this — it stays in memory only for this function.)
-  const wallet = Wallet.fromPhrase(ctx.mnemonic)
-  const encryptedJson = await wallet.encrypt(passphrase)
-
-  const completeBody = {
-    userIdBytes: ctx.userIdBytes,
-    attestation: ctx.attestation,
-    walletPayload: {
-      scheme: 'passphrase' as const,
-      encryptedJson,
-      label: defaultPasskeyLabel(),
-    },
-  }
-  const complete = await postJson<typeof completeBody, RegCompleteRes>(
-    '/auth/registration/complete',
-    completeBody,
-  )
-
-  return {
-    mnemonic: ctx.mnemonic,
-    addresses: ctx.addresses,
-    sessionToken: complete.sessionToken,
-  }
-}
-
-// Unlock a passphrase-protected wallet using the user-supplied passphrase.
-// Reads the encrypted JSON from the in-memory blob, decrypts via ethers,
-// and updates the keystore/addresses. No passkey ceremony — the cookie
-// session is the auth primitive; the passphrase is the encryption primitive.
-export async function unlockWithPassphrase(
-  passphrase: string,
-): Promise<DerivedAddresses> {
-  const t = new Timing('unlock-passphrase')
-  // Make sure the blob is in memory. If it isn't (cold start), bootstrap.
-  let blob = getBlob()
-  if (!blob) {
-    t.mark('→ POST /auth/bootstrap (cold)')
-    const boot = await bootstrapFromCookie()
-    if (!boot) throw new Error('Session expired — please sign in again.')
-    blob = boot.blob
-    t.mark('← /auth/bootstrap')
-  }
-  if (!blob.encryptedJson) {
-    throw new Error('This wallet isn’t passphrase-protected.')
-  }
-  t.mark('Wallet.fromEncryptedJson (scrypt)')
-  let wallet: HDNodeWallet | null = null
-  try {
-    const decrypted = await Wallet.fromEncryptedJson(
-      blob.encryptedJson,
-      passphrase,
-    )
-    // ethers may return a Wallet (private-key only) or an HDNodeWallet
-    // (mnemonic + private key). We require the HD form for deriveAddresses.
-    if (!('mnemonic' in decrypted) || !decrypted.mnemonic) {
-      throw new Error('Decrypted wallet has no mnemonic.')
-    }
-    wallet = decrypted
-    const addresses = deriveAddresses(wallet)
-    t.mark('deriveAddresses (EVM + envelope + poseidon)')
-    setAddresses(addresses)
-    t.finish()
-    return addresses
-  } finally {
-    wallet = null
-  }
-}
-
-// Marks the wallet's mnemonic as confirmed server-side. Called when the
-// user completes the 3-word confirmation step. Skipping ("Do it later")
-// just doesn't call this; the wallet's mnemonicConfirmedAt stays null.
-export async function markMnemonicConfirmed(
-  sessionToken: string,
-): Promise<void> {
-  const { ConvexHttpClient } = await import('convex/browser')
-  const { api } = await import('../../convex/_generated/api')
-  const url = import.meta.env.VITE_CONVEX_URL as string | undefined
-  if (!url) throw new Error('VITE_CONVEX_URL is not set')
-  const client = new ConvexHttpClient(url)
-  await client.mutation(api.auth.confirmMnemonic, { sessionToken })
-}
-
 // ─── Sign in ─────────────────────────────────────────────────────────────
 
-// PRF wallets unlock end-to-end in one step. Passphrase wallets surface
-// `needs-passphrase` so the UI can prompt for the passphrase as a second
-// step — the cookie session is already established at that point.
-export type SignInOutcome =
-  | { kind: 'success'; addresses: DerivedAddresses; sessionToken: string }
-  | { kind: 'needs-passphrase'; sessionToken: string }
+export type SignInOutcome = {
+  addresses: DerivedAddresses
+  sessionToken: string
+}
 
 export async function signInWithExistingPasskey(): Promise<SignInOutcome> {
   const t = new Timing('sign-in')
@@ -437,20 +289,7 @@ export async function completeConditionalSignIn(
 // ceremony purely to derive PRF and decrypt — no server round-trip for
 // auth, since the cookie is still valid.
 
-// Thrown from `reAuthenticate` when the wallet is passphrase-protected — the
-// re-auth path can't unlock without a passphrase prompt, so the caller (the
-// wallet route) needs to switch to the passphrase entry UI instead.
-export class PassphraseRequiredError extends Error {
-  readonly kind = 'passphrase-required' as const
-  constructor() {
-    super('This wallet is passphrase-protected. Enter your passphrase to unlock.')
-    this.name = 'PassphraseRequiredError'
-  }
-}
-
-export type ReAuthOutcome =
-  | { kind: 'success'; addresses: DerivedAddresses }
-  | { kind: 'needs-passphrase' }
+export type ReAuthOutcome = { addresses: DerivedAddresses }
 
 export async function reAuthenticate(): Promise<ReAuthOutcome> {
   const t = new Timing('re-auth')
@@ -460,23 +299,10 @@ export async function reAuthenticate(): Promise<ReAuthOutcome> {
     console.log('no blob → fallback to full sign-in')
     t.finish('fallback')
     const outcome = await signInWithExistingPasskey()
-    if (outcome.kind === 'needs-passphrase') return { kind: 'needs-passphrase' }
-    return { kind: 'success', addresses: outcome.addresses }
-  }
-
-  if (blob.protectionScheme === 'passphrase') {
-    // No PRF available — caller must prompt for the passphrase.
-    t.finish('passphrase')
-    return { kind: 'needs-passphrase' }
+    return { addresses: outcome.addresses }
   }
 
   const cred = blob.credentials[0]
-  if (!cred.wrappedDek || !cred.wrappedDekIv) {
-    throw new Error('PRF wallet missing wrapped DEK — re-sign in.')
-  }
-  if (!blob.mnemonicCiphertext || !blob.mnemonicIv) {
-    throw new Error('PRF wallet missing mnemonic ciphertext — re-sign in.')
-  }
 
   // Local-only challenge: the PRF derivation runs entirely in the
   // authenticator + browser; the server never sees this assertion.
@@ -518,7 +344,7 @@ export async function reAuthenticate(): Promise<ReAuthOutcome> {
     setAddresses(addresses)
     console.log('keystore + localStorage updated')
     t.finish()
-    return { kind: 'success', addresses }
+    return { addresses }
   } finally {
     new Uint8Array(dekBytes).fill(0)
     new Uint8Array(mnemonicBuf).fill(0)
@@ -559,22 +385,12 @@ export async function bootstrapFromCookie(): Promise<{
       {},
     )
     const blob: EncryptedBlob = {
-      protectionScheme: res.wallet.protectionScheme,
-      mnemonicCiphertext: res.wallet.mnemonicCiphertext
-        ? base64UrlToBuffer(res.wallet.mnemonicCiphertext)
-        : null,
-      mnemonicIv: res.wallet.mnemonicIv
-        ? base64UrlToBuffer(res.wallet.mnemonicIv)
-        : null,
-      encryptedJson: res.wallet.encryptedJson,
+      mnemonicCiphertext: base64UrlToBuffer(res.wallet.mnemonicCiphertext),
+      mnemonicIv: base64UrlToBuffer(res.wallet.mnemonicIv),
       credentials: res.credentials.map((c) => ({
         credentialId: base64UrlToBuffer(c.credentialId),
-        prfSalt: c.prfSalt ? base64UrlToBuffer(c.prfSalt) : null,
-        wrappedDek: c.wrappedDek ? base64UrlToBuffer(c.wrappedDek) : null,
-        wrappedDekIv: c.wrappedDekIv
-          ? base64UrlToBuffer(c.wrappedDekIv)
-          : null,
-        label: c.label,
+        wrappedDek: base64UrlToBuffer(c.wrappedDek),
+        wrappedDekIv: base64UrlToBuffer(c.wrappedDekIv),
       })),
     }
     setBlob(blob)
@@ -600,9 +416,6 @@ async function unlockAfterAssertion(
 ): Promise<SignInOutcome> {
   const t = parentTiming ?? new Timing('unlock')
 
-  // Refetch the encrypted blob via /auth/bootstrap (cookie now valid). This
-  // also tells us whether the wallet is PRF- or passphrase-protected, which
-  // we can't know from the assertion alone.
   console.log('→ POST /auth/bootstrap')
   const boot = await bootstrapFromCookie()
   if (!boot) throw new Error("Server didn't accept the freshly issued cookie")
@@ -610,24 +423,10 @@ async function unlockAfterAssertion(
 
   setSessionToken(sessionToken)
 
-  if (boot.blob.protectionScheme === 'passphrase') {
-    // Cookie session is established; the UI now needs to ask the user for
-    // their passphrase before we can derive addresses.
-    if (!parentTiming) t.finish('passphrase')
-    return { kind: 'needs-passphrase', sessionToken }
-  }
-
   if (!prfOutput) {
-    // Wallet is PRF-protected but this passkey didn't return PRF output.
     throw new PrfNotSupportedError()
   }
   const cred = boot.blob.credentials[0]
-  if (!cred.wrappedDek || !cred.wrappedDekIv) {
-    throw new Error('PRF wallet missing wrapped DEK — server state corrupt.')
-  }
-  if (!boot.blob.mnemonicCiphertext || !boot.blob.mnemonicIv) {
-    throw new Error('PRF wallet missing mnemonic ciphertext — server state corrupt.')
-  }
 
   console.log('HKDF: derive KEK from PRF output')
   const kek = await deriveKekFromPrfOutput(prfOutput)
@@ -652,21 +451,11 @@ async function unlockAfterAssertion(
     setAddresses(addresses)
     console.log('keystore + localStorage updated')
     if (!parentTiming) t.finish()
-    return { kind: 'success', addresses, sessionToken }
+    return { addresses, sessionToken }
   } finally {
     // Best-effort scrub.
     new Uint8Array(dekBytes).fill(0)
     new Uint8Array(mnemonicBuf).fill(0)
     wallet = null
   }
-}
-
-function defaultPasskeyLabel(): string {
-  if (typeof navigator === 'undefined') return 'Passkey'
-  const ua = navigator.userAgent || ''
-  if (/iPhone|iPad/.test(ua)) return 'iPhone'
-  if (/Macintosh/.test(ua)) return 'Mac'
-  if (/Android/.test(ua)) return 'Android'
-  if (/Windows/.test(ua)) return 'Windows'
-  return 'Passkey'
 }

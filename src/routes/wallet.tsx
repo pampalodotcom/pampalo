@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
-import { Fingerprint, KeyRound, Loader2, LogOut, RefreshCcw } from "lucide-react";
+import { Loader2, LogOut, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 import { AccountAvatar } from "@/components/pampalo/AccountAvatar";
@@ -14,7 +14,6 @@ import {
   type NetworkFilter,
 } from "@/components/pampalo/NetworkFilterTabs";
 import { PageLoading } from "@/components/pampalo/PageLoading";
-import { PassphraseEntry } from "@/components/pampalo/PassphraseEntry";
 import { SecondaryButton } from "@/components/pampalo/SecondaryButton";
 import { ThemeToggle } from "@/components/pampalo/ThemeToggle";
 import { useAccountModal } from "@/lib/account-modal";
@@ -24,7 +23,6 @@ import {
   weiToNumber,
 } from "@/lib/balances";
 import { useAuth } from "@/lib/auth";
-import { unlockWithPassphrase } from "@/lib/auth-flow";
 import { getBlob } from "@/lib/keystore";
 import { isTestnetChainId, useTestnetsEnabled } from "@/lib/preferences";
 import { useTheme } from "@/lib/theme";
@@ -39,8 +37,6 @@ function Wallet() {
   const accountModal = useAccountModal();
   const [signingOut, setSigningOut] = useState(false);
   const [reauthing, setReauthing] = useState(false);
-  const [needsPassphrase, setNeedsPassphrase] = useState(false);
-  const [passphraseBusy, setPassphraseBusy] = useState(false);
 
   useEffect(() => {
     if (auth.state.status === "anonymous") {
@@ -53,37 +49,17 @@ function Wallet() {
   }
 
   const addresses = auth.state.addresses;
-  const scheme = getBlob()?.protectionScheme ?? "prf";
 
   async function onReAuth() {
     setReauthing(true);
     try {
-      const outcome = await auth.reAuth();
-      if (outcome.kind === "needs-passphrase") {
-        setNeedsPassphrase(true);
-        return;
-      }
+      await auth.reAuth();
       toast("Wallet unlocked");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Couldn’t unlock wallet.";
       toast.error(msg);
     } finally {
       setReauthing(false);
-    }
-  }
-
-  async function onPassphraseUnlock(passphrase: string) {
-    setPassphraseBusy(true);
-    try {
-      await unlockWithPassphrase(passphrase);
-      auth.refreshAddress();
-      setNeedsPassphrase(false);
-      toast("Wallet unlocked");
-    } catch (e) {
-      setPassphraseBusy(false);
-      throw e;
-    } finally {
-      setPassphraseBusy(false);
     }
   }
 
@@ -111,7 +87,6 @@ function Wallet() {
           <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-5">
             <div className="pointer-events-auto flex items-center gap-2">
               <BrandLockup />
-              <SchemeBadge scheme={scheme} />
             </div>
             <div className="pointer-events-auto flex items-center gap-2">
               {addresses && (
@@ -140,16 +115,7 @@ function Wallet() {
       {/* Dashboard column. Pulled up with -mt-10 so the first card overlaps
           the beach's bottom edge, matching the landing's hero card. */}
       <div className="relative z-10 -mt-10 mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-4 pb-12">
-        {needsPassphrase ? (
-          <section className="rise-in rounded-3xl card-cream px-5 py-5">
-            <PassphraseEntry
-              mode="unlock"
-              onSubmit={onPassphraseUnlock}
-              onBack={() => setNeedsPassphrase(false)}
-              busy={passphraseBusy}
-            />
-          </section>
-        ) : addresses ? (
+        {addresses ? (
           <Dashboard evmAddress={addresses.evm} />
         ) : (
           <section className="rise-in rounded-3xl card-cream px-5 py-5">
@@ -157,7 +123,6 @@ function Wallet() {
               onUnlock={onReAuth}
               loading={reauthing}
               canReAuth={getBlob() !== null}
-              scheme={scheme}
             />
           </section>
         )}
@@ -578,20 +543,16 @@ function NoAddressNotice({
   onUnlock,
   loading,
   canReAuth,
-  scheme,
 }: {
   onUnlock: () => void;
   loading: boolean;
   canReAuth: boolean;
-  scheme: "prf" | "passphrase";
 }) {
-  const passphrase = scheme === "passphrase";
   return (
     <div className="flex flex-col gap-3 text-[14px] text-ink-soft">
       <p>
-        Your wallet addresses aren’t cached on this device. Unlock{" "}
-        {passphrase ? "with your passphrase" : "with your passkey"} to view
-        your balances.
+        Your wallet addresses aren’t cached on this device. Unlock with your
+        passkey to view your balances.
       </p>
       <button
         type="button"
@@ -608,29 +569,8 @@ function NoAddressNotice({
         ) : (
           <RefreshCcw className="size-3.5" />
         )}
-        {passphrase ? "Unlock with passphrase" : "Unlock with passkey"}
+        Unlock with passkey
       </button>
     </div>
-  );
-}
-
-function SchemeBadge({ scheme }: { scheme: "prf" | "passphrase" }) {
-  const isPrf = scheme === "prf";
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full",
-        "border border-line bg-paper-lo px-2 py-0.5",
-        "text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-soft",
-      )}
-      title={isPrf ? "Encrypted with passkey (PRF)" : "Encrypted with passphrase"}
-    >
-      {isPrf ? (
-        <Fingerprint className="size-3" />
-      ) : (
-        <KeyRound className="size-3" />
-      )}
-      {isPrf ? "Passkey" : "Passphrase"}
-    </span>
   );
 }

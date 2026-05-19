@@ -135,26 +135,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!blobQuery) return;
     const w = blobQuery.wallet;
     const blob: EncryptedBlob = {
-      protectionScheme: w.protectionScheme,
-      mnemonicCiphertext: w.mnemonicCiphertext
-        ? base64UrlToBuffer(bufferToB64UrlIfNeeded(w.mnemonicCiphertext))
-        : null,
-      mnemonicIv: w.mnemonicIv
-        ? base64UrlToBuffer(bufferToB64UrlIfNeeded(w.mnemonicIv))
-        : null,
-      encryptedJson: w.encryptedJson,
+      mnemonicCiphertext: base64UrlToBuffer(
+        bufferToB64UrlIfNeeded(w.mnemonicCiphertext),
+      ),
+      mnemonicIv: base64UrlToBuffer(bufferToB64UrlIfNeeded(w.mnemonicIv)),
       credentials: blobQuery.credentials.map((c) => ({
         credentialId: base64UrlToBuffer(bufferToB64UrlIfNeeded(c.credentialId)),
-        prfSalt: c.prfSalt
-          ? base64UrlToBuffer(bufferToB64UrlIfNeeded(c.prfSalt))
-          : null,
-        wrappedDek: c.wrappedDek
-          ? base64UrlToBuffer(bufferToB64UrlIfNeeded(c.wrappedDek))
-          : null,
-        wrappedDekIv: c.wrappedDekIv
-          ? base64UrlToBuffer(bufferToB64UrlIfNeeded(c.wrappedDekIv))
-          : null,
-        label: c.label,
+        wrappedDek: base64UrlToBuffer(bufferToB64UrlIfNeeded(c.wrappedDek)),
+        wrappedDekIv: base64UrlToBuffer(bufferToB64UrlIfNeeded(c.wrappedDekIv)),
       })),
     };
     setBlob(blob);
@@ -184,11 +172,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     reAuth: async () => {
       const outcome = await runReAuthenticate();
       const token = getSessionToken();
-      if (outcome.kind === "needs-passphrase") {
-        // Cookie session is still valid; surface the prompt requirement
-        // to the caller without touching auth state.
-        return outcome;
-      }
       if (token) {
         setState({
           status: "authenticated",

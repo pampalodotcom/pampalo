@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Fingerprint, KeyRound, RefreshCcw, Loader2 } from "lucide-react";
+import { ArrowLeft, RefreshCcw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AccountAvatar, shortAddress } from "@/components/pampalo/AccountAvatar";
 import { AddressWell } from "@/components/pampalo/AddressWell";
@@ -8,7 +8,6 @@ import { BeachScene } from "@/components/pampalo/BeachScene";
 import { PageLoading } from "@/components/pampalo/PageLoading";
 import { ThemeToggle } from "@/components/pampalo/ThemeToggle";
 import { useAuth } from "@/lib/auth";
-import { getBlob } from "@/lib/keystore";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
@@ -31,16 +30,11 @@ function AccountPage() {
   }
 
   const addresses = auth.state.addresses;
-  const scheme = getBlob()?.protectionScheme ?? "prf";
 
   async function onReAuth() {
     setReauthing(true);
     try {
-      const outcome = await auth.reAuth();
-      if (outcome.kind === "needs-passphrase") {
-        toast("Passphrase unlock required — go back to /wallet to enter it.");
-        return;
-      }
+      await auth.reAuth();
       toast("Wallet unlocked");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Couldn’t unlock wallet.";
@@ -81,7 +75,6 @@ function AccountPage() {
           <div className="mb-4 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <p className="eyebrow">Your Wallet</p>
-              <SchemeBadge scheme={scheme} />
             </div>
             {addresses && <ReAuthButton onClick={onReAuth} loading={reauthing} />}
           </div>
@@ -187,23 +180,3 @@ function ReAuthButton({
   );
 }
 
-function SchemeBadge({ scheme }: { scheme: "prf" | "passphrase" }) {
-  const isPrf = scheme === "prf";
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full",
-        "border border-line bg-paper-lo px-2 py-0.5",
-        "text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-soft",
-      )}
-      title={isPrf ? "Encrypted with passkey (PRF)" : "Encrypted with passphrase"}
-    >
-      {isPrf ? (
-        <Fingerprint className="size-3" />
-      ) : (
-        <KeyRound className="size-3" />
-      )}
-      {isPrf ? "Passkey" : "Passphrase"}
-    </span>
-  );
-}
