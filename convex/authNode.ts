@@ -18,22 +18,12 @@ export const verifyAndCompleteRegistration = internalAction({
     expectedRPID: v.string(),
     expectedOrigin: v.string(),
     attestation: v.any(), // RegistrationResponseJSON shape from the browser
-    walletPayload: v.union(
-      v.object({
-        scheme: v.literal("prf"),
-        mnemonicCiphertext: v.bytes(),
-        mnemonicIv: v.bytes(),
-        wrappedDek: v.bytes(),
-        wrappedDekIv: v.bytes(),
-        prfSalt: v.bytes(),
-        label: v.string(),
-      }),
-      v.object({
-        scheme: v.literal("passphrase"),
-        encryptedJson: v.string(),
-        label: v.string(),
-      }),
-    ),
+    walletPayload: v.object({
+      mnemonicCiphertext: v.bytes(),
+      mnemonicIv: v.bytes(),
+      wrappedDek: v.bytes(),
+      wrappedDekIv: v.bytes(),
+    }),
   },
   handler: async (ctx, args) => {
     const pending = await ctx.runQuery(internal.auth._findPendingRegistration, {
@@ -65,39 +55,18 @@ export const verifyAndCompleteRegistration = internalAction({
       await ctx.runMutation(internal.auth._completeRegistration, {
         pendingId: pending._id,
         userIdBytes: args.userIdBytes,
-        displayName: pending.displayName,
-        payload:
-          args.walletPayload.scheme === "prf"
-            ? {
-                scheme: "prf" as const,
-                credential: {
-                  credentialId: base64UrlToBuffer(credentialId),
-                  publicKey: bufferFromUint8(credentialPublicKey),
-                  counter,
-                  transports,
-                  prfSalt: args.walletPayload.prfSalt,
-                  wrappedDek: args.walletPayload.wrappedDek,
-                  wrappedDekIv: args.walletPayload.wrappedDekIv,
-                  label: args.walletPayload.label,
-                },
-                wallet: {
-                  mnemonicCiphertext: args.walletPayload.mnemonicCiphertext,
-                  mnemonicIv: args.walletPayload.mnemonicIv,
-                },
-              }
-            : {
-                scheme: "passphrase" as const,
-                credential: {
-                  credentialId: base64UrlToBuffer(credentialId),
-                  publicKey: bufferFromUint8(credentialPublicKey),
-                  counter,
-                  transports,
-                  label: args.walletPayload.label,
-                },
-                wallet: {
-                  encryptedJson: args.walletPayload.encryptedJson,
-                },
-              },
+        credential: {
+          credentialId: base64UrlToBuffer(credentialId),
+          publicKey: bufferFromUint8(credentialPublicKey),
+          counter,
+          transports,
+          wrappedDek: args.walletPayload.wrappedDek,
+          wrappedDekIv: args.walletPayload.wrappedDekIv,
+        },
+        wallet: {
+          mnemonicCiphertext: args.walletPayload.mnemonicCiphertext,
+          mnemonicIv: args.walletPayload.mnemonicIv,
+        },
       });
 
     return completion;

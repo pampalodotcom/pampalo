@@ -5,7 +5,9 @@ import { v } from "convex/values";
 export default defineSchema({
   users: defineTable({
     userIdBytes: v.bytes(), // 16 random bytes; used as WebAuthn user.id
-    displayName: v.string(),
+    // Existing rows may carry a string; new rows do not write this field.
+    // See docs/adr/0001-encrypted-mnemonic-and-nothing-else.md.
+    displayName: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_userIdBytes", ["userIdBytes"]),
 
@@ -41,12 +43,19 @@ export default defineSchema({
     publicKey: v.bytes(), // COSE-encoded
     counter: v.number(),
     transports: v.array(v.string()),
-    // PRF-only fields; absent for credentials bound to passphrase wallets.
+    // Per-credential PRF salt — historical column, no longer written.
+    // The client uses a single deterministic global salt; see
+    // docs/adr/0001-encrypted-mnemonic-and-nothing-else.md.
     prfSalt: v.optional(v.bytes()),
+    // Wrapped DEK is required for new PRF wallets; v.optional only because
+    // historical rows may carry a passphrase-protected credential without
+    // these fields (see docs/adr/0002-prf-required-no-passphrase-fallback.md).
     wrappedDek: v.optional(v.bytes()),
     wrappedDekIv: v.optional(v.bytes()),
-    label: v.string(),
+    // Device label — historical column, no longer written.
+    label: v.optional(v.string()),
     createdAt: v.number(),
+    // Historical column, no longer written.
     lastUsedAt: v.optional(v.number()),
   })
     .index("by_credentialId", ["credentialId"])
@@ -55,7 +64,10 @@ export default defineSchema({
   pendingRegistrations: defineTable({
     userIdBytes: v.bytes(),
     challenge: v.bytes(),
-    displayName: v.string(),
+    // Historical column, no longer written. New flows pass the WebAuthn
+    // displayName from the client directly without round-tripping it
+    // through the database.
+    displayName: v.optional(v.string()),
     expiresAt: v.number(),
   })
     .index("by_userIdBytes", ["userIdBytes"])
@@ -75,4 +87,93 @@ export default defineSchema({
   })
     .index("by_token", ["token"])
     .index("by_expiresAt", ["expiresAt"]),
+
+  // ─── Public market data ─────────────────────────────────────────────────
+  // Everything below is global, public information. No user data.
+  // BYO-RPC design note: networks store only `alchemySubdomain` (e.g.
+  // "eth-mainnet"), never a full URL. The proxy action composes the URL
+  // from process.env.ALCHEMY_API_KEY. When BYO RPC lands, the client picks
+  // its own URL per-chainId; the catalog stays unchanged.
+
+  supportedNetworks: defineTable({
+    chainId: v.number(),
+    name: v.string(),
+    alchemySubdomain: v.string(),
+    nativeSymbol: v.string(),
+    nativeDecimals: v.number(),
+    // True when this network's native token represents "ETH" for the
+    // ETH-balance UI (Ethereum, Optimism, Arbitrum, Base, …); false for
+    // L1s with non-ETH gas tokens (Polygon, etc.).
+    isNative: v.boolean(),
+    // LayerZero endpoint id for this chain (e.g. mainnet=30101, Sepolia=
+    // 40101, Arb Sepolia=40231). Optional because future networks may be
+    // seeded before LZ exists for them.
+    lzEndpointId: v.optional(v.number()),
+    enabled: v.boolean(),
+  }).index("by_chainId", ["chainId"]),
+
+  supportedTokens: defineTable({
+    networkId: v.id("supportedNetworks"),
+    // Lowercased hex. Use "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" as
+    // the sentinel for the native token (matches 1inch / OKX convention).
+    address: v.string(),
+    name: v.string(), // "USD Coin", "Ethereum", …
+    symbol: v.string(),
+    decimals: v.number(),
+    // True only for the chain-native token row (ETH on mainnet, etc.).
+    // Redundant with the sentinel address but cheaper to query.
+    isNative: v.optional(v.boolean()),
+    // UI display precision (e.g. USDC → 2, ETH → 5). Optional; client
+    // defaults sensibly when absent.
+    roundTo: v.optional(v.number()),
+    // Optional FK into priceFeeds.shortId. Lets the client price token
+    // balances using the same feed catalog as native ETH.
+    priceFeedShortId: v.optional(v.string()),
+  })
+    .index("by_networkId", ["networkId"])
+    .index("by_networkId_and_address", ["networkId", "address"]),
+
+  priceFeeds: defineTable({
+    // Short id used everywhere downstream — fixed lowercase "base/quote".
+    // e.g. "eth/usd", "usd/aud", "usd/cad", "usd/gbp".
+    shortId: v.string(),
+    // All fiat-pair feeds we read live on Ethereum mainnet (per design
+    // decision); networkId points at that row. Keeping this as an FK
+    // avoids hard-coding chainId 1 anywhere.
+    networkId: v.id("supportedNetworks"),
+    aggregator: v.string(), // 0x… AggregatorV3Interface address
+    feedDecimals: v.number(), // usually 8
+    enabled: v.boolean(),
+  }).index("by_shortId", ["shortId"]),
+
+  // One row per feed; upserted on every refresh.
+  latestPrices: defineTable({
+    shortId: v.string(),
+    answer: v.string(), // raw int256 as decimal string
+    feedDecimals: v.number(),
+    feedUpdatedAt: v.number(), // on-chain roundData.updatedAt (seconds)
+    fetchedAt: v.number(), // wall clock at fetch (ms)
+  }).index("by_shortId", ["shortId"]),
+
+  // Append-only history. Field names are 1–2 chars to save bytes — this
+  // table grows fast and will eventually be archived to file storage.
+  priceHistory: defineTable({
+    s: v.string(), // shortId
+    a: v.string(), // answer
+    t: v.number(), // fetchedAt (ms)
+  }).index("by_s_t", ["s", "t"]),
+
+  latestGas: defineTable({
+    networkId: v.id("supportedNetworks"),
+    gasPriceWei: v.string(),
+    baseFeeWei: v.optional(v.string()),
+    priorityFeeWei: v.optional(v.string()),
+    fetchedAt: v.number(),
+  }).index("by_networkId", ["networkId"]),
+
+  gasHistory: defineTable({
+    n: v.id("supportedNetworks"),
+    g: v.string(), // gasPriceWei
+    t: v.number(),
+  }).index("by_n_t", ["n", "t"]),
 });

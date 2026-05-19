@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 import * as React from "react";
 import appCss from "../styles.css?url";
+import { AccountModalProvider } from "@/lib/account-modal";
 import { AuthProvider } from "@/lib/auth";
 import { ThemeProvider } from "@/lib/theme";
 import { Toaster } from "@/components/ui/sonner";
@@ -83,8 +84,10 @@ function RootComponent() {
     <RootDocument>
       <ThemeProvider>
         <AuthProvider>
-          <Outlet />
-          <Toaster position="top-center" />
+          <AccountModalProvider>
+            <Outlet />
+            <Toaster position="top-center" />
+          </AccountModalProvider>
         </AuthProvider>
       </ThemeProvider>
     </RootDocument>

@@ -3,7 +3,6 @@ import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
   internalQuery,
-  mutation,
   query,
 } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -14,14 +13,13 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 // ─── Internal: ceremony start (HTTP routes call these) ────────────────────
 
 export const _startRegistration = internalMutation({
-  args: { displayName: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
     const userIdBytes = randomBytes(16);
     const challenge = randomBytes(32);
     await ctx.db.insert("pendingRegistrations", {
       userIdBytes: userIdBytes.buffer as ArrayBuffer,
       challenge: challenge.buffer as ArrayBuffer,
-      displayName: args.displayName,
       expiresAt: Date.now() + PENDING_TTL_MS,
     });
     return {
@@ -55,49 +53,28 @@ export const getEncryptedBlob = query({
       .query("wallets")
       .withIndex("by_userId", (q) => q.eq("userId", session.userId))
       .first();
-    if (!wallet) return null;
+    if (!wallet || !wallet.mnemonicCiphertext || !wallet.mnemonicIv) {
+      return null;
+    }
 
     const credentials = await ctx.db
       .query("credentials")
       .withIndex("by_userId", (q) => q.eq("userId", session.userId))
       .take(16);
 
-    const scheme = wallet.protectionScheme ?? "prf";
     return {
       wallet: {
-        protectionScheme: scheme,
-        mnemonicCiphertext: wallet.mnemonicCiphertext ?? null,
-        mnemonicIv: wallet.mnemonicIv ?? null,
-        encryptedJson: wallet.encryptedJson ?? null,
-        mnemonicConfirmedAt: wallet.mnemonicConfirmedAt ?? null,
+        mnemonicCiphertext: wallet.mnemonicCiphertext,
+        mnemonicIv: wallet.mnemonicIv,
       },
-      credentials: credentials.map((c) => ({
-        credentialId: c.credentialId,
-        prfSalt: c.prfSalt ?? null,
-        wrappedDek: c.wrappedDek ?? null,
-        wrappedDekIv: c.wrappedDekIv ?? null,
-        label: c.label,
-      })),
+      credentials: credentials
+        .filter((c) => c.wrappedDek && c.wrappedDekIv)
+        .map((c) => ({
+          credentialId: c.credentialId,
+          wrappedDek: c.wrappedDek as ArrayBuffer,
+          wrappedDekIv: c.wrappedDekIv as ArrayBuffer,
+        })),
     };
-  },
-});
-
-// Public mutation: marks the wallet's mnemonic as confirmed by the user.
-// Idempotent — calling it twice is fine.
-export const confirmMnemonic = mutation({
-  args: { sessionToken: v.string() },
-  handler: async (ctx, args) => {
-    const session = await sessionByTokenOrNull(ctx, args.sessionToken);
-    if (!session) throw new Error("invalid session");
-    const wallet = await ctx.db
-      .query("wallets")
-      .withIndex("by_userId", (q) => q.eq("userId", session.userId))
-      .first();
-    if (!wallet) throw new Error("no wallet for this session");
-    if (wallet.mnemonicConfirmedAt) return { confirmedAt: wallet.mnemonicConfirmedAt };
-    const confirmedAt = Date.now();
-    await ctx.db.patch(wallet._id, { mnemonicConfirmedAt: confirmedAt });
-    return { confirmedAt };
   },
 });
 
@@ -145,54 +122,28 @@ export const _completeRegistration = internalMutation({
   args: {
     pendingId: v.id("pendingRegistrations"),
     userIdBytes: v.bytes(),
-    displayName: v.string(),
-    // Discriminated union: PRF-protected wallets carry the per-credential
-    // wrapped DEK + the wallet's mnemonic ciphertext + IV; passphrase
-    // wallets carry only the ethers encrypted-JSON keystore string and
-    // omit the PRF fields on both the wallet and the credential.
-    payload: v.union(
-      v.object({
-        scheme: v.literal("prf"),
-        credential: v.object({
-          credentialId: v.bytes(),
-          publicKey: v.bytes(),
-          counter: v.number(),
-          transports: v.array(v.string()),
-          prfSalt: v.bytes(),
-          wrappedDek: v.bytes(),
-          wrappedDekIv: v.bytes(),
-          label: v.string(),
-        }),
-        wallet: v.object({
-          mnemonicCiphertext: v.bytes(),
-          mnemonicIv: v.bytes(),
-        }),
-      }),
-      v.object({
-        scheme: v.literal("passphrase"),
-        credential: v.object({
-          credentialId: v.bytes(),
-          publicKey: v.bytes(),
-          counter: v.number(),
-          transports: v.array(v.string()),
-          label: v.string(),
-        }),
-        wallet: v.object({
-          encryptedJson: v.string(),
-        }),
-      }),
-    ),
+    credential: v.object({
+      credentialId: v.bytes(),
+      publicKey: v.bytes(),
+      counter: v.number(),
+      transports: v.array(v.string()),
+      wrappedDek: v.bytes(),
+      wrappedDekIv: v.bytes(),
+    }),
+    wallet: v.object({
+      mnemonicCiphertext: v.bytes(),
+      mnemonicIv: v.bytes(),
+    }),
   },
   handler: async (ctx, args) => {
     // Idempotency: if the credentialId already exists, this is a retry.
     const existing = await ctx.db
       .query("credentials")
       .withIndex("by_credentialId", (q) =>
-        q.eq("credentialId", args.payload.credential.credentialId),
+        q.eq("credentialId", args.credential.credentialId),
       )
       .first();
     if (existing) {
-      // Surface the existing user's session rather than duplicate-insert.
       const token = await issueSession(ctx, existing.userId);
       return {
         sessionToken: token.token,
@@ -203,50 +154,26 @@ export const _completeRegistration = internalMutation({
     const now = Date.now();
     const userId: Id<"users"> = await ctx.db.insert("users", {
       userIdBytes: args.userIdBytes,
-      displayName: args.displayName,
       createdAt: now,
     });
 
-    let walletId: Id<"wallets">;
-    if (args.payload.scheme === "prf") {
-      walletId = await ctx.db.insert("wallets", {
-        userId,
-        protectionScheme: "prf",
-        mnemonicCiphertext: args.payload.wallet.mnemonicCiphertext,
-        mnemonicIv: args.payload.wallet.mnemonicIv,
-        createdAt: now,
-      });
-      await ctx.db.insert("credentials", {
-        userId,
-        walletId,
-        credentialId: args.payload.credential.credentialId,
-        publicKey: args.payload.credential.publicKey,
-        counter: args.payload.credential.counter,
-        transports: args.payload.credential.transports,
-        prfSalt: args.payload.credential.prfSalt,
-        wrappedDek: args.payload.credential.wrappedDek,
-        wrappedDekIv: args.payload.credential.wrappedDekIv,
-        label: args.payload.credential.label,
-        createdAt: now,
-      });
-    } else {
-      walletId = await ctx.db.insert("wallets", {
-        userId,
-        protectionScheme: "passphrase",
-        encryptedJson: args.payload.wallet.encryptedJson,
-        createdAt: now,
-      });
-      await ctx.db.insert("credentials", {
-        userId,
-        walletId,
-        credentialId: args.payload.credential.credentialId,
-        publicKey: args.payload.credential.publicKey,
-        counter: args.payload.credential.counter,
-        transports: args.payload.credential.transports,
-        label: args.payload.credential.label,
-        createdAt: now,
-      });
-    }
+    const walletId: Id<"wallets"> = await ctx.db.insert("wallets", {
+      userId,
+      mnemonicCiphertext: args.wallet.mnemonicCiphertext,
+      mnemonicIv: args.wallet.mnemonicIv,
+      createdAt: now,
+    });
+    await ctx.db.insert("credentials", {
+      userId,
+      walletId,
+      credentialId: args.credential.credentialId,
+      publicKey: args.credential.publicKey,
+      counter: args.credential.counter,
+      transports: args.credential.transports,
+      wrappedDek: args.credential.wrappedDek,
+      wrappedDekIv: args.credential.wrappedDekIv,
+      createdAt: now,
+    });
     await ctx.db.delete(args.pendingId);
 
     const token = await issueSession(ctx, userId);
@@ -266,10 +193,7 @@ export const _completeAuthentication = internalMutation({
   handler: async (ctx, args) => {
     const cred = await ctx.db.get(args.credentialDocId);
     if (!cred) throw new Error("credential vanished");
-    await ctx.db.patch(args.credentialDocId, {
-      counter: args.newCounter,
-      lastUsedAt: Date.now(),
-    });
+    await ctx.db.patch(args.credentialDocId, { counter: args.newCounter });
     await ctx.db.delete(args.pendingAuthDocId);
     const token = await issueSession(ctx, cred.userId);
     return { sessionToken: token.token, expiresAt: token.expiresAt };
@@ -304,32 +228,27 @@ export const _bootstrapBlob = internalQuery({
       .query("wallets")
       .withIndex("by_userId", (q) => q.eq("userId", session.userId))
       .first();
-    if (!wallet) return null;
+    if (!wallet || !wallet.mnemonicCiphertext || !wallet.mnemonicIv) {
+      return null;
+    }
     const credentials = await ctx.db
       .query("credentials")
       .withIndex("by_userId", (q) => q.eq("userId", session.userId))
       .take(16);
-    const scheme = wallet.protectionScheme ?? "prf";
     return {
       sessionToken: session.token,
       sessionExpiresAt: session.expiresAt,
       wallet: {
-        protectionScheme: scheme,
-        // PRF wallets carry the DEK-encrypted mnemonic; passphrase wallets
-        // carry the ethers encrypted-JSON keystore string. Both are sent
-        // so the client can decide which path to take based on the scheme.
-        mnemonicCiphertext: wallet.mnemonicCiphertext ?? null,
-        mnemonicIv: wallet.mnemonicIv ?? null,
-        encryptedJson: wallet.encryptedJson ?? null,
-        mnemonicConfirmedAt: wallet.mnemonicConfirmedAt ?? null,
+        mnemonicCiphertext: wallet.mnemonicCiphertext,
+        mnemonicIv: wallet.mnemonicIv,
       },
-      credentials: credentials.map((c) => ({
-        credentialId: c.credentialId,
-        prfSalt: c.prfSalt ?? null,
-        wrappedDek: c.wrappedDek ?? null,
-        wrappedDekIv: c.wrappedDekIv ?? null,
-        label: c.label,
-      })),
+      credentials: credentials
+        .filter((c) => c.wrappedDek && c.wrappedDekIv)
+        .map((c) => ({
+          credentialId: c.credentialId,
+          wrappedDek: c.wrappedDek as ArrayBuffer,
+          wrappedDekIv: c.wrappedDekIv as ArrayBuffer,
+        })),
     };
   },
 });

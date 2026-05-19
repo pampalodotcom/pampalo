@@ -5,7 +5,6 @@ import { toast } from 'sonner'
 import { BeachScene } from '@/components/pampalo/BeachScene'
 import { MnemonicReveal } from '@/components/pampalo/MnemonicReveal'
 import { PageLoading } from '@/components/pampalo/PageLoading'
-import { PassphraseEntry } from '@/components/pampalo/PassphraseEntry'
 import { PrimaryButton } from '@/components/pampalo/PrimaryButton'
 import { SecondaryButton } from '@/components/pampalo/SecondaryButton'
 import { ThemeToggle } from '@/components/pampalo/ThemeToggle'
@@ -14,16 +13,12 @@ import { useAuth } from '@/lib/auth'
 import { useTheme } from '@/lib/theme'
 import {
   completeConditionalSignIn,
-  completePassphraseRegistration,
   finalizeNewWallet,
-  markMnemonicConfirmed,
   PrfNotSupportedError,
   registerNewWallet,
   signInWithExistingPasskey,
-  unlockWithPassphrase,
   UnknownCredentialError,
   type NewWalletDraft,
-  type PassphraseSetupContext,
 } from '@/lib/auth-flow'
 import { isConditionalUIAvailable, startConditionalGet } from '@/lib/passkey'
 import { postJson } from '@/lib/http'
@@ -37,8 +32,6 @@ type LocalUiState =
   | { kind: 'registering' }
   | { kind: 'signing-in' }
   | { kind: 'reveal'; draft: NewWalletDraft }
-  | { kind: 'passphrase-setup'; ctx: PassphraseSetupContext; busy: boolean }
-  | { kind: 'passphrase-unlock'; busy: boolean }
   | { kind: 'help'; help: HelpKind }
   | { kind: 'transitioning' }
 
@@ -83,10 +76,6 @@ function Landing() {
         if (lifecycle.signal.aborted) return
 
         const outcome = await completeConditionalSignIn(assertion)
-        if (outcome.kind === 'needs-passphrase') {
-          setUi({ kind: 'passphrase-unlock', busy: false })
-          return
-        }
         finalizeAddressIntoState(outcome.addresses.evm)
         toast(`Signed in as ${shortAddress(outcome.addresses.evm)}`)
         setUi({ kind: 'transitioning' })
@@ -115,10 +104,6 @@ function Landing() {
     setUi({ kind: 'signing-in' })
     try {
       const outcome = await signInWithExistingPasskey()
-      if (outcome.kind === 'needs-passphrase') {
-        setUi({ kind: 'passphrase-unlock', busy: false })
-        return
-      }
       finalizeAddressIntoState(outcome.addresses.evm)
       toast(`Signed in as ${shortAddress(outcome.addresses.evm)}`)
       setUi({ kind: 'transitioning' })
@@ -146,12 +131,8 @@ function Landing() {
     conditionalAbortRef.current?.abort()
     setUi({ kind: 'registering' })
     try {
-      const outcome = await registerNewWallet('My Pampalo wallet')
-      if (outcome.kind === 'needs-passphrase') {
-        setUi({ kind: 'passphrase-setup', ctx: outcome.ctx, busy: false })
-        return
-      }
-      setUi({ kind: 'reveal', draft: outcome.draft })
+      const draft = await registerNewWallet()
+      setUi({ kind: 'reveal', draft })
     } catch (e) {
       if (e instanceof PrfNotSupportedError) {
         setUi({ kind: 'help', help: 'prf-not-supported' })
@@ -163,44 +144,11 @@ function Landing() {
     }
   }
 
-  async function onPassphraseSetup(passphrase: string) {
-    if (ui.kind !== 'passphrase-setup') return
-    setUi({ ...ui, busy: true })
-    try {
-      const draft = await completePassphraseRegistration(ui.ctx, passphrase)
-      setUi({ kind: 'reveal', draft })
-    } catch (e) {
-      // Re-throw so the entry component can surface the error inline.
-      setUi({ ...ui, busy: false })
-      throw e
-    }
-  }
-
-  async function onPassphraseUnlock(passphrase: string) {
-    if (ui.kind !== 'passphrase-unlock') return
-    setUi({ kind: 'passphrase-unlock', busy: true })
-    try {
-      const addresses = await unlockWithPassphrase(passphrase)
-      finalizeAddressIntoState(addresses.evm)
-      toast(`Signed in as ${shortAddress(addresses.evm)}`)
-      setUi({ kind: 'transitioning' })
-      void navigate({ to: '/wallet' })
-    } catch (e) {
-      setUi({ kind: 'passphrase-unlock', busy: false })
-      throw e
-    }
-  }
-
   function onMnemonicConfirmed() {
     if (ui.kind !== 'reveal') return
     const draft = ui.draft
     finalizeNewWallet(draft)
     finalizeAddressIntoState(draft.addresses.evm)
-    markMnemonicConfirmed(draft.sessionToken).catch((e: unknown) => {
-      const msg =
-        e instanceof Error ? e.message : 'Couldn’t save backup status.'
-      toast.error(msg)
-    })
     setUi({ kind: 'transitioning' })
     void navigate({ to: '/wallet' })
   }
@@ -240,20 +188,6 @@ function Landing() {
               address={ui.draft.addresses.evm}
               onConfirmed={onMnemonicConfirmed}
               onSkip={onMnemonicSkipped}
-            />
-          ) : ui.kind === 'passphrase-setup' ? (
-            <PassphraseEntry
-              mode="setup"
-              onSubmit={onPassphraseSetup}
-              onBack={() => setUi({ kind: 'idle' })}
-              busy={ui.busy}
-            />
-          ) : ui.kind === 'passphrase-unlock' ? (
-            <PassphraseEntry
-              mode="unlock"
-              onSubmit={onPassphraseUnlock}
-              onBack={() => setUi({ kind: 'idle' })}
-              busy={ui.busy}
             />
           ) : ui.kind === 'help' ? (
             <PasskeyHelp
