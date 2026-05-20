@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 
 export function AddressPill({
   address,
-  subline = "Ethereum · Smart Account",
+  subline = "Ethereum Account",
   className,
 }: {
   address: string;

@@ -111,7 +111,7 @@ export function AccountModal({
                     {shortAddress(evm)}
                   </div>
                   <div className="text-[12px] text-ink-mute">
-                    Ethereum · Smart Account
+                    Ethereum Account
                   </div>
                 </div>
                 <button

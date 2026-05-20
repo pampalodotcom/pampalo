@@ -4,7 +4,7 @@ export function BrandLockup({ className }: { className?: string }) {
   return (
     <div className={cn("flex items-center gap-2 select-none", className)}>
       <img
-        src="/brand-mark.png"
+        src="/pampalo-circular.svg"
         alt=""
         aria-hidden
         width={28}

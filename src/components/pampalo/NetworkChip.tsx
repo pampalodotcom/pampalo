@@ -10,6 +10,12 @@ const LABELS: Record<NetworkSlug, string> = {
   sepolia: "Sepolia",
 };
 
+// Optional per-network logo. Networks without an entry fall back to the
+// CSS colour dot defined in styles.css.
+const LOGOS: Partial<Record<NetworkSlug, string>> = {
+  base: "/base-logo.svg",
+};
+
 /** Map a chainId from supportedNetworks → slug. Centralised so the
  *  client decides the chip's brand colour from a single place. */
 export function networkSlugForChainId(chainId: number): NetworkSlug | null {
@@ -38,8 +44,23 @@ export function NetworkChip({
   label?: string;
   className?: string;
 }) {
+  const logo = LOGOS[network];
+  // When a logo is registered, suppress the CSS `::before` dot and render
+  // an inline <img> instead. The `has-logo` modifier in styles.css hides
+  // the dot for this case.
   return (
-    <span className={cn("net-chip", network, className)}>
+    <span className={cn("net-chip", network, logo && "has-logo", className)}>
+      {logo && (
+        <img
+          src={logo}
+          alt=""
+          aria-hidden
+          width={10}
+          height={10}
+          className="size-2.5 rounded-[2px]"
+          draggable={false}
+        />
+      )}
       {label ?? LABELS[network]}
     </span>
   );

@@ -365,6 +365,10 @@ body {
 .net-chip.sepolia::before {
   background: #ffc107;
 }
+/* When the chip renders an inline logo image, hide the CSS dot. */
+.net-chip.has-logo::before {
+  display: none;
+}
 
 /* Public/private chips (e.g. in the BalanceCard hero). */
 .bal-chip {

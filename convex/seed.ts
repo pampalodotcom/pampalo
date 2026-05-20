@@ -1,22 +1,25 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { mutation } from "./_generated/server";
+import { internalMutation } from "./_generated/server";
 
-// CLI-callable seed mutations. Run via:
+// Dashboard / CLI-only seed mutations. Run via:
 //   pnpm convex run seed:addNetwork '{...}'
 //   pnpm convex run seed:addToken '{...}'
 //   pnpm convex run seed:addPriceFeed '{...}'
 //   pnpm convex run seed:seedAll        ← idempotent one-shot
 //
-// Public `mutation`s so the dashboard / CLI can invoke them without an
-// auth token. Re-running with the same chainId / shortId / token address
-// is an upsert, so scripts are idempotent.
+// `internalMutation` so the public client API can't reach them — only the
+// Convex dashboard "Run function" panel and the `convex run` CLI can.
+// Re-running with the same chainId / shortId is an upsert for networks
+// and price feeds. Token rows are insert-only: once a token exists for a
+// (network, address), subsequent seeds leave it alone so any manual edits
+// in the dashboard (e.g. roundTo tweaks, name fixes) survive.
 
 // Native-token sentinel address. Matches the 1inch / OKX convention used
 // elsewhere in EVM tooling. Stored lowercased.
 export const ETH_ADDRESS = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 
-export const addNetwork = mutation({
+export const addNetwork = internalMutation({
   args: {
     chainId: v.number(),
     name: v.string(),
@@ -50,7 +53,7 @@ export const addNetwork = mutation({
   },
 });
 
-export const addToken = mutation({
+export const addToken = internalMutation({
   args: {
     chainId: v.number(),
     address: v.string(), // any case; stored lowercased
@@ -76,7 +79,11 @@ export const addToken = mutation({
         q.eq("networkId", network._id).eq("address", addr),
       )
       .unique();
-    const payload = {
+    if (existing) {
+      // Token already in the catalogue — leave it untouched.
+      return existing._id;
+    }
+    return await ctx.db.insert("supportedTokens", {
       networkId: network._id,
       address: addr,
       name: args.name,
@@ -85,16 +92,11 @@ export const addToken = mutation({
       isNative: args.isNative,
       roundTo: args.roundTo,
       priceFeedShortId: args.priceFeedShortId,
-    };
-    if (existing) {
-      await ctx.db.replace(existing._id, payload);
-      return existing._id;
-    }
-    return await ctx.db.insert("supportedTokens", payload);
+    });
   },
 });
 
-export const addPriceFeed = mutation({
+export const addPriceFeed = internalMutation({
   args: {
     shortId: v.string(), // "eth/usd", "usd/aud", …
     chainId: v.number(), // chain the aggregator lives on (1 for mainnet)
@@ -223,6 +225,17 @@ const TOKENS: SeedToken[] = [
     roundTo: 5,
     priceFeedShortId: "eth/usd",
   },
+  // ── Base ──
+  {
+    chainId: 8453,
+    address: ETH_ADDRESS,
+    name: "Ethereum",
+    symbol: "ETH",
+    decimals: 18,
+    isNative: true,
+    roundTo: 5,
+    priceFeedShortId: "eth/usd",
+  },
   // ── Sepolia ──
   {
     chainId: 11155111,
@@ -296,7 +309,7 @@ const PRICE_FEEDS = [
 
 // ─── One-shot seeder ─────────────────────────────────────────────────────
 
-export const seedAll = mutation({
+export const seedAll = internalMutation({
   args: {},
   handler: async (ctx): Promise<{
     networks: number;
@@ -328,8 +341,9 @@ export const seedAll = mutation({
       }
     }
 
-    // Tokens
-    let tokenCount = 0;
+    // Tokens — insert-only. Existing rows are left untouched so any
+    // dashboard edits (renames, roundTo tweaks, …) survive a reseed.
+    let tokenInserted = 0;
     for (const t of TOKENS) {
       const networkId = netIds[t.chainId];
       if (!networkId) continue;
@@ -340,7 +354,8 @@ export const seedAll = mutation({
           q.eq("networkId", networkId).eq("address", addr),
         )
         .unique();
-      const payload = {
+      if (existing) continue;
+      await ctx.db.insert("supportedTokens", {
         networkId,
         address: addr,
         name: t.name,
@@ -349,13 +364,8 @@ export const seedAll = mutation({
         isNative: t.isNative,
         roundTo: t.roundTo,
         priceFeedShortId: t.priceFeedShortId,
-      };
-      if (existing) {
-        await ctx.db.replace(existing._id, payload);
-      } else {
-        await ctx.db.insert("supportedTokens", payload);
-      }
-      tokenCount += 1;
+      });
+      tokenInserted += 1;
     }
 
     // Price feeds (all live on mainnet)
@@ -385,7 +395,7 @@ export const seedAll = mutation({
 
     return {
       networks: NETWORKS.length,
-      tokens: tokenCount,
+      tokens: tokenInserted,
       priceFeeds: feedCount,
     };
   },

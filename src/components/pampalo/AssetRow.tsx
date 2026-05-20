@@ -100,10 +100,16 @@ export function AssetRow({
     .filter((s): s is NetworkSlug => s !== null);
 
   // Shared sub-bits keep mobile + desktop in lockstep.
+  // Stack symbol over name so long names (e.g. "Australian Digital Dollar")
+  // wrap cleanly under the symbol rather than next to it.
   const ticker = (
-    <div className="flex items-baseline gap-2">
-      <span className="font-bold text-[15px] text-ink">{asset.symbol}</span>
-      <span className="text-[12.5px] text-ink-mute">{asset.name}</span>
+    <div className="flex flex-col items-start gap-0.5 min-w-0">
+      <span className="font-bold text-[15px] text-ink leading-tight">
+        {asset.symbol}
+      </span>
+      <span className="text-[12.5px] text-ink-mute leading-snug break-words">
+        {asset.name}
+      </span>
     </div>
   );
   const chips = (
