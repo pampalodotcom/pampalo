@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WalletRouteImport } from './routes/wallet'
+import { Route as LoadingRouteImport } from './routes/loading'
 import { Route as ClearRouteImport } from './routes/clear'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
@@ -17,6 +18,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const WalletRoute = WalletRouteImport.update({
   id: '/wallet',
   path: '/wallet',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoadingRoute = LoadingRouteImport.update({
+  id: '/loading',
+  path: '/loading',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClearRoute = ClearRouteImport.update({
@@ -39,12 +45,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/clear': typeof ClearRoute
+  '/loading': typeof LoadingRoute
   '/wallet': typeof WalletRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/clear': typeof ClearRoute
+  '/loading': typeof LoadingRoute
   '/wallet': typeof WalletRoute
 }
 export interface FileRoutesById {
@@ -52,20 +60,22 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/clear': typeof ClearRoute
+  '/loading': typeof LoadingRoute
   '/wallet': typeof WalletRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/account' | '/clear' | '/wallet'
+  fullPaths: '/' | '/account' | '/clear' | '/loading' | '/wallet'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/account' | '/clear' | '/wallet'
-  id: '__root__' | '/' | '/account' | '/clear' | '/wallet'
+  to: '/' | '/account' | '/clear' | '/loading' | '/wallet'
+  id: '__root__' | '/' | '/account' | '/clear' | '/loading' | '/wallet'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRoute: typeof AccountRoute
   ClearRoute: typeof ClearRoute
+  LoadingRoute: typeof LoadingRoute
   WalletRoute: typeof WalletRoute
 }
 
@@ -76,6 +86,13 @@ declare module '@tanstack/react-router' {
       path: '/wallet'
       fullPath: '/wallet'
       preLoaderRoute: typeof WalletRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/loading': {
+      id: '/loading'
+      path: '/loading'
+      fullPath: '/loading'
+      preLoaderRoute: typeof LoadingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/clear': {
@@ -106,6 +123,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
   ClearRoute: ClearRoute,
+  LoadingRoute: LoadingRoute,
   WalletRoute: WalletRoute,
 }
 export const routeTree = rootRouteImport

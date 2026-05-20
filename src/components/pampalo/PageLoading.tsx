@@ -26,12 +26,12 @@ export function PageLoading({
       )}
     >
       <img
-        src="/pampalo-solid.svg"
+        src="/pampalo-circular.svg"
         alt=""
         aria-hidden
-        width={108}
-        height={108}
-        className="size-[108px] animate-[brand-pulse_1.6s_ease-in-out_infinite]"
+        width={160}
+        height={160}
+        className="size-[160px] animate-[brand-pulse_1.6s_ease-in-out_infinite]"
         draggable={false}
       />
       {label && (
