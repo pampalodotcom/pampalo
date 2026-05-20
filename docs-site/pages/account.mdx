@@ -1,9 +1,9 @@
 # Account
 
-When you create a pampalo account, you are creating and storing a passkey with PRF cabilities on your device, or in your password manager. 
+When you create a pampalo account, you generate a secret on your device, then you create and store a passkey with PRF cabilities on your device, or in your selected password manager. 
 
-You also generate an account secret. You use your passkey with PRF to encrypt your account secret, and Pampalo stores that encrypted secret in it's database against your passkey id. Your passkey ID is not traceable to you or your device (unless someone has your device).
+Once set up, you use your passkey to decrypt your account secret to sign in, and authorise transactions. Pampalo stores only your encrypted secret in it's database against your passkey id. Your passkey ID is not traceable to you or your device, and only your passkey can decrypt that stored secret (time of writing is pre quantum).
 
 This means that if pampalo ever has it's database leaked or server compromised - all that is leaked is data encrypted with keys that you control.
 
-Pampalo is client side first with the intent of giving more power to all of its users.
+This architecture doesn't remove all actor vectors, but pampalo is client side first with the intent of giving more power to all of its users, while removing 'honey pots' that occur in traditional web computing.
