@@ -79,7 +79,12 @@
   --line: rgba(12, 34, 54, 0.1);
   --card-bg: rgba(255, 251, 240, 0.94);
   --card-bd: rgba(255, 255, 255, 0.7);
-  --card-shadow: 0 24px 64px rgba(12, 34, 54, 0.18);
+  /* Two-layer shadow: a soft, far-reaching diffusion (low alpha, big blur)
+     plus a tighter contact shadow. Eliminates the visible "puddle" edge
+     a single-layer shadow leaves when there's empty space below the card. */
+  --card-shadow:
+    0 48px 120px rgba(12, 34, 54, 0.1),
+    0 12px 28px rgba(12, 34, 54, 0.08);
   --warn-bg: rgba(214, 138, 22, 0.1);
   --warn-bd: rgba(214, 138, 22, 0.28);
   --warn-fg: #8a5410;
@@ -128,7 +133,11 @@ html[data-theme="dark"] {
   --line: rgba(241, 238, 227, 0.12);
   --card-bg: rgba(18, 36, 56, 0.78);
   --card-bd: rgba(241, 238, 227, 0.1);
-  --card-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  /* See the light-mode comment above; dark mode runs the same two-layer
+     shadow with a higher base alpha for visibility against the dark paper. */
+  --card-shadow:
+    0 48px 120px rgba(0, 0, 0, 0.32),
+    0 12px 28px rgba(0, 0, 0, 0.22);
   --warn-bg: rgba(255, 206, 120, 0.1);
   --warn-bd: rgba(255, 206, 120, 0.28);
   --warn-fg: #ffce78;
@@ -165,6 +174,13 @@ body,
   min-height: 100%;
 }
 
+/* The html element also gets the paper background so any space that
+   falls outside body (e.g. while resizing) stays on-brand instead of
+   showing the UA default white. */
+html {
+  background-color: var(--color-paper);
+}
+
 body {
   margin: 0;
   color: var(--color-ink);
@@ -175,12 +191,14 @@ body {
   overflow-x: hidden;
 }
 
-/* Outer container — full-width, full-height, paper background.
-   Lets full-bleed sections (BeachScene) span the desktop window. */
+/* Outer container — full-width, paper background.
+   Lets full-bleed sections (BeachScene) span the desktop window. The
+   route's <main> sets `flex-1` so it grows inside the body's flex
+   column; the body owns the viewport-height constraint so the footer
+   can sit beneath. */
 .phone-shell {
   position: relative;
   width: 100%;
-  min-height: 100dvh;
   background: var(--color-paper);
   /* Allow vertical scroll for tall content (mnemonic reveal, etc).
      Body already clips overflow-x. */

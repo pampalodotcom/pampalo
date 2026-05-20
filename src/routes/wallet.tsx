@@ -62,7 +62,7 @@ function Wallet() {
   }
 
   return (
-    <main className="phone-shell flex min-h-dvh flex-col">
+    <main className="phone-shell flex flex-1 flex-col">
       {/* Full-width beach band — same vibe as the landing page. Header
           floats over it with absolute positioning so it lines up with
           the dashboard column below. */}
@@ -96,7 +96,7 @@ function Wallet() {
 
       {/* Dashboard column. Pulled up with -mt-10 so the first card overlaps
           the beach's bottom edge, matching the landing's hero card. */}
-      <div className="relative z-10 -mt-10 mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-4 pb-12 lg:max-w-4xl">
+      <div className="relative z-10 -mt-10 mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-[8vw] pb-12 sm:px-4 lg:max-w-4xl">
         {addresses ? (
           <Dashboard evmAddress={addresses.evm} />
         ) : (

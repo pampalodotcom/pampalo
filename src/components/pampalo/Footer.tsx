@@ -33,11 +33,16 @@ export function Footer() {
   // mounts its own loading state).
   const { state } = useAuth()
   if (state.status === 'loading') return null
+  // Footer-at-the-bottom is handled by the sticky-footer column in
+  // __root.tsx (main has `flex-1` and absorbs leftover space). All we
+  // do here is render the responsive variants. `pt-[6vh]` adds a modest
+  // breathing gap above the footer's border so the last card and the
+  // footer aren't crowded against each other.
   return (
-    <>
+    <div className="pt-[6vh]">
       <FooterDesktop className="hidden md:block" />
       <FooterMobile className="md:hidden" />
-    </>
+    </div>
   )
 }
 
@@ -49,7 +54,7 @@ function FooterDesktop({ className }: { className?: string }) {
       <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-7">
         {/* Row 1 — brand + links */}
         <div className="flex flex-wrap items-center justify-between gap-20">
-          <div className="flex items-center gap-14">
+          <div className="flex items-center gap-4">
             <BrandLockup size="sm" />
             <WarningChip>Experimental</WarningChip>
           </div>

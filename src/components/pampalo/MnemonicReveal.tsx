@@ -53,7 +53,12 @@ export function MnemonicReveal({
   // 10s read-window runs from that point even if they later toggle hide.
   const [revealStartAt, setRevealStartAt] = useState<number | null>(null)
   const [readProgress, setReadProgress] = useState(0)
-  const canProceed = readProgress >= 1
+  // `hasSaved` flips true when the user successfully copies or downloads.
+  // It's treated as proof they have the phrase off-device, so the
+  // "saved it" gate doesn't require also reading on-screen for the
+  // full 10s window.
+  const [hasSaved, setHasSaved] = useState(false)
+  const canProceed = readProgress >= 1 || hasSaved
   const words = useMemo(() => mnemonic.split(/\s+/).filter(Boolean), [mnemonic])
   const clipboardClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -88,6 +93,7 @@ export function MnemonicReveal({
     try {
       await navigator.clipboard.writeText(mnemonic)
       setCopied(true)
+      setHasSaved(true)
       toast('Recovery phrase copied', { duration: 2000 })
       if (clipboardClearTimerRef.current)
         clearTimeout(clipboardClearTimerRef.current)
@@ -104,6 +110,9 @@ export function MnemonicReveal({
 
   function onDownload() {
     const first6 = address.slice(2, 8)
+    // 1..1000 inclusive. Disambiguates repeated downloads for the same
+    // wallet so the OS doesn't silently overwrite an earlier file.
+    const suffix = 1 + Math.floor(Math.random() * 1000)
     const blob = new Blob(
       [`# Recovery phrase for 0x${first6}…\n${mnemonic}\n`],
       { type: 'text/plain' },
@@ -111,9 +120,10 @@ export function MnemonicReveal({
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `wallet-recovery-${first6}.txt`
+    a.download = `wallet-recovery-${first6}-${suffix}.txt`
     a.click()
     URL.revokeObjectURL(url)
+    setHasSaved(true)
   }
 
   if (stage === 'reveal') {
@@ -176,8 +186,7 @@ export function MnemonicReveal({
           <button
             type="button"
             onClick={onCopy}
-            disabled={!revealed || !canProceed}
-            className="flex-1 inline-flex items-center justify-center gap-2 rounded-full border border-line bg-card px-3 py-2.5 text-[13px] font-semibold text-ink disabled:opacity-50"
+            className="flex-1 inline-flex items-center justify-center gap-2 rounded-full border border-line bg-card px-3 py-2.5 text-[13px] font-semibold text-ink"
           >
             {copied ? (
               <Check className="size-4" />
@@ -189,8 +198,7 @@ export function MnemonicReveal({
           <button
             type="button"
             onClick={onDownload}
-            disabled={!revealed || !canProceed}
-            className="flex-1 inline-flex items-center justify-center gap-2 rounded-full border border-line bg-card px-3 py-2.5 text-[13px] font-semibold text-ink disabled:opacity-50"
+            className="flex-1 inline-flex items-center justify-center gap-2 rounded-full border border-line bg-card px-3 py-2.5 text-[13px] font-semibold text-ink"
           >
             <Download className="size-4" /> Download
           </button>

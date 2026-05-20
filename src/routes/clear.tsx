@@ -74,9 +74,9 @@ function Clear() {
   }, [])
 
   return (
-    <main className="phone-shell flex min-h-dvh flex-col">
+    <main className="phone-shell flex flex-1 flex-col">
       <div className="phone-column flex flex-1 flex-col justify-center">
-        <section className="mx-4 rounded-3xl card-cream px-5 pt-6 pb-5">
+        <section className="mx-[8vw] rounded-3xl card-cream px-5 pt-6 pb-5 sm:mx-4">
           <p className="eyebrow mb-3">Dev · Reset</p>
           <h1 className="font-serif text-[26px] font-bold leading-tight text-ink mb-3">
             Clear local state

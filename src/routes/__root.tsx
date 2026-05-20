@@ -86,8 +86,16 @@ function RootComponent() {
       <ThemeProvider>
         <AuthProvider>
           <AccountModalProvider>
-            <Outlet />
-            <Footer />
+            {/* Dedicated sticky-footer container. main inside Outlet uses
+                `flex-1` to absorb the leftover space, so Footer always
+                lands at the bottom of the viewport on short pages and
+                flows below the content on tall pages. Toaster is OUTSIDE
+                this column so its `<section>` doesn't end up as a flex
+                sibling that competes with Footer for the bottom slot. */}
+            <div className="flex min-h-dvh flex-col">
+              <Outlet />
+              <Footer />
+            </div>
             <Toaster position="top-center" />
           </AccountModalProvider>
         </AuthProvider>
