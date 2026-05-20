@@ -165,7 +165,7 @@ function Landing() {
     auth.state.status === 'anonymous' ? auth.state.knownDevice : false
 
   return (
-    <main className="phone-shell flex min-h-dvh flex-col">
+    <main className="phone-shell flex flex-1 flex-col">
       {/* Full-width beach band; brand floats over it inside the centered column */}
       <div className="relative shrink-0 w-full">
         <BeachScene height={420} theme={theme} />
@@ -181,7 +181,7 @@ function Landing() {
       {/* Centered foreground column */}
       <div className="phone-column flex flex-1 flex-col">
         {/* Hero card overlaps the scene's bottom fade */}
-        <section className="relative z-10 -mt-10 mx-4 mb-8 rise-in rounded-3xl card-cream px-5 pt-6 pb-5">
+        <section className="relative z-10 -mt-10 mx-[8vw] mb-8 rise-in rounded-3xl card-cream px-5 pt-6 pb-5 sm:mx-4">
           {ui.kind === 'reveal' ? (
             <MnemonicReveal
               mnemonic={ui.draft.mnemonic}

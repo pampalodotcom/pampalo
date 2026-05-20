@@ -72,7 +72,7 @@ function AccountPage() {
   }
 
   return (
-    <main className="phone-shell flex min-h-dvh flex-col">
+    <main className="phone-shell flex flex-1 flex-col">
       <div className="relative shrink-0 w-full">
         <BeachScene height={240} theme={theme} />
         <div className="absolute inset-x-0 top-6 z-10 pointer-events-none">
@@ -97,7 +97,7 @@ function AccountPage() {
         </div>
       </div>
 
-      <div className="relative z-10 -mt-10 mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-4 pb-12">
+      <div className="relative z-10 -mt-10 mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-[8vw] pb-12 sm:px-4">
         {exportedMnemonic && addresses ? (
           <section className="rise-in rounded-3xl card-cream px-5 py-5">
             <MnemonicReveal
