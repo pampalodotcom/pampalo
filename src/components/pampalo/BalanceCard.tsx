@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { SplitBar } from "./SplitBar";
 import { SunIcon, MoonIcon } from "./SunMoonIcons";
+import { SyncIndicator } from "./SyncIndicator";
 
 type Props = {
   /** Total USD (public + private). null while loading. */
@@ -48,7 +49,10 @@ export function BalanceCard({
         className,
       )}
     >
-      <p className="eyebrow">Total Balance</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="eyebrow">Total Balance</p>
+        <SyncIndicator />
+      </div>
 
       {isLoading ? (
         <span

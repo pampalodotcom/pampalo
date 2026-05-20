@@ -4,7 +4,7 @@
 // where possible. The only key the caller will ever hold extractable bytes
 // for is the random DEK (generated as raw bytes so we can wrap it).
 
-import { utf8ToBuffer } from "./encoding";
+import { bufferToUtf8, utf8ToBuffer } from "./encoding";
 
 const KEK_INFO = utf8ToBuffer("wallet-v1-kek");
 
@@ -82,6 +82,26 @@ export async function deriveKekFromPrfOutput(
     /* extractable */ false,
     ["encrypt", "decrypt"],
   );
+}
+
+// ─── JSON-shaped wrappers for AES-GCM ────────────────────────────────────
+// Used by the encrypted-preferences sync flow (CLIENT_SIDE_FIRST.md). The
+// plaintext is the user's preferences object serialized as UTF-8 JSON.
+
+export async function encryptJsonWithDek(
+  dek: CryptoKey,
+  value: unknown,
+): Promise<{ ciphertext: ArrayBuffer; iv: ArrayBuffer }> {
+  return await aesGcmEncrypt(dek, utf8ToBuffer(JSON.stringify(value)));
+}
+
+export async function decryptJsonWithDek<T = unknown>(
+  dek: CryptoKey,
+  ciphertext: ArrayBuffer,
+  iv: ArrayBuffer,
+): Promise<T> {
+  const plaintext = await aesGcmDecrypt(dek, ciphertext, iv);
+  return JSON.parse(bufferToUtf8(plaintext)) as T;
 }
 
 // ─── Best-effort key material zero-out ───────────────────────────────────

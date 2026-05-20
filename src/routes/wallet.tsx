@@ -314,8 +314,19 @@ function BalanceCardConnected({
       />
     );
   }
+  // Same hook-count protection as AssetGroupRow below: BalanceCardWithBalances
+  // calls usePublicBalance/usePrivateBalance inside tokens.map(), so when the
+  // testnets toggle adds/removes Sepolia rows mid-session the hook count
+  // would change between renders ("Rendered more hooks than during the
+  // previous render"). Keying on the token-set signature forces a remount
+  // whenever that shape changes; react-query keeps the balance cache so
+  // there's no visible refetch.
+  const balanceKey = tokens
+    .map((t) => `${t.chainId}:${t.address.toLowerCase()}`)
+    .join("|");
   return (
     <BalanceCardWithBalances
+      key={balanceKey}
       tokens={tokens}
       prices={prices}
       evmAddress={evmAddress}

@@ -295,7 +295,7 @@ async function issueSession(
   return { token, expiresAt };
 }
 
-async function sessionByTokenOrNull(
+export async function sessionByTokenOrNull(
   ctx: QueryCtx,
   token: string,
 ): Promise<Doc<"sessions"> | null> {

@@ -31,6 +31,7 @@ import { postJson } from './http'
 import {
   clearAll,
   getBlob,
+  getSessionToken,
   setAddresses,
   setBlob,
   setSessionToken,
@@ -42,31 +43,17 @@ import {
   runGetForPrf,
   runRegistrationCeremony,
 } from './passkey'
+import { PrfNotSupportedError, UnknownCredentialError } from './auth-errors'
+import { clearPrefsMemoryForSignOut } from './preferences'
+import { syncOnSignInComplete, syncOnTxSign } from './preferences-sync'
 import { Timing } from './timing'
 
 // ─── Typed errors for compatibility failures ─────────────────────────────
-// These are recognised by the Landing route to switch into a help UI state
-// instead of just toasting a string.
+// Defined in ./auth-errors so non-auth modules (preferences-sync) can
+// throw them without a circular import. Re-exported here for back-compat
+// with existing route-level callers.
 
-export class PrfNotSupportedError extends Error {
-  readonly kind = 'prf-not-supported' as const
-  constructor() {
-    super(
-      'Your passkey provider doesn’t support the encryption extension Pampalo needs.',
-    )
-    this.name = 'PrfNotSupportedError'
-  }
-}
-
-export class UnknownCredentialError extends Error {
-  readonly kind = 'unknown-credential' as const
-  constructor() {
-    super(
-      'The passkey you picked isn’t registered with Pampalo on this account.',
-    )
-    this.name = 'UnknownCredentialError'
-  }
-}
+export { PrfNotSupportedError, UnknownCredentialError } from './auth-errors'
 
 // ─── Wire types matching convex/http.ts ──────────────────────────────────
 
@@ -343,6 +330,13 @@ export async function reAuthenticate(): Promise<ReAuthOutcome> {
     console.log('deriveAddresses (EVM + envelope + poseidon)')
     setAddresses(addresses)
     console.log('keystore + localStorage updated')
+    // Trigger (a): sync encrypted preferences while DEK is briefly alive.
+    // The reAuthenticate path doesn't have a fresh sessionToken, but the
+    // existing one stored in the keystore is still valid.
+    const sessionToken = getSessionToken()
+    if (sessionToken) {
+      await syncOnSignInComplete(dekKey, sessionToken)
+    }
     t.finish()
     return { addresses }
   } finally {
@@ -397,6 +391,15 @@ export async function exportMnemonic(): Promise<string> {
   )
   const mnemonic = bufferToUtf8(mnemonicBuf)
 
+  // Trigger (b): opportunistic preferences push while DEK is briefly
+  // alive. CLIENT_SIDE_FIRST.md frames this as the tx-signing piggyback;
+  // tx-signing is "coming soon", so exportMnemonic is the only §6.6-style
+  // ceremony today. When tx-signing lands, the same call shape applies.
+  const sessionToken = getSessionToken()
+  if (sessionToken) {
+    await syncOnTxSign(dekKey, sessionToken)
+  }
+
   // Scrub the intermediate key material. The mnemonic itself is the
   // return value — the caller is responsible for dropping its reference.
   new Uint8Array(dekBytes).fill(0)
@@ -412,6 +415,11 @@ export async function signOut(): Promise<void> {
     await postJson<Record<string, never>, { ok: true }>('/auth/signout', {})
   } finally {
     clearAll()
+    // Clear in-memory prefs only. The IDB record is intentionally NOT
+    // wiped here: if the user toggled a setting this session but no PRF
+    // ceremony fired (no tx, no explicit sync), the change is still dirty
+    // in IDB and will push on the next sign-in. See CLIENT_SIDE_FIRST.md.
+    clearPrefsMemoryForSignOut()
   }
 }
 
@@ -495,6 +503,10 @@ async function unlockAfterAssertion(
     console.log('deriveAddresses (EVM + envelope + poseidon)')
     setAddresses(addresses)
     console.log('keystore + localStorage updated')
+    // Trigger (a): sync encrypted preferences while DEK is briefly alive.
+    // See CLIENT_SIDE_FIRST.md. Failures are swallowed inside the sync
+    // module — they must not abort sign-in.
+    await syncOnSignInComplete(dekKey, sessionToken)
     if (!parentTiming) t.finish()
     return { addresses, sessionToken }
   } finally {
