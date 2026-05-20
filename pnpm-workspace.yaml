@@ -1,0 +1,3 @@
+packages:
+  - "docs-site"
+  # - "contracts"   # uncomment once the Hardhat package lands
