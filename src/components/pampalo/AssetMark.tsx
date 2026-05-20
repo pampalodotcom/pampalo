@@ -8,12 +8,21 @@ type AssetVisual = {
   glyph: string;
   bg: string;
   fg: string;
+  // Source logo is white-on-transparent and vanishes against the paper
+  // background in light mode; invert it so it reads as dark ink.
+  invertOnLight?: boolean;
 };
 
 const VISUALS: Record<string, AssetVisual> = {
   ETH: { image: "/eth-logo.png", glyph: "Ξ", bg: "#0C2236", fg: "#FAF6EA" },
   USDC: { image: "/usdc-logo.png", glyph: "$", bg: "#2E7DC2", fg: "#FFFFFF" },
-  AUDD: { image: "/audd-logo.png", glyph: "A$", bg: "#C44530", fg: "#FFFBF0" },
+  AUDD: {
+    image: "/audd-logo.png",
+    glyph: "A$",
+    bg: "#C44530",
+    fg: "#FFFBF0",
+    invertOnLight: true,
+  },
   LINK: { image: "/link-logo.png", glyph: "L", bg: "#2A5ADA", fg: "#FFFFFF" },
 };
 
@@ -54,7 +63,10 @@ export function AssetMark({
           alt=""
           width={size}
           height={size}
-          className="h-full w-full object-cover"
+          className={cn(
+            "h-full w-full object-cover",
+            visual.invertOnLight && "asset-mark-invert-light",
+          )}
           draggable={false}
         />
       </span>
