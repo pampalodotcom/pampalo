@@ -129,10 +129,14 @@ export async function syncExplicit(): Promise<void> {
   const localChallenge = bufferToBase64Url(
     crypto.getRandomValues(new Uint8Array(32)),
   );
+  // Scope the get() to the credential the user already signed in with —
+  // otherwise the browser shows the cross-device QR sheet ("use your
+  // phone or tablet") instead of prompting the local platform passkey.
   const { prfOutput } = await runGetForPrf({
     challenge: localChallenge,
     rpId:
       typeof window !== "undefined" ? window.location.hostname : "localhost",
+    allowCredentialId: bufferToBase64Url(cred.credentialId),
   });
   if (!prfOutput) throw new PrfNotSupportedError();
 

@@ -296,12 +296,14 @@ export async function reAuthenticate(): Promise<ReAuthOutcome> {
   const localChallenge = bufferToBase64Url(
     crypto.getRandomValues(new Uint8Array(32)),
   )
-  // Match the sign-in shape (empty allowCredentials) so Safari uses the
-  // discoverable-credential picker instead of the cross-device QR sheet.
+  // Scope the get() to the credential the user signed in with so the
+  // browser prompts that exact platform passkey rather than falling back
+  // to the cross-device QR sheet.
   console.log('→ navigator.credentials.get() (PRF, local challenge)')
   const { prfOutput } = await runGetForPrf({
     challenge: localChallenge,
     rpId: rpIdHint(),
+    allowCredentialId: bufferToBase64Url(cred.credentialId),
   })
   console.log('← navigator.credentials.get()')
   if (!prfOutput) {
@@ -371,13 +373,13 @@ export async function exportMnemonic(): Promise<string> {
   const localChallenge = bufferToBase64Url(
     crypto.getRandomValues(new Uint8Array(32)),
   )
-  // Match the sign-in shape: leave allowCredentials empty so Safari uses the
-  // discoverable-credential picker (Touch ID / Apple Passwords / 1Password)
-  // instead of the cross-device QR sheet it falls back to when an entry has
-  // no transports hint.
+  // Scope the get() to the credential the user signed in with so the
+  // browser prompts that exact platform passkey rather than falling back
+  // to the cross-device QR sheet.
   const { prfOutput } = await runGetForPrf({
     challenge: localChallenge,
     rpId: rpIdHint(),
+    allowCredentialId: bufferToBase64Url(cred.credentialId),
   })
   if (!prfOutput) throw new PrfNotSupportedError()
 
