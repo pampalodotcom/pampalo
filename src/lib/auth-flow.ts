@@ -31,9 +31,11 @@ import { postJson } from './http'
 import {
   clearAll,
   getBlob,
+  getRpId,
   getSessionToken,
   setAddresses,
   setBlob,
+  setRpId,
   setSessionToken,
 } from './keystore'
 import type { EncryptedBlob } from './keystore'
@@ -69,6 +71,7 @@ type AuthCompleteRes = { sessionToken: string; expiresAt: number }
 type BootstrapRes = {
   sessionToken: string
   sessionExpiresAt: number
+  rpId: string
   wallet: {
     mnemonicCiphertext: string
     mnemonicIv: string
@@ -77,6 +80,7 @@ type BootstrapRes = {
     credentialId: string
     wrappedDek: string
     wrappedDekIv: string
+    transports?: ReadonlyArray<string>
   }>
 }
 
@@ -298,12 +302,15 @@ export async function reAuthenticate(): Promise<ReAuthOutcome> {
   )
   // Scope the get() to the credential the user signed in with so the
   // browser prompts that exact platform passkey rather than falling back
-  // to the cross-device QR sheet.
+  // to the cross-device QR sheet. rpId comes from the bootstrap response
+  // (set during /auth/bootstrap), not window.location.hostname — the
+  // latter breaks on apex-vs-www origins.
   console.log('→ navigator.credentials.get() (PRF, local challenge)')
   const { prfOutput } = await runGetForPrf({
     challenge: localChallenge,
-    rpId: rpIdHint(),
+    rpId: getRpId() ?? rpIdHint(),
     allowCredentialId: bufferToBase64Url(cred.credentialId),
+    allowCredentialTransports: cred.transports,
   })
   console.log('← navigator.credentials.get()')
   if (!prfOutput) {
@@ -375,11 +382,12 @@ export async function exportMnemonic(): Promise<string> {
   )
   // Scope the get() to the credential the user signed in with so the
   // browser prompts that exact platform passkey rather than falling back
-  // to the cross-device QR sheet.
+  // to the cross-device QR sheet. rpId comes from the bootstrap response.
   const { prfOutput } = await runGetForPrf({
     challenge: localChallenge,
-    rpId: rpIdHint(),
+    rpId: getRpId() ?? rpIdHint(),
     allowCredentialId: bufferToBase64Url(cred.credentialId),
+    allowCredentialTransports: cred.transports,
   })
   if (!prfOutput) throw new PrfNotSupportedError()
 
@@ -446,10 +454,12 @@ export async function bootstrapFromCookie(): Promise<{
         credentialId: base64UrlToBuffer(c.credentialId),
         wrappedDek: base64UrlToBuffer(c.wrappedDek),
         wrappedDekIv: base64UrlToBuffer(c.wrappedDekIv),
+        transports: c.transports,
       })),
     }
     setBlob(blob)
     setSessionToken(res.sessionToken)
+    setRpId(res.rpId)
     return { sessionToken: res.sessionToken, blob }
   } catch (e) {
     if (

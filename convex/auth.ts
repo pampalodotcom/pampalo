@@ -73,6 +73,7 @@ export const getEncryptedBlob = query({
           credentialId: c.credentialId,
           wrappedDek: c.wrappedDek as ArrayBuffer,
           wrappedDekIv: c.wrappedDekIv as ArrayBuffer,
+          transports: c.transports,
         })),
     };
   },
@@ -248,6 +249,7 @@ export const _bootstrapBlob = internalQuery({
           credentialId: c.credentialId,
           wrappedDek: c.wrappedDek as ArrayBuffer,
           wrappedDekIv: c.wrappedDekIv as ArrayBuffer,
+          transports: c.transports,
         })),
     };
   },

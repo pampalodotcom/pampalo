@@ -342,6 +342,10 @@ http.route({
     return jsonResponse(req, {
       sessionToken: blob.sessionToken,
       sessionExpiresAt: blob.sessionExpiresAt,
+      // Echo the rpId used at registration time so client-side ceremonies
+      // (re-auth, export, sync) don't have to guess from
+      // window.location.hostname — that breaks for apex-vs-www origins.
+      rpId: rpIdForRequest(req),
       wallet: {
         mnemonicCiphertext: arrayBufferToBase64Url(blob.wallet.mnemonicCiphertext),
         mnemonicIv: arrayBufferToBase64Url(blob.wallet.mnemonicIv),
@@ -350,6 +354,10 @@ http.route({
         credentialId: arrayBufferToBase64Url(c.credentialId),
         wrappedDek: arrayBufferToBase64Url(c.wrappedDek),
         wrappedDekIv: arrayBufferToBase64Url(c.wrappedDekIv),
+        // Transport hints so allowCredentials in get() can steer the
+        // browser to the local platform authenticator instead of the
+        // cross-device picker.
+        transports: c.transports,
       })),
     });
   }),

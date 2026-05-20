@@ -11,6 +11,9 @@ export type EncryptedBlobCredential = {
   credentialId: ArrayBuffer;
   wrappedDek: ArrayBuffer;
   wrappedDekIv: ArrayBuffer;
+  // WebAuthn transport hints (e.g. ["internal"]); used by §6.6 ceremonies
+  // to keep the browser on the local platform authenticator.
+  transports?: ReadonlyArray<string>;
 };
 
 export type EncryptedBlob = {
@@ -60,6 +63,10 @@ function writePersistedAddresses(value: DerivedAddresses | null): void {
 let blob: EncryptedBlob | null = null;
 let addresses: DerivedAddresses | null = readPersistedAddresses();
 let sessionToken: string | null = null;
+// rpId the server used at registration time; populated on /auth/bootstrap.
+// Used by §6.6 ceremonies so we don't fall back to window.location.hostname
+// (which is wrong for apex-vs-www origins).
+let rpId: string | null = null;
 
 export function setBlob(b: EncryptedBlob): void {
   blob = b;
@@ -93,9 +100,17 @@ export function clearSessionToken(): void {
   sessionToken = null;
 }
 
+export function setRpId(id: string): void {
+  rpId = id;
+}
+export function getRpId(): string | null {
+  return rpId;
+}
+
 export function clearAll(): void {
   blob = null;
   addresses = null;
   sessionToken = null;
+  rpId = null;
   writePersistedAddresses(null);
 }
