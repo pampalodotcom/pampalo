@@ -208,7 +208,15 @@ function Landing() {
               </p>
               <p className="mb-5 text-[14.5px] leading-relaxed text-ink-soft">
                 Any data stored in the database is encrypted with (pass)keys
-                that you control.
+                that you control.{' '}
+                <a
+                  href="https://docs.pampalo.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-ink underline underline-offset-2 hover:text-ink-soft"
+                >
+                  Read More
+                </a>
               </p>
 
               <div className="flex flex-col gap-3">
