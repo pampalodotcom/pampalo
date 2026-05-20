@@ -16,7 +16,7 @@ import {
   importDekBytes,
 } from "./crypto";
 import { bufferToBase64Url, base64UrlToBuffer } from "./encoding";
-import { getBlob, getSessionToken } from "./keystore";
+import { getBlob, getRpId, getSessionToken } from "./keystore";
 import {
   applyPulledPrefs,
   getCurrentPrefsSnapshot,
@@ -132,11 +132,15 @@ export async function syncExplicit(): Promise<void> {
   // Scope the get() to the credential the user already signed in with —
   // otherwise the browser shows the cross-device QR sheet ("use your
   // phone or tablet") instead of prompting the local platform passkey.
+  // rpId comes from the bootstrap response, not window.location (which
+  // is "www.pampalo.com" while registration used "pampalo.com").
+  const fallbackRpId =
+    typeof window !== "undefined" ? window.location.hostname : "localhost";
   const { prfOutput } = await runGetForPrf({
     challenge: localChallenge,
-    rpId:
-      typeof window !== "undefined" ? window.location.hostname : "localhost",
+    rpId: getRpId() ?? fallbackRpId,
     allowCredentialId: bufferToBase64Url(cred.credentialId),
+    allowCredentialTransports: cred.transports,
   });
   if (!prfOutput) throw new PrfNotSupportedError();
 

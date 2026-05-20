@@ -68,10 +68,22 @@ export function prfEnabledOnRegistration(
 
 // ─── PRF derivation via a get() ceremony ──────────────────────────────────
 
+type AuthenticatorTransportLike =
+  | "usb"
+  | "nfc"
+  | "ble"
+  | "internal"
+  | "hybrid"
+  | "smart-card";
+
 export async function runGetForPrf(opts: {
   challenge: string; // base64url
   rpId: string;
   allowCredentialId?: string; // base64url; required to scope to a specific cred
+  // Transport hints for the credential — needed so the browser routes to
+  // the local platform authenticator instead of the cross-device QR sheet
+  // when allowCredentials is populated.
+  allowCredentialTransports?: ReadonlyArray<string>;
 }): Promise<{
   assertion: AuthenticationResponseJSON;
   prfOutput: ArrayBuffer | null;
@@ -87,6 +99,9 @@ export async function runGetForPrf(opts: {
             {
               id: opts.allowCredentialId,
               type: "public-key",
+              transports: opts.allowCredentialTransports as
+                | AuthenticatorTransportLike[]
+                | undefined,
             },
           ]
         : [],
