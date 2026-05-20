@@ -4,7 +4,7 @@ import { defineConfig } from 'vocs'
 export default defineConfig({
   rootDir: '.',
   title: 'Pampalo Docs',
-  description: 'Documentation for Pampalo — private money on Ethereum.',
+  description: 'Documentation for Pampalo - Private Money',
   logoUrl: '/pampalo-circular.svg',
   iconUrl: '/pampalo-circular.svg',
   sidebar: [
