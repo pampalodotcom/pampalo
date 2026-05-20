@@ -17,6 +17,7 @@
   --color-ink: var(--ink);
   --color-ink-soft: var(--ink-soft);
   --color-ink-mute: var(--ink-mute);
+  --color-ink-faint: var(--ink-faint);
   --color-line: var(--line);
   --color-accent: #ff7c4d;
   --color-accent-d: #e8553a;
@@ -74,6 +75,7 @@
   --ink: #0c2236;
   --ink-soft: rgba(12, 34, 54, 0.72);
   --ink-mute: rgba(12, 34, 54, 0.55);
+  --ink-faint: rgba(12, 34, 54, 0.4);
   --line: rgba(12, 34, 54, 0.1);
   --card-bg: rgba(255, 251, 240, 0.94);
   --card-bd: rgba(255, 255, 255, 0.7);
@@ -122,6 +124,7 @@ html[data-theme="dark"] {
   --ink: #f1eee3;
   --ink-soft: rgba(241, 238, 227, 0.78);
   --ink-mute: rgba(241, 238, 227, 0.55);
+  --ink-faint: rgba(241, 238, 227, 0.4);
   --line: rgba(241, 238, 227, 0.12);
   --card-bg: rgba(18, 36, 56, 0.78);
   --card-bd: rgba(241, 238, 227, 0.1);
@@ -364,6 +367,10 @@ body {
 }
 .net-chip.sepolia::before {
   background: #ffc107;
+}
+/* When the chip renders an inline logo image, hide the CSS dot. */
+.net-chip.has-logo::before {
+  display: none;
 }
 
 /* Public/private chips (e.g. in the BalanceCard hero). */

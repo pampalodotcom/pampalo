@@ -28,8 +28,13 @@ import { cn } from '@/lib/utils'
 type Props = {
   mnemonic: string
   address: string
+  // 'setup' is the post-registration flow: reveal → confirm (typed-word check)
+  // → call onConfirmed. 'export' is the on-demand reveal from the account
+  // page: reveal → "Done" → call onConfirmed (caller clears the mnemonic).
+  // In export mode there's no confirm step and no skip link.
+  mode?: 'setup' | 'export'
   onConfirmed: () => void
-  onSkip: () => void
+  onSkip?: () => void
 }
 
 const READ_TIMER_MS = 10_000
@@ -37,6 +42,7 @@ const READ_TIMER_MS = 10_000
 export function MnemonicReveal({
   mnemonic,
   address,
+  mode = 'setup',
   onConfirmed,
   onSkip,
 }: Props) {
@@ -114,11 +120,12 @@ export function MnemonicReveal({
     return (
       <div className="flex flex-col gap-4">
         <h2 className="font-serif text-[26px] font-bold leading-tight text-ink">
-          Your recovery phrase
+          {mode === 'export' ? 'Your account secret' : 'Your recovery phrase'}
         </h2>
         <p className="text-[14px] leading-relaxed text-ink-soft">
-          Write these 12 words down somewhere private. They’re the only way to
-          recover your wallet if you lose access to your passkey.
+          {mode === 'export'
+            ? 'Anyone with these 12 words can take your wallet. Only display them somewhere private, and never share them.'
+            : 'Write these 12 words down somewhere private. They’re the only way to recover your wallet if you lose access to your passkey.'}
         </p>
 
         <div className="relative">
@@ -209,22 +216,38 @@ export function MnemonicReveal({
           </div>
         )}
 
-        <PrimaryButton disabled={!canProceed} onClick={() => setStage('confirm')}>
-          I’ve saved it
+        <PrimaryButton
+          disabled={!canProceed}
+          onClick={() =>
+            mode === 'export' ? onConfirmed() : setStage('confirm')
+          }
+        >
+          {mode === 'export' ? 'Done' : 'I’ve saved it'}
         </PrimaryButton>
 
-        <button
-          type="button"
-          onClick={onSkip}
-          className="self-center text-[13px] font-medium text-ink-mute underline underline-offset-2 hover:text-ink-soft"
-        >
-          I&apos;ll do this later
-        </button>
+        {mode === 'setup' && onSkip && (
+          <button
+            type="button"
+            onClick={onSkip}
+            className="self-center text-[13px] font-medium text-ink-mute underline underline-offset-2 hover:text-ink-soft"
+          >
+            I&apos;ll do this later
+          </button>
+        )}
       </div>
     )
   }
 
-  return <ConfirmStep words={words} onConfirmed={onConfirmed} onSkip={onSkip} />
+  // Confirm stage is only reachable in 'setup' mode (the reveal-stage button
+  // calls onConfirmed directly in 'export' mode), so onSkip is always
+  // defined here. Fall back to a no-op for the type system.
+  return (
+    <ConfirmStep
+      words={words}
+      onConfirmed={onConfirmed}
+      onSkip={onSkip ?? (() => {})}
+    />
+  )
 }
 
 function ConfirmStep({

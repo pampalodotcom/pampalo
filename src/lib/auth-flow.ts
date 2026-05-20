@@ -360,6 +360,49 @@ function rpIdHint(): string {
   return window.location.hostname
 }
 
+// ─── Export Account Secret ───────────────────────────────────────────────
+// Runs a passkey ceremony to derive PRF and decrypt the mnemonic, returning
+// the plaintext for one-time display. Caller is responsible for clearing
+// it from React state as soon as the user dismisses the UI.
+
+export async function exportMnemonic(): Promise<string> {
+  let blob = getBlob()
+  if (!blob) {
+    const boot = await bootstrapFromCookie()
+    if (!boot) throw new Error('Session expired — please sign in again.')
+    blob = boot.blob
+  }
+  const cred = blob.credentials[0]
+
+  const localChallenge = bufferToBase64Url(
+    crypto.getRandomValues(new Uint8Array(32)),
+  )
+  const credentialIdB64 = bufferToBase64Url(cred.credentialId)
+  const { prfOutput } = await runGetForPrf({
+    challenge: localChallenge,
+    rpId: rpIdHint(),
+    allowCredentialId: credentialIdB64,
+  })
+  if (!prfOutput) throw new PrfNotSupportedError()
+
+  const kek = await deriveKekFromPrfOutput(prfOutput)
+  const dekBytes = await aesGcmDecrypt(kek, cred.wrappedDek, cred.wrappedDekIv)
+  const dekKey = await importDekBytes(new Uint8Array(dekBytes), false)
+  const mnemonicBuf = await aesGcmDecrypt(
+    dekKey,
+    blob.mnemonicCiphertext,
+    blob.mnemonicIv,
+  )
+  const mnemonic = bufferToUtf8(mnemonicBuf)
+
+  // Scrub the intermediate key material. The mnemonic itself is the
+  // return value — the caller is responsible for dropping its reference.
+  new Uint8Array(dekBytes).fill(0)
+  new Uint8Array(mnemonicBuf).fill(0)
+
+  return mnemonic
+}
+
 // ─── Sign out ────────────────────────────────────────────────────────────
 
 export async function signOut(): Promise<void> {

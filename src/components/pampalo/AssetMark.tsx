@@ -1,18 +1,20 @@
 import { cn } from "@/lib/utils";
 
-// Each asset has its own coloured disc with the ticker glyph. Colours
-// lifted from the design handoff (ETH = ink, USDC = calm blue, AUDD =
-// umbrella red from the landing scene).
+// Per-asset visual. When `image` is set, the disc renders the logo (clipped
+// to a circle). When it isn't, falls back to a coloured disc with a
+// stylised glyph — used for any symbol we haven't registered a logo for.
 type AssetVisual = {
+  image?: string;
   glyph: string;
   bg: string;
   fg: string;
 };
 
 const VISUALS: Record<string, AssetVisual> = {
-  ETH: { glyph: "Ξ", bg: "#0C2236", fg: "#FAF6EA" },
-  USDC: { glyph: "$", bg: "#2E7DC2", fg: "#FFFFFF" },
-  AUDD: { glyph: "A$", bg: "#C44530", fg: "#FFFBF0" },
+  ETH: { image: "/eth-logo.png", glyph: "Ξ", bg: "#0C2236", fg: "#FAF6EA" },
+  USDC: { image: "/usdc-logo.png", glyph: "$", bg: "#2E7DC2", fg: "#FFFFFF" },
+  AUDD: { image: "/audd-logo.png", glyph: "A$", bg: "#C44530", fg: "#FFFBF0" },
+  LINK: { image: "/link-logo.png", glyph: "L", bg: "#2A5ADA", fg: "#FFFFFF" },
 };
 
 const FALLBACK: AssetVisual = {
@@ -31,6 +33,34 @@ export function AssetMark({
   className?: string;
 }) {
   const visual = VISUALS[symbol] ?? FALLBACK;
+
+  if (visual.image) {
+    return (
+      <span
+        className={cn(
+          "inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-card",
+          className,
+        )}
+        style={{
+          width: size,
+          height: size,
+          boxShadow:
+            "0 4px 12px rgba(12,34,54,0.18), inset 0 1px 0 rgba(255,255,255,0.18)",
+        }}
+        aria-hidden="true"
+      >
+        <img
+          src={visual.image}
+          alt=""
+          width={size}
+          height={size}
+          className="h-full w-full object-cover"
+          draggable={false}
+        />
+      </span>
+    );
+  }
+
   const isLong = visual.glyph.length > 1;
   return (
     <span

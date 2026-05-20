@@ -275,17 +275,6 @@ function Landing() {
           )}
         </section>
 
-        <p className="mt-auto pb-6 text-center text-[11px] text-ink-mute">
-          By continuing you agree to the{' '}
-          <a
-            href="/Pampalo-Terms-of-Service.pdf"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
-            Terms and Conditions
-          </a>
-        </p>
       </div>
 
       {/* Anchor for conditional mediation autofill on browsers that need it. */}

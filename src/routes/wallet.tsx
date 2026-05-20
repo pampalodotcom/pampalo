@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
-import { Loader2, LogOut, RefreshCcw } from "lucide-react";
+import { Loader2, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 import { AccountAvatar } from "@/components/pampalo/AccountAvatar";
@@ -14,7 +14,6 @@ import {
   type NetworkFilter,
 } from "@/components/pampalo/NetworkFilterTabs";
 import { PageLoading } from "@/components/pampalo/PageLoading";
-import { SecondaryButton } from "@/components/pampalo/SecondaryButton";
 import { ThemeToggle } from "@/components/pampalo/ThemeToggle";
 import { useAccountModal } from "@/lib/account-modal";
 import {
@@ -35,7 +34,6 @@ function Wallet() {
   const navigate = useNavigate();
   const { theme } = useTheme();
   const accountModal = useAccountModal();
-  const [signingOut, setSigningOut] = useState(false);
   const [reauthing, setReauthing] = useState(false);
 
   useEffect(() => {
@@ -63,19 +61,6 @@ function Wallet() {
     }
   }
 
-  async function onSignOut() {
-    setSigningOut(true);
-    try {
-      await auth.signOut();
-      toast("Signed out");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Sign-out failed.";
-      toast.error(msg);
-    } finally {
-      setSigningOut(false);
-    }
-  }
-
   return (
     <main className="phone-shell flex min-h-dvh flex-col">
       {/* Full-width beach band — same vibe as the landing page. Header
@@ -84,14 +69,11 @@ function Wallet() {
       <div className="relative shrink-0 w-full">
         <BeachScene height={280} theme={theme} />
         <div className="absolute inset-x-0 top-6 z-10 pointer-events-none">
-          <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-5">
+          <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-5 lg:max-w-4xl">
             <div className="pointer-events-auto flex items-center gap-2">
               <BrandLockup />
             </div>
             <div className="pointer-events-auto flex items-center gap-2">
-              {addresses && (
-                <ReAuthButton onClick={onReAuth} loading={reauthing} />
-              )}
               <ThemeToggle />
               {addresses && (
                 <button
@@ -114,7 +96,7 @@ function Wallet() {
 
       {/* Dashboard column. Pulled up with -mt-10 so the first card overlaps
           the beach's bottom edge, matching the landing's hero card. */}
-      <div className="relative z-10 -mt-10 mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-4 pb-12">
+      <div className="relative z-10 -mt-10 mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-4 pb-12 lg:max-w-4xl">
         {addresses ? (
           <Dashboard evmAddress={addresses.evm} />
         ) : (
@@ -127,16 +109,6 @@ function Wallet() {
           </section>
         )}
 
-        <div className="mt-auto">
-          <SecondaryButton onClick={onSignOut} disabled={signingOut}>
-            {signingOut ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <LogOut className="size-4" />
-            )}
-            Sign out
-          </SecondaryButton>
-        </div>
       </div>
     </main>
   );
@@ -285,16 +257,29 @@ function Dashboard({ evmAddress }: { evmAddress: string }) {
           </p>
         ) : (
           <ul className="flex flex-col gap-3">
-            {groupedAssets.map((g) => (
-              <li key={g.symbol}>
-                <AssetGroupRow
-                  symbol={g.symbol}
-                  tokens={g.tokens}
-                  prices={prices ?? undefined}
-                  evmAddress={evmAddress}
-                />
-              </li>
-            ))}
+            {groupedAssets.map((g) => {
+              // The key includes the chain set because AssetGroupRow calls
+              // balance hooks inside a tokens.map() — if the filter shrinks
+              // an ETH group from [mainnet, base] to [mainnet] without a
+              // remount, React sees fewer hooks on the next render and
+              // throws "Rendered fewer hooks than expected." Including
+              // chainIds in the key forces a remount whenever that shape
+              // changes; React Query keeps the underlying balances cached
+              // so there's no visible refetch.
+              const groupKey = `${g.symbol}:${g.tokens
+                .map((t) => t.chainId)
+                .join(",")}`;
+              return (
+                <li key={groupKey}>
+                  <AssetGroupRow
+                    symbol={g.symbol}
+                    tokens={g.tokens}
+                    prices={prices ?? undefined}
+                    evmAddress={evmAddress}
+                  />
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
@@ -507,37 +492,6 @@ function AssetGroupRow({
 }
 
 // ─── Auth-shell pieces (lifted from the previous wallet.tsx) ────────────
-
-function ReAuthButton({
-  onClick,
-  loading,
-}: {
-  onClick: () => void;
-  loading: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={loading}
-      aria-label="Unlock with passkey"
-      title="Unlock with passkey"
-      className={cn(
-        "inline-flex size-8 items-center justify-center rounded-full",
-        "border border-line bg-card text-ink",
-        "transition-colors hover:bg-paper-lo",
-        "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ink/15",
-        "disabled:opacity-50",
-      )}
-    >
-      {loading ? (
-        <Loader2 className="size-3.5 animate-spin" />
-      ) : (
-        <RefreshCcw className="size-3.5" />
-      )}
-    </button>
-  );
-}
 
 function NoAddressNotice({
   onUnlock,
