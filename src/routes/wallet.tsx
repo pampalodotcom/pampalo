@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
-import { Loader2, LogOut, RefreshCcw } from "lucide-react";
+import { Loader2, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 import { AccountAvatar } from "@/components/pampalo/AccountAvatar";
@@ -14,7 +14,6 @@ import {
   type NetworkFilter,
 } from "@/components/pampalo/NetworkFilterTabs";
 import { PageLoading } from "@/components/pampalo/PageLoading";
-import { SecondaryButton } from "@/components/pampalo/SecondaryButton";
 import { ThemeToggle } from "@/components/pampalo/ThemeToggle";
 import { useAccountModal } from "@/lib/account-modal";
 import {
@@ -35,7 +34,6 @@ function Wallet() {
   const navigate = useNavigate();
   const { theme } = useTheme();
   const accountModal = useAccountModal();
-  const [signingOut, setSigningOut] = useState(false);
   const [reauthing, setReauthing] = useState(false);
 
   useEffect(() => {
@@ -60,19 +58,6 @@ function Wallet() {
       toast.error(msg);
     } finally {
       setReauthing(false);
-    }
-  }
-
-  async function onSignOut() {
-    setSigningOut(true);
-    try {
-      await auth.signOut();
-      toast("Signed out");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Sign-out failed.";
-      toast.error(msg);
-    } finally {
-      setSigningOut(false);
     }
   }
 
@@ -124,16 +109,6 @@ function Wallet() {
           </section>
         )}
 
-        <div className="mt-auto">
-          <SecondaryButton onClick={onSignOut} disabled={signingOut}>
-            {signingOut ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <LogOut className="size-4" />
-            )}
-            Sign out
-          </SecondaryButton>
-        </div>
       </div>
     </main>
   );
