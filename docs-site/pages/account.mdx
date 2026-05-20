@@ -1,0 +1,9 @@
+# Account
+
+When you create a pampalo account, you are creating and storing a passkey with PRF cabilities on your device, or in your password manager. 
+
+You also generate an account secret. You use your passkey with PRF to encrypt your account secret, and Pampalo stores that encrypted secret in it's database against your passkey id. Your passkey ID is not traceable to you or your device (unless someone has your device).
+
+This means that if pampalo ever has it's database leaked or server compromised - all that is leaked is data encrypted with keys that you control.
+
+Pampalo is client side first with the intent of giving more power to all of its users.
