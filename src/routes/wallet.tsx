@@ -282,16 +282,29 @@ function Dashboard({ evmAddress }: { evmAddress: string }) {
           </p>
         ) : (
           <ul className="flex flex-col gap-3">
-            {groupedAssets.map((g) => (
-              <li key={g.symbol}>
-                <AssetGroupRow
-                  symbol={g.symbol}
-                  tokens={g.tokens}
-                  prices={prices ?? undefined}
-                  evmAddress={evmAddress}
-                />
-              </li>
-            ))}
+            {groupedAssets.map((g) => {
+              // The key includes the chain set because AssetGroupRow calls
+              // balance hooks inside a tokens.map() — if the filter shrinks
+              // an ETH group from [mainnet, base] to [mainnet] without a
+              // remount, React sees fewer hooks on the next render and
+              // throws "Rendered fewer hooks than expected." Including
+              // chainIds in the key forces a remount whenever that shape
+              // changes; React Query keeps the underlying balances cached
+              // so there's no visible refetch.
+              const groupKey = `${g.symbol}:${g.tokens
+                .map((t) => t.chainId)
+                .join(",")}`;
+              return (
+                <li key={groupKey}>
+                  <AssetGroupRow
+                    symbol={g.symbol}
+                    tokens={g.tokens}
+                    prices={prices ?? undefined}
+                    evmAddress={evmAddress}
+                  />
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

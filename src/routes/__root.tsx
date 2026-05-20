@@ -10,6 +10,7 @@ import appCss from "../styles.css?url";
 import { AccountModalProvider } from "@/lib/account-modal";
 import { AuthProvider } from "@/lib/auth";
 import { ThemeProvider } from "@/lib/theme";
+import { Footer } from "@/components/pampalo/Footer";
 import { Toaster } from "@/components/ui/sonner";
 
 export const Route = createRootRouteWithContext<{
@@ -86,6 +87,7 @@ function RootComponent() {
         <AuthProvider>
           <AccountModalProvider>
             <Outlet />
+            <Footer />
             <Toaster position="top-center" />
           </AccountModalProvider>
         </AuthProvider>

@@ -26,12 +26,12 @@ export function PageLoading({
       )}
     >
       <img
-        src="/pampalo-dusk-apple-180.png"
+        src="/pampalo-solid.svg"
         alt=""
         aria-hidden
         width={108}
         height={108}
-        className="size-[108px] rounded-3xl animate-[brand-pulse_1.6s_ease-in-out_infinite]"
+        className="size-[108px] animate-[brand-pulse_1.6s_ease-in-out_infinite]"
         draggable={false}
       />
       {label && (
