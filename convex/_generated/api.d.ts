@@ -14,6 +14,7 @@ import type * as crons from "../crons.js";
 import type * as gas from "../gas.js";
 import type * as http from "../http.js";
 import type * as networks from "../networks.js";
+import type * as preferences from "../preferences.js";
 import type * as prices from "../prices.js";
 import type * as refresh from "../refresh.js";
 import type * as rpcProxy from "../rpcProxy.js";
@@ -33,6 +34,7 @@ declare const fullApi: ApiFromModules<{
   gas: typeof gas;
   http: typeof http;
   networks: typeof networks;
+  preferences: typeof preferences;
   prices: typeof prices;
   refresh: typeof refresh;
   rpcProxy: typeof rpcProxy;

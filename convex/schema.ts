@@ -88,6 +88,23 @@ export default defineSchema({
     .index("by_token", ["token"])
     .index("by_expiresAt", ["expiresAt"]),
 
+  // ─── Encrypted client-side application state ────────────────────────────
+  // See CLIENT_SIDE_FIRST.md. One row per user holds a single ciphertext
+  // blob of the user's preferences JSON, encrypted client-side under the
+  // wallet DEK. The `revision` is an opaque monotonic counter bumped on
+  // every write; it powers the cross-device "upstream has changes" UI.
+  //
+  // Column rules follow ADR 0001 with one documented concession: `revision`
+  // is a bounded behavior signal (write count, nothing about content). New
+  // tables of this shape must follow the same shape — ciphertext + iv +
+  // single opaque counter, nothing else.
+  userPreferences: defineTable({
+    userId: v.id("users"),
+    ciphertext: v.bytes(), // AES-256-GCM(DEK, JSON.stringify(prefs))
+    iv: v.bytes(), // 12 bytes
+    revision: v.number(), // 1, 2, 3, … server-bumped on every write
+  }).index("by_userId", ["userId"]),
+
   // ─── Public market data ─────────────────────────────────────────────────
   // Everything below is global, public information. No user data.
   // BYO-RPC design note: networks store only `alchemySubdomain` (e.g.

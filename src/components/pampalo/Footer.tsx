@@ -17,6 +17,7 @@
 import { ExternalLink, FileText } from 'lucide-react'
 import { BrandLockup } from './BrandLockup'
 import { WarningChip } from './WarningChip'
+import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 
 // Pampalo Pty Ltd — Australian Company Number.
@@ -27,6 +28,11 @@ const X_URL = 'https://x.com/pampalodotcom'
 const TERMS_URL = '/Pampalo-Terms-of-Service.pdf'
 
 export function Footer() {
+  // Hold the footer off the page until auth bootstrap resolves so it doesn't
+  // flash behind the PageLoading overlay (or briefly below any route that
+  // mounts its own loading state).
+  const { state } = useAuth()
+  if (state.status === 'loading') return null
   return (
     <>
       <FooterDesktop className="hidden md:block" />

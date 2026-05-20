@@ -15,6 +15,7 @@ import { Check, Loader2 } from 'lucide-react'
 import { PrimaryButton } from '@/components/pampalo/PrimaryButton'
 import { signOut } from '@/lib/auth-flow'
 import { clearAll } from '@/lib/keystore'
+import { wipePrefsCompletely } from '@/lib/preferences'
 
 export const Route = createFileRoute('/clear')({ component: Clear })
 
@@ -58,6 +59,11 @@ function Clear() {
 
         // 4. In-memory keystore.
         clearAll()
+
+        // 5. IDB preferences record. signOut() above only clears the
+        //    in-memory cache so cross-sign-in prefs persist; /clear is
+        //    the explicit "nuke everything" path so we wipe IDB too.
+        await wipePrefsCompletely()
 
         setStatus('done')
       } catch (e) {
