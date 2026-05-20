@@ -420,3 +420,9 @@ body {
     background-position: -200% 0;
   }
 }
+
+/* AssetMark logos that ship as white-on-transparent need to be inverted
+   in light mode so they read as dark ink against the paper background. */
+html:not([data-theme="dark"]) .asset-mark-invert-light {
+  filter: invert(1);
+}
