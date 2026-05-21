@@ -236,6 +236,18 @@ const TOKENS: SeedToken[] = [
     roundTo: 5,
     priceFeedShortId: "eth/usd",
   },
+  // Native (Circle-issued) USDC on Base. Distinct from USDbC
+  // (bridged USDC, 0xd9aa…), which Circle now discourages — we only
+  // surface the canonical token. USDC has no chainlink feed in our
+  // catalogue; the swap UI prices it at $1, same as on mainnet.
+  {
+    chainId: 8453,
+    address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    name: "USD Coin",
+    symbol: "USDC",
+    decimals: 6,
+    roundTo: 2,
+  },
   // ── Sepolia ──
   {
     chainId: 11155111,

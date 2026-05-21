@@ -5,7 +5,8 @@ import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { ETH_ADDRESS } from "./seed";
 import {
-  addressResult,
+  computeV2PairAddress,
+  computeV3PoolAddress,
   feeFromQuoterCalldata,
   quoterResult,
   reservesResult,
@@ -28,14 +29,14 @@ const USDC_WETH_V3_500 = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640";
 const USDC_WETH_V3_3000 = "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8";
 const USDC_WETH_V3_10000 = "0x7bea39867e4169dbe237d55c8242a8f2fcdcc387";
 
-// Made-up pool addresses for factory-fallback tests.
-const FACTORY_FALLBACK_PAIR = "0x1111111111111111111111111111111111111111";
-
+// Canonical mainnet factory addresses. Used to derive expected
+// CREATE2 pool addresses in tests so we stay in sync with the
+// production address book.
 const V2_FACTORY = "0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f";
+const V3_FACTORY = "0x1f98431c8ad98523631ae4a59f267346ea31f984";
 const V3_QUOTER = "0x61ffe014ba17989e743c5f6cb21bf9697530b21e";
 
 const SELECTORS = {
-  V2_FACTORY_GET_PAIR: "0xe6a43905",
   V2_PAIR_GET_RESERVES: "0x0902f1ac",
   V3_POOL_LIQUIDITY: "0x1a686502",
   V3_QUOTER_EXACT_INPUT_SINGLE: "0xc6a5026a",
@@ -170,14 +171,20 @@ describe("uniswap.getPool", () => {
     expect(captured[0].to).toBe(USDC_WETH_V2_POOL);
   });
 
-  test("v2 factory fallback when no cache entry", async () => {
+  test("v2 cache miss → CREATE2-derived address, no factory RPC", async () => {
     const t = convexTest(schema, modules);
     await seedMainnet(t);
-    // No pool seeded — should call factory.getPair, then probe reserves.
-    setHandler(V2_FACTORY, SELECTORS.V2_FACTORY_GET_PAIR, () =>
-      addressResult(FACTORY_FALLBACK_PAIR),
-    );
-    setHandler(FACTORY_FALLBACK_PAIR, SELECTORS.V2_PAIR_GET_RESERVES, () =>
+    // No pool seeded. The action now derives the address locally via
+    // CREATE2 and goes straight to the reserves probe — no
+    // factory.getPair eth_call. Zero reserves at the derived address
+    // means no pool was initialized.
+    const expectedPair = computeV2PairAddress({
+      factory: V2_FACTORY,
+      // Token order: AUDD (0x4cce…) < USDC (0xa0b8…)
+      token0: AUDD,
+      token1: USDC,
+    });
+    setHandler(expectedPair, SELECTORS.V2_PAIR_GET_RESERVES, () =>
       reservesResult(0n, 0n),
     );
 
@@ -188,22 +195,26 @@ describe("uniswap.getPool", () => {
       tokenB: USDC,
     });
 
-    expect(result.address).toBe(FACTORY_FALLBACK_PAIR);
-    // Zero reserves → available=false even though pool exists.
+    expect(result.address).toBeNull();
     expect(result.available).toBe(false);
-    expect(result.liquidity).toBe("0");
-    expect(captured.map((c) => c.to)).toEqual([
-      V2_FACTORY,
-      FACTORY_FALLBACK_PAIR,
-    ]);
+    expect(result.liquidity).toBeNull();
+    // The only RPC was the reserves probe at the derived address.
+    expect(captured).toHaveLength(1);
+    expect(captured[0].to).toBe(expectedPair);
   });
 
-  test("returns null when factory says pool does not exist", async () => {
+  test("v2: empty eth_call response (no contract) → unavailable", async () => {
     const t = convexTest(schema, modules);
     await seedMainnet(t);
-    setHandler(V2_FACTORY, SELECTORS.V2_FACTORY_GET_PAIR, () =>
-      addressResult("0x0000000000000000000000000000000000000000"),
-    );
+    // No contract deployed at the CREATE2 address → eth_call returns
+    // plain 0x. Action should treat that as no-pool rather than try
+    // to decode it.
+    const expectedPair = computeV2PairAddress({
+      factory: V2_FACTORY,
+      token0: AUDD,
+      token1: WETH,
+    });
+    setHandler(expectedPair, SELECTORS.V2_PAIR_GET_RESERVES, () => "0x");
 
     const result = await t.action(api.uniswap.getPool, {
       chainId: 1,
@@ -215,9 +226,8 @@ describe("uniswap.getPool", () => {
     expect(result.address).toBeNull();
     expect(result.available).toBe(false);
     expect(result.liquidity).toBeNull();
-    // Only the factory call — no reserves probe on a non-existent pool.
     expect(captured).toHaveLength(1);
-    expect(captured[0].to).toBe(V2_FACTORY);
+    expect(captured[0].to).toBe(expectedPair);
   });
 
   test("v3 cached pool with liquidity probe", async () => {
@@ -568,11 +578,15 @@ describe("uniswap.getAllQuotes", () => {
   test("marks venues without pools as unavailable instead of throwing", async () => {
     const t = convexTest(schema, modules);
     await seedMainnet(t);
-    // No pools seeded. Factory returns zero for the V2 pair, and the
-    // quoter has nothing meaningful to return either.
-    setHandler(V2_FACTORY, SELECTORS.V2_FACTORY_GET_PAIR, () =>
-      addressResult("0x0000000000000000000000000000000000000000"),
-    );
+    // No pools seeded. V2 reserves probe returns empty (no contract
+    // at the CREATE2 address); v3 quoter has nothing to return.
+    const auddWethV2 = computeV2PairAddress({
+      factory: V2_FACTORY,
+      // AUDD < WETH lexically.
+      token0: AUDD,
+      token1: WETH,
+    });
+    setHandler(auddWethV2, SELECTORS.V2_PAIR_GET_RESERVES, () => "0x");
     setHandler(V3_QUOTER, SELECTORS.V3_QUOTER_EXACT_INPUT_SINGLE, () => "0x");
 
     const result = await t.action(api.uniswap.getAllQuotes, {
@@ -586,5 +600,44 @@ describe("uniswap.getAllQuotes", () => {
     expect(result.options).toHaveLength(4);
     expect(result.options.every((o) => !o.available)).toBe(true);
     expect(result.options[0].error).toBe("no pool");
+  });
+
+  // Regression guard: if CREATE2 derivation ever drifts, this test
+  // will catch it before it ships. The seeded mainnet pool addresses
+  // are canonical — they match what factory.getPool returns on-chain.
+  test("CREATE2 derivation reproduces canonical mainnet pool addresses", () => {
+    // V3 USDC/WETH at all three fee tiers.
+    expect(
+      computeV3PoolAddress({
+        factory: V3_FACTORY,
+        token0: USDC,
+        token1: WETH,
+        fee: 500,
+      }),
+    ).toBe(USDC_WETH_V3_500);
+    expect(
+      computeV3PoolAddress({
+        factory: V3_FACTORY,
+        token0: USDC,
+        token1: WETH,
+        fee: 3000,
+      }),
+    ).toBe(USDC_WETH_V3_3000);
+    expect(
+      computeV3PoolAddress({
+        factory: V3_FACTORY,
+        token0: USDC,
+        token1: WETH,
+        fee: 10000,
+      }),
+    ).toBe(USDC_WETH_V3_10000);
+    // V2 USDC/WETH.
+    expect(
+      computeV2PairAddress({
+        factory: V2_FACTORY,
+        token0: USDC,
+        token1: WETH,
+      }),
+    ).toBe(USDC_WETH_V2_POOL);
   });
 });

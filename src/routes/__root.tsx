@@ -24,7 +24,20 @@ export const Route = createRootRouteWithContext<{
         content:
           "width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1",
       },
-      { name: "theme-color", content: "#faf6ea" },
+      // Sky-blue chrome so iOS Safari / Android Chrome tint the
+      // status-bar / URL-bar area to match the BeachScene's sky band
+      // at the top of every wallet-shell route. Values match
+      // BeachScene.tsx's PAL.{light,dark}.clear exactly. The
+      // unconditional entry is the day variant — ThemeProvider
+      // overrides this at runtime when the user toggles Night via
+      // applyThemeColorMeta(), so the OS-pref media variant only
+      // matters before the JS bundles boot.
+      { name: "theme-color", content: "#a3d9ff" },
+      {
+        name: "theme-color",
+        content: "#0a1830",
+        media: "(prefers-color-scheme: dark)",
+      },
       { title: "Pampalo · Private Money" },
       {
         name: "description",
