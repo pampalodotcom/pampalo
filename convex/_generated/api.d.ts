@@ -19,7 +19,9 @@ import type * as prices from "../prices.js";
 import type * as refresh from "../refresh.js";
 import type * as rpcProxy from "../rpcProxy.js";
 import type * as seed from "../seed.js";
+import type * as swap_abi from "../swap/abi.js";
 import type * as tokens from "../tokens.js";
+import type * as uniswap from "../uniswap.js";
 
 import type {
   ApiFromModules,
@@ -39,7 +41,9 @@ declare const fullApi: ApiFromModules<{
   refresh: typeof refresh;
   rpcProxy: typeof rpcProxy;
   seed: typeof seed;
+  "swap/abi": typeof swap_abi;
   tokens: typeof tokens;
+  uniswap: typeof uniswap;
 }>;
 
 /**
