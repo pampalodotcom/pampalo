@@ -351,7 +351,15 @@ export function SwapModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        // Cap the dialog at the viewport and scroll when content
+        // (Review pane with all the breakdown rows) gets tall on
+        // mobile. The close button stays pinned to the top-right via
+        // its `absolute` positioning inside DialogContent — it
+        // doesn't scroll with the body. `overscroll-contain` keeps
+        // page scroll from leaking past the modal's bounds on iOS.
+        className="sm:max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain"
+      >
         <DialogHeader>
           <DialogTitle className="text-base font-bold">
             {phase === "review" ? "Review swap" : "Swap"}
