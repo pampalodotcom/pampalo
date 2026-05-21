@@ -1,5 +1,11 @@
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowLeft, Check } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowLeft,
+  Check,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
 import { weiToNumber } from "@/lib/balances";
 import { applySlippageMax, applySlippageMin } from "@/lib/uniswap-swap";
 import { cn } from "@/lib/utils";
@@ -106,6 +112,10 @@ export function ReviewSwap({
   onConfirm: (tier: GasTier) => void;
 }) {
   const [tier, setTier] = useState<GasTier>("standard");
+  // Collapsed by default: most users don't change gas tier, and the
+  // 4-row picker adds significant vertical real estate. Expand only
+  // when they actually want to tune.
+  const [feeOpen, setFeeOpen] = useState(false);
 
   // ── USD price lookups ────────────────────────────────────────────────
   function usdPriceFor(token: TokenPair): number | null {
@@ -295,31 +305,68 @@ export function ReviewSwap({
         <RouteBadge quote={quote} />
       </div>
 
-      {/* Gas tier picker */}
-      <div className="rounded-xl border border-border bg-muted/30 p-3">
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            Network fee
-          </p>
-          {!gas?.gasPriceWei && (
-            <p className="text-[10px] text-muted-foreground">
-              Estimating…
-            </p>
+      {/* Gas tier picker — collapsed by default. Header summarises
+          the current pick + cost; expanding reveals the full
+          slower/standard/faster/stupid menu. */}
+      <div className="rounded-xl border border-border bg-muted/30">
+        <button
+          type="button"
+          onClick={() => setFeeOpen((o) => !o)}
+          aria-expanded={feeOpen}
+          className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
+        >
+          <span className="flex items-center gap-1.5">
+            {feeOpen ? (
+              <ChevronDown className="size-3 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="size-3 text-muted-foreground" />
+            )}
+            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              Network fee
+            </span>
+            {!feeOpen && (
+              <span className="text-[12px] font-medium text-ink">
+                {TIER_LABEL[tier]}
+              </span>
+            )}
+          </span>
+          {!feeOpen && (
+            <span className="flex flex-col items-end leading-tight">
+              <span className="font-mono text-[12px] text-ink">
+                {selectedGasUsd !== null ? `≈ ${fmtUsd(selectedGasUsd)}` : "—"}
+              </span>
+              <span className="font-mono text-[10px] text-ink-mute">
+                {gasByTier[tier].gweiPerUnit !== null
+                  ? `${formatGwei(gasByTier[tier].gweiPerUnit)} gwei`
+                  : !gas?.gasPriceWei
+                    ? "estimating…"
+                    : "—"}
+              </span>
+            </span>
           )}
-        </div>
-        <ul className="flex flex-col gap-1">
-          {TIERS.map((t) => (
-            <li key={t}>
-              <TierRow
-                tier={t}
-                selected={t === tier}
-                gweiPerUnit={gasByTier[t].gweiPerUnit}
-                usd={gasByTier[t].usd}
-                onSelect={() => setTier(t)}
-              />
-            </li>
-          ))}
-        </ul>
+        </button>
+        {feeOpen && (
+          <div className="px-3 pb-3">
+            {!gas?.gasPriceWei && (
+              <p className="mb-1.5 text-right text-[10px] text-muted-foreground">
+                Estimating gas…
+              </p>
+            )}
+            <ul className="flex flex-col gap-1">
+              {TIERS.map((t) => (
+                <li key={t}>
+                  <TierRow
+                    tier={t}
+                    selected={t === tier}
+                    gweiPerUnit={gasByTier[t].gweiPerUnit}
+                    usd={gasByTier[t].usd}
+                    onSelect={() => setTier(t)}
+                  />
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       {/* Cost breakdown — separates the asset value the user is
