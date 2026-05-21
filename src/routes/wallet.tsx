@@ -335,7 +335,11 @@ function BalanceCardConnected({
         evmAddress={evmAddress}
         onSwap={() => setSwapOpen(true)}
       />
-      <SwapModal open={swapOpen} onOpenChange={setSwapOpen} />
+      <SwapModal
+        open={swapOpen}
+        onOpenChange={setSwapOpen}
+        evmAddress={evmAddress}
+      />
     </>
   );
 }
