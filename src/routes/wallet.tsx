@@ -14,6 +14,7 @@ import {
   type NetworkFilter,
 } from "@/components/pampalo/NetworkFilterTabs";
 import { PageLoading } from "@/components/pampalo/PageLoading";
+import { SwapModal } from "@/components/pampalo/SwapModal";
 import { ThemeToggle } from "@/components/pampalo/ThemeToggle";
 import { useAccountModal } from "@/lib/account-modal";
 import {
@@ -304,6 +305,7 @@ function BalanceCardConnected({
   prices: PriceRow[] | null;
   evmAddress: string;
 }) {
+  const [swapOpen, setSwapOpen] = useState(false);
   if (!tokens) {
     return (
       <BalanceCard
@@ -325,12 +327,16 @@ function BalanceCardConnected({
     .map((t) => `${t.chainId}:${t.address.toLowerCase()}`)
     .join("|");
   return (
-    <BalanceCardWithBalances
-      key={balanceKey}
-      tokens={tokens}
-      prices={prices}
-      evmAddress={evmAddress}
-    />
+    <>
+      <BalanceCardWithBalances
+        key={balanceKey}
+        tokens={tokens}
+        prices={prices}
+        evmAddress={evmAddress}
+        onSwap={() => setSwapOpen(true)}
+      />
+      <SwapModal open={swapOpen} onOpenChange={setSwapOpen} />
+    </>
   );
 }
 
@@ -338,10 +344,12 @@ function BalanceCardWithBalances({
   tokens,
   prices,
   evmAddress,
+  onSwap,
 }: {
   tokens: Token[];
   prices: PriceRow[] | null;
   evmAddress: string;
+  onSwap?: () => void;
 }) {
   // Aggregate by symbol — one balance lookup per (chainId, address).
   // React allows this because the token list is stable across renders;
@@ -412,6 +420,7 @@ function BalanceCardWithBalances({
       totalUsd={stillLoading ? null : publicUsd + privateUsd}
       publicUsd={stillLoading ? null : publicUsd}
       privateUsd={stillLoading ? null : privateUsd}
+      onSwap={onSwap}
     />
   );
 }

@@ -512,3 +512,79 @@ describe("uniswap.getQuote (v3)", () => {
     ).rejects.toThrow(/decimal wei string/);
   });
 });
+
+// ─── getAllQuotes ───────────────────────────────────────────────────────
+
+describe("uniswap.getAllQuotes", () => {
+  test("returns one option per venue (V2 + each V3 tier)", async () => {
+    const t = convexTest(schema, modules);
+    await seedMainnet(t);
+    await seedV2UsdcWeth(t);
+    await seedV3UsdcWethAll(t);
+
+    const reserveUSDC = 1_000_000n * 10n ** 6n;
+    const reserveWETH = 500n * 10n ** 18n;
+    setHandler(USDC_WETH_V2_POOL, SELECTORS.V2_PAIR_GET_RESERVES, () =>
+      reservesResult(reserveUSDC, reserveWETH),
+    );
+    setHandler(V3_QUOTER, SELECTORS.V3_QUOTER_EXACT_INPUT_SINGLE, ({ data }) => {
+      const fee = feeFromQuoterCalldata(data);
+      const amount =
+        fee === 500
+          ? 6n * 10n ** 17n
+          : fee === 3000
+            ? 5n * 10n ** 17n
+            : 4n * 10n ** 17n;
+      return quoterResult(amount);
+    });
+
+    const amountIn = 2000n * 10n ** 6n;
+    const result = await t.action(api.uniswap.getAllQuotes, {
+      chainId: 1,
+      tokenIn: USDC,
+      tokenOut: WETH,
+      kind: "exactIn",
+      amount: amountIn.toString(),
+    });
+
+    expect(result.options).toHaveLength(4); // v2 + 3 v3 tiers
+    const byKey = Object.fromEntries(
+      result.options.map((o) => [`${o.version}:${o.fee ?? ""}`, o]),
+    );
+    expect(byKey["v2:"].available).toBe(true);
+    expect(byKey["v3:500"].amountOut).toBe((6n * 10n ** 17n).toString());
+    expect(byKey["v3:500"].poolAddress).toBe(USDC_WETH_V3_500);
+    expect(byKey["v3:3000"].amountOut).toBe((5n * 10n ** 17n).toString());
+    expect(byKey["v3:10000"].amountOut).toBe((4n * 10n ** 17n).toString());
+
+    // V2 amountOut should match the constant-product formula.
+    const amountInWithFee = amountIn * 997n;
+    const v2Expected =
+      (amountInWithFee * reserveWETH) /
+      (reserveUSDC * 1000n + amountInWithFee);
+    expect(byKey["v2:"].amountOut).toBe(v2Expected.toString());
+  });
+
+  test("marks venues without pools as unavailable instead of throwing", async () => {
+    const t = convexTest(schema, modules);
+    await seedMainnet(t);
+    // No pools seeded. Factory returns zero for the V2 pair, and the
+    // quoter has nothing meaningful to return either.
+    setHandler(V2_FACTORY, SELECTORS.V2_FACTORY_GET_PAIR, () =>
+      addressResult("0x0000000000000000000000000000000000000000"),
+    );
+    setHandler(V3_QUOTER, SELECTORS.V3_QUOTER_EXACT_INPUT_SINGLE, () => "0x");
+
+    const result = await t.action(api.uniswap.getAllQuotes, {
+      chainId: 1,
+      tokenIn: AUDD,
+      tokenOut: WETH,
+      kind: "exactIn",
+      amount: (1n * 10n ** 6n).toString(),
+    });
+
+    expect(result.options).toHaveLength(4);
+    expect(result.options.every((o) => !o.available)).toBe(true);
+    expect(result.options[0].error).toBe("no pool");
+  });
+});

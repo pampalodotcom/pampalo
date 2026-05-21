@@ -633,6 +633,220 @@ function parseAmount(s: string): bigint {
   return n;
 }
 
+// ─── getAllQuotes ────────────────────────────────────────────────────────
+// Returns one entry per available option (V2 pool + each configured V3
+// fee tier). Lets the swap UI show the full quote board at once instead
+// of forcing the user to pick a venue blind. Pools that don't exist or
+// have no liquidity come back with `available: false` + an `error`
+// string so the UI can render them dimmed rather than throwing the
+// whole call away.
+
+export type QuoteOption = {
+  version: "v2" | "v3";
+  fee?: number; // v3 only
+  poolAddress: string | null;
+  amountIn: string | null;
+  amountOut: string | null;
+  available: boolean;
+  error?: string;
+};
+
+export type AllQuotesResult = {
+  chainId: number;
+  kind: QuoteKind;
+  tokenIn: string; // resolved (WETH if ETH sentinel was passed)
+  tokenOut: string;
+  amount: string; // the input the user specified
+  options: QuoteOption[];
+  fetchedAt: number;
+};
+
+export const getAllQuotes = action({
+  args: {
+    chainId: v.number(),
+    tokenIn: v.string(),
+    tokenOut: v.string(),
+    kind: v.union(v.literal("exactIn"), v.literal("exactOut")),
+    amount: v.string(),
+  },
+  handler: async (ctx, args): Promise<AllQuotesResult> => {
+    const network: { alchemySubdomain: string } | null = await ctx.runQuery(
+      internal.uniswap._networkForUniswap,
+      { chainId: args.chainId },
+    );
+    if (!network) {
+      throw new Error(`Unknown or disabled chainId ${args.chainId}`);
+    }
+    const book = UNISWAP_ADDRESSES[args.chainId];
+    if (!book) throw new Error(`No Uniswap address book for chain ${args.chainId}`);
+
+    const tokenIn = resolveTokenForPool(args.tokenIn, args.chainId);
+    const tokenOut = resolveTokenForPool(args.tokenOut, args.chainId);
+    const amount = parseAmount(args.amount);
+    const fetchedAt = Date.now();
+    const url = alchemyUrl(network.alchemySubdomain);
+    const { token0, token1 } = sortPair(tokenIn, tokenOut);
+
+    const options: QuoteOption[] = [];
+
+    // ── V2 ──
+    try {
+      const cached: { address: string } | null = await ctx.runQuery(
+        internal.uniswap._cachedPool,
+        { chainId: args.chainId, version: "v2", token0, token1 },
+      );
+      let poolAddress = cached ? cached.address : null;
+      if (!poolAddress) {
+        const call = buildFactoryCall({
+          version: "v2",
+          token0,
+          token1,
+          book,
+        });
+        const hex = await rpc<string>(url, "eth_call", [
+          ethCall(call.to, call.data),
+          "latest",
+        ]);
+        poolAddress = !hex || hex.length < 66 ? null : addressFromWord(hex.slice(2));
+      }
+      if (!poolAddress || poolAddress === ZERO_ADDRESS) {
+        options.push({
+          version: "v2",
+          poolAddress: null,
+          amountIn: null,
+          amountOut: null,
+          available: false,
+          error: "no pool",
+        });
+      } else {
+        const hex = await rpc<string>(url, "eth_call", [
+          ethCall(poolAddress, V2_PAIR_GET_RESERVES),
+          "latest",
+        ]);
+        const { reserve0, reserve1 } = decodeV2Reserves(hex);
+        const tokenInIsToken0 = tokenIn === token0;
+        const reserveIn = tokenInIsToken0 ? reserve0 : reserve1;
+        const reserveOut = tokenInIsToken0 ? reserve1 : reserve0;
+
+        let amountIn: bigint;
+        let amountOut: bigint;
+        if (args.kind === "exactIn") {
+          amountIn = amount;
+          amountOut = v2GetAmountOut(amountIn, reserveIn, reserveOut);
+        } else {
+          amountOut = amount;
+          amountIn = v2GetAmountIn(amountOut, reserveIn, reserveOut);
+        }
+        options.push({
+          version: "v2",
+          poolAddress,
+          amountIn: amountIn.toString(),
+          amountOut: amountOut.toString(),
+          available: true,
+        });
+      }
+    } catch (e) {
+      options.push({
+        version: "v2",
+        poolAddress: null,
+        amountIn: null,
+        amountOut: null,
+        available: false,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+
+    // ── V3: one batched call covering every fee tier. ──
+    const selector =
+      args.kind === "exactIn"
+        ? V3_QUOTER_EXACT_INPUT_SINGLE
+        : V3_QUOTER_EXACT_OUTPUT_SINGLE;
+    const batch: Array<RpcRequest> = V3_FEE_TIERS.map((fee, i) => ({
+      jsonrpc: "2.0",
+      id: i,
+      method: "eth_call",
+      params: [
+        ethCall(
+          book.v3.quoterV2,
+          buildQuoterCalldata({
+            selector,
+            tokenIn,
+            tokenOut,
+            amount,
+            fee,
+          }),
+        ),
+        "latest",
+      ],
+    }));
+    const responses = await rpcBatch<string>(url, batch);
+
+    for (let i = 0; i < V3_FEE_TIERS.length; i++) {
+      const fee = V3_FEE_TIERS[i];
+      const resp = responses.find((r) => r.id === i) ?? responses[i];
+      if (resp.error || !resp.result) {
+        options.push({
+          version: "v3",
+          fee,
+          poolAddress: null,
+          amountIn: null,
+          amountOut: null,
+          available: false,
+          error: resp.error?.message ?? "no result",
+        });
+        continue;
+      }
+      let decoded: { amount: bigint; sqrtPriceX96After: bigint };
+      try {
+        decoded = decodeQuoterResponse(resp.result);
+      } catch (e) {
+        options.push({
+          version: "v3",
+          fee,
+          poolAddress: null,
+          amountIn: null,
+          amountOut: null,
+          available: false,
+          error: e instanceof Error ? e.message : "decode failed",
+        });
+        continue;
+      }
+
+      // Resolve pool address from cache; skip factory call for a
+      // lighter response — the UI mostly cares about the price, the
+      // address is informational.
+      const cached: { address: string } | null = await ctx.runQuery(
+        internal.uniswap._cachedPool,
+        { chainId: args.chainId, version: "v3", token0, token1, fee },
+      );
+      const poolAddress = cached?.address ?? null;
+
+      const amountIn =
+        args.kind === "exactIn" ? amount.toString() : decoded.amount.toString();
+      const amountOut =
+        args.kind === "exactIn" ? decoded.amount.toString() : amount.toString();
+      options.push({
+        version: "v3",
+        fee,
+        poolAddress,
+        amountIn,
+        amountOut,
+        available: true,
+      });
+    }
+
+    return {
+      chainId: args.chainId,
+      kind: args.kind,
+      tokenIn,
+      tokenOut,
+      amount: amount.toString(),
+      options,
+      fetchedAt,
+    };
+  },
+});
+
 function buildQuoterCalldata(args: {
   selector: string;
   tokenIn: string;
