@@ -6,6 +6,7 @@ import { BeachScene } from '@/components/pampalo/BeachScene'
 import { MnemonicReveal } from '@/components/pampalo/MnemonicReveal'
 import { PageLoading } from '@/components/pampalo/PageLoading'
 import { PrimaryButton } from '@/components/pampalo/PrimaryButton'
+import { RecoverAccount } from '@/components/pampalo/RecoverAccount'
 import { SecondaryButton } from '@/components/pampalo/SecondaryButton'
 import { ThemeToggle } from '@/components/pampalo/ThemeToggle'
 import { WarningChip } from '@/components/pampalo/WarningChip'
@@ -29,9 +30,13 @@ type HelpKind = 'prf-not-supported' | 'unknown-credential'
 
 type LocalUiState =
   | { kind: 'idle' }
+  // Cold-start "I already have a wallet" reveal — Sign In tapped on the
+  // unknown-device shell, showing the two child options.
+  | { kind: 'signin-choice' }
   | { kind: 'registering' }
   | { kind: 'signing-in' }
   | { kind: 'reveal'; draft: NewWalletDraft }
+  | { kind: 'recovering' }
   | { kind: 'help'; help: HelpKind }
   | { kind: 'transitioning' }
 
@@ -194,6 +199,18 @@ function Landing() {
               kind={ui.help}
               onBack={() => setUi({ kind: 'idle' })}
             />
+          ) : ui.kind === 'recovering' ? (
+            <RecoverAccount
+              onBack={() => setUi({ kind: 'signin-choice' })}
+              onRecovered={() => {
+                auth.refreshAddress()
+                setUi({ kind: 'transitioning' })
+                void navigate({ to: '/wallet' })
+              }}
+              onPrfMissing={() =>
+                setUi({ kind: 'help', help: 'prf-not-supported' })
+              }
+            />
           ) : (
             <>
               <p className="eyebrow mb-3">Pampalo · Private Money</p>
@@ -242,6 +259,45 @@ function Landing() {
                       </>
                     )}
                   </PrimaryButton>
+                ) : ui.kind === 'signin-choice' ||
+                  ui.kind === 'signing-in' ? (
+                  // Two-button reveal: the user already tapped Sign In on
+                  // the unknown-device shell, now they pick between the
+                  // passkey path and the recovery-phrase path. See CONTEXT.md
+                  // §"Entry-point flows" for the term distinction. We keep
+                  // this branch on `'signing-in'` too so the loading state
+                  // shows on the same button the user tapped, in the same
+                  // layout — without this the user would see Sign In flip
+                  // back to "Get started" mid-ceremony.
+                  <>
+                    <PrimaryButton onClick={onSignIn} disabled={busy(ui)}>
+                      {ui.kind === 'signing-in' ? (
+                        <>
+                          <Loader2 className="size-[18px] animate-spin" />
+                          Signing in with Passkey…
+                        </>
+                      ) : (
+                        <>
+                          <Fingerprint className="size-[18px]" />
+                          Sign in with passkey
+                        </>
+                      )}
+                    </PrimaryButton>
+                    <SecondaryButton
+                      onClick={() => setUi({ kind: 'recovering' })}
+                      disabled={busy(ui)}
+                    >
+                      Recover account
+                    </SecondaryButton>
+                    <button
+                      type="button"
+                      onClick={() => setUi({ kind: 'idle' })}
+                      disabled={busy(ui)}
+                      className="self-center text-[13px] font-medium text-ink-mute underline underline-offset-2 hover:text-ink-soft disabled:opacity-50"
+                    >
+                      Back
+                    </button>
+                  </>
                 ) : (
                   <>
                     <PrimaryButton onClick={onCreate} disabled={busy(ui)}>
@@ -259,19 +315,16 @@ function Landing() {
                     </PrimaryButton>
                     {/* Cold-start escape hatch: on a new device the
                         `wallet_known_device` cookie isn't set, but a synced
-                        passkey may already exist in the OS keychain. Without
-                        this link the only option is "Get started", which
-                        would create a duplicate wallet. */}
-                    <button
-                      type="button"
-                      onClick={onSignIn}
+                        passkey may already exist in the OS keychain. Tapping
+                        this reveals the {Sign in with passkey / Recover
+                        account} pair — Recover is the path for users whose
+                        passkey isn't here at all. */}
+                    <SecondaryButton
+                      onClick={() => setUi({ kind: 'signin-choice' })}
                       disabled={busy(ui)}
-                      className="self-center text-[13px] font-medium text-ink-mute underline underline-offset-2 hover:text-ink-soft disabled:opacity-50"
                     >
-                      {ui.kind === 'signing-in'
-                        ? 'Signing in with Passkey…'
-                        : 'Already have a wallet? Sign in'}
-                    </button>
+                      Sign in
+                    </SecondaryButton>
                   </>
                 )}
               </div>

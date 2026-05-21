@@ -294,7 +294,7 @@ export function SwapModal({
             <Loader2 className="size-4 animate-spin" />
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex min-w-0 flex-col gap-3">
             <SideBox
               label={kind === "exactIn" ? "You pay" : "You pay (max)"}
               token={tokenIn}
@@ -415,11 +415,11 @@ function SideBox({
   usdValue: number | null;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-muted/30 p-3">
+    <div className="min-w-0 rounded-xl border border-border bg-muted/30 p-3">
       <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <input
           inputMode="decimal"
           value={value}
@@ -457,13 +457,11 @@ function SideBox({
           )}
         </div>
       </div>
-      <div className="mt-1 flex h-[16px] items-center justify-between gap-2 text-[11px] text-muted-foreground">
-        <span className="font-mono">
+      <div className="mt-1 flex h-[16px] min-w-0 items-center justify-between gap-2 text-[11px] text-muted-foreground">
+        <span className="min-w-0 truncate font-mono">
           {usdValue === null ? "" : `≈ ${fmtUsd(usdValue)}`}
         </span>
-        {token && (
-          <ChainPill chainId={token.chainId} />
-        )}
+        {token && <ChainPill chainId={token.chainId} />}
       </div>
     </div>
   );
