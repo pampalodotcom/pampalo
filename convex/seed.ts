@@ -294,6 +294,73 @@ const TOKENS: SeedToken[] = [
   },
 ];
 
+// Uniswap pool addresses (mainnet). Verified on Etherscan; v3 covers
+// the standard fee tiers (500/3000/10000). Pools that don't exist as
+// of writing (e.g. AUDD/USDC v3) are omitted — the `getPool` action
+// falls back to a factory call, so missing rows just mean "compute on
+// demand and cache later". Token addresses are stored lowercased and
+// in canonical (token0 < token1) order.
+//
+// All addresses lowercased to match the schema's canonical form.
+type SeedPool = {
+  chainId: number;
+  version: "v2" | "v3";
+  token0: string; // < token1 lexicographically
+  token1: string;
+  fee?: number; // v3 only
+  address: string;
+};
+
+const POOLS: SeedPool[] = [
+  // ── Ethereum mainnet, v2 ──
+  // USDC/WETH: USDC=0xa0b8…, WETH=0xc02a… → token0=USDC, token1=WETH
+  {
+    chainId: 1,
+    version: "v2",
+    token0: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // USDC
+    token1: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // WETH
+    address: "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc",
+  },
+  // AUDD/WETH v2: AUDD=0x4cce…, WETH=0xc02a… → token0=AUDD, token1=WETH
+  // No live v2 pool at time of seeding — left for factory fallback.
+  //
+  // AUDD/USDC v2: AUDD=0x4cce…, USDC=0xa0b8… → token0=USDC, token1=AUDD
+  // No live v2 pool at time of seeding — left for factory fallback.
+
+  // ── Ethereum mainnet, v3 ──
+  // USDC/WETH 0.05%
+  {
+    chainId: 1,
+    version: "v3",
+    token0: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    token1: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    fee: 500,
+    address: "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+  },
+  // USDC/WETH 0.3%
+  {
+    chainId: 1,
+    version: "v3",
+    token0: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    token1: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    fee: 3000,
+    address: "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8",
+  },
+  // USDC/WETH 1% (low liquidity but exists)
+  {
+    chainId: 1,
+    version: "v3",
+    token0: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    token1: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    fee: 10000,
+    address: "0x7bea39867e4169dbe237d55c8242a8f2fcdcc387",
+  },
+  // AUDD pools on mainnet v3 are absent / very illiquid at time of
+  // seeding. The factory fallback in `getPool` handles them: if
+  // factory.getPool returns the zero address we surface { available:
+  // false } to the caller, who can then try another fee tier or v2.
+];
+
 // Chainlink mainnet aggregators (verified against docs.chain.link).
 // All four have feedDecimals = 8 and use base/quote in the shortId.
 const PRICE_FEEDS = [
@@ -309,12 +376,65 @@ const PRICE_FEEDS = [
 
 // ─── One-shot seeder ─────────────────────────────────────────────────────
 
+export const addUniswapPool = internalMutation({
+  args: {
+    chainId: v.number(),
+    version: v.union(v.literal("v2"), v.literal("v3")),
+    token0: v.string(),
+    token1: v.string(),
+    fee: v.optional(v.number()),
+    address: v.string(),
+    enabled: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const network = await ctx.db
+      .query("supportedNetworks")
+      .withIndex("by_chainId", (q) => q.eq("chainId", args.chainId))
+      .unique();
+    if (!network) {
+      throw new Error(`No supportedNetworks row for chainId ${args.chainId}`);
+    }
+    const token0 = args.token0.toLowerCase();
+    const token1 = args.token1.toLowerCase();
+    if (token0 >= token1) {
+      throw new Error(`token0 must be < token1 (got ${token0}, ${token1})`);
+    }
+    const address = args.address.toLowerCase();
+    const existing = await ctx.db
+      .query("uniswapPools")
+      .withIndex("by_pair", (q) =>
+        q
+          .eq("networkId", network._id)
+          .eq("version", args.version)
+          .eq("token0", token0)
+          .eq("token1", token1)
+          .eq("fee", args.fee),
+      )
+      .unique();
+    const payload = {
+      networkId: network._id,
+      version: args.version,
+      token0,
+      token1,
+      fee: args.fee,
+      address,
+      enabled: args.enabled ?? true,
+    };
+    if (existing) {
+      await ctx.db.replace(existing._id, payload);
+      return existing._id;
+    }
+    return await ctx.db.insert("uniswapPools", payload);
+  },
+});
+
 export const seedAll = internalMutation({
   args: {},
   handler: async (ctx): Promise<{
     networks: number;
     tokens: number;
     priceFeeds: number;
+    uniswapPools: number;
   }> => {
     // Networks
     const netIds: Record<number, Id<"supportedNetworks">> = {};
@@ -393,10 +513,46 @@ export const seedAll = internalMutation({
       }
     }
 
+    // Uniswap pools — upsert by (network, version, token0, token1, fee).
+    let poolCount = 0;
+    for (const p of POOLS) {
+      const networkId = netIds[p.chainId];
+      if (!networkId) continue;
+      const token0 = p.token0.toLowerCase();
+      const token1 = p.token1.toLowerCase();
+      const existing = await ctx.db
+        .query("uniswapPools")
+        .withIndex("by_pair", (q) =>
+          q
+            .eq("networkId", networkId)
+            .eq("version", p.version)
+            .eq("token0", token0)
+            .eq("token1", token1)
+            .eq("fee", p.fee),
+        )
+        .unique();
+      const payload = {
+        networkId,
+        version: p.version,
+        token0,
+        token1,
+        fee: p.fee,
+        address: p.address.toLowerCase(),
+        enabled: true,
+      };
+      if (existing) {
+        await ctx.db.replace(existing._id, payload);
+      } else {
+        await ctx.db.insert("uniswapPools", payload);
+      }
+      poolCount += 1;
+    }
+
     return {
       networks: NETWORKS.length,
       tokens: tokenInserted,
       priceFeeds: feedCount,
+      uniswapPools: poolCount,
     };
   },
 });

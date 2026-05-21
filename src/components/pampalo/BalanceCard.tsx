@@ -1,3 +1,4 @@
+import { ArrowLeftRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SplitBar } from "./SplitBar";
 import { SunIcon, MoonIcon } from "./SunMoonIcons";
@@ -10,6 +11,8 @@ type Props = {
   privateUsd: number | null;
   loading?: boolean;
   className?: string;
+  /** Optional: render a top-right Swap button that calls this on click. */
+  onSwap?: () => void;
 };
 
 function formatUsd(n: number, dp = 2): string {
@@ -32,6 +35,7 @@ export function BalanceCard({
   privateUsd,
   loading,
   className,
+  onSwap,
 }: Props) {
   const isLoading =
     loading || totalUsd === null || publicUsd === null || privateUsd === null;
@@ -51,7 +55,27 @@ export function BalanceCard({
     >
       <div className="flex items-center justify-between gap-3">
         <p className="eyebrow">Total Balance</p>
-        <SyncIndicator />
+        <div className="flex items-center gap-2">
+          {onSwap && (
+            <button
+              type="button"
+              onClick={onSwap}
+              className={cn(
+                "inline-flex items-center gap-1.5",
+                "h-[28px] px-3 rounded-full",
+                "border border-line bg-paper-lo text-ink",
+                "text-[12px] font-semibold",
+                "transition-colors hover:bg-[var(--pub-soft)] hover:text-[var(--pub)]",
+                "focus-visible:outline-none focus-visible:ring-3",
+                "focus-visible:ring-[var(--pub-soft-2)]",
+              )}
+            >
+              <ArrowLeftRight className="size-3.5" />
+              Swap
+            </button>
+          )}
+          <SyncIndicator />
+        </div>
       </div>
 
       {isLoading ? (
