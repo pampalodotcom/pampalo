@@ -4,7 +4,7 @@
 // otherwise the same 32-byte word logic ends up duplicated in two
 // places and starts drifting.
 //
-// Two groups of exports:
+// Three groups of exports:
 //
 //   1. Generic 32-byte word helpers (pad32, encodeAddress, encodeUint,
 //      sliceWord, addressFromWord). Used by the production action to
@@ -13,6 +13,21 @@
 //   2. Uniswap-specific encoders/decoders (reservesResult, quoterResult,
 //      feeFromQuoterCalldata). Used by tests to canned-mock the
 //      Alchemy responses and introspect what the action sent.
+//
+//   3. CREATE2 pool-address derivations (computeV2PairAddress,
+//      computeV3PoolAddress). Pool addresses on canonical Uniswap
+//      deployments are deterministic — same factory + same tokens
+//      + same fee + same init-code hash → same address. Using these
+//      saves a factory.getPair / factory.getPool RPC per uncached
+//      lookup; the action calls them instead of seeding addresses
+//      into the DB or chasing factory.getPool on cache miss.
+
+import {
+  AbiCoder,
+  getCreate2Address,
+  keccak256,
+  solidityPackedKeccak256,
+} from "ethers";
 
 // ─── Generic 32-byte word helpers ───────────────────────────────────────
 
@@ -125,4 +140,72 @@ export function amountFromQuoterCalldata(data: string): bigint {
 
 export function feeFromQuoterCalldata(data: string): number {
   return Number("0x" + quoterParam(data, 3));
+}
+
+// ─── CREATE2 pool-address derivations ───────────────────────────────────
+// Uniswap V2 + V3 pools are deployed via CREATE2 from a small,
+// well-known set of factories. Same inputs → same address on every
+// chain that runs the canonical bytecode (mainnet, Base, Optimism,
+// Arbitrum, …). Computing locally beats round-tripping through
+// factory.getPair / factory.getPool because:
+//   1. saves one eth_call per uncached lookup, and
+//   2. doesn't require seeding pool addresses for new chains.
+//
+// The init-code hash MUST match the chain's deployment. For Uniswap
+// Labs' canonical V2 + V3 deployments (the ones we use), the hash is
+// the same on every chain because the contract bytecode is byte-
+// identical. Forks (SushiSwap, Camelot, BaseSwap, etc.) have
+// different hashes and would need their own constants.
+
+/** Uniswap V2 pair init-code keccak256. Same value on every chain
+ *  that runs Uniswap's canonical V2 factory (mainnet, Base, etc.). */
+export const UNISWAP_V2_INIT_CODE_HASH =
+  "0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f";
+
+/** Uniswap V3 pool init-code keccak256. Same value on every chain
+ *  that runs Uniswap's canonical V3 factory. */
+export const UNISWAP_V3_INIT_CODE_HASH =
+  "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54";
+
+/** Compute the address of a Uniswap V2 pair via CREATE2. Inputs are
+ *  pre-sorted (token0 < token1); the salt for V2 is
+ *  `keccak256(abi.encodePacked(token0, token1))`. */
+export function computeV2PairAddress(args: {
+  factory: string;
+  token0: string;
+  token1: string;
+  initCodeHash?: string;
+}): string {
+  const salt = solidityPackedKeccak256(
+    ["address", "address"],
+    [args.token0, args.token1],
+  );
+  return getCreate2Address(
+    args.factory,
+    salt,
+    args.initCodeHash ?? UNISWAP_V2_INIT_CODE_HASH,
+  ).toLowerCase();
+}
+
+/** Compute the address of a Uniswap V3 pool via CREATE2. The salt is
+ *  `keccak256(abi.encode(token0, token1, fee))` — the abi-encoded
+ *  (not packed) tuple, in contrast to V2. */
+export function computeV3PoolAddress(args: {
+  factory: string;
+  token0: string;
+  token1: string;
+  fee: number;
+  initCodeHash?: string;
+}): string {
+  const salt = keccak256(
+    AbiCoder.defaultAbiCoder().encode(
+      ["address", "address", "uint24"],
+      [args.token0, args.token1, args.fee],
+    ),
+  );
+  return getCreate2Address(
+    args.factory,
+    salt,
+    args.initCodeHash ?? UNISWAP_V3_INIT_CODE_HASH,
+  ).toLowerCase();
 }

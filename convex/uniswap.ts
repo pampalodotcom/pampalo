@@ -3,7 +3,8 @@ import { internal } from "./_generated/api";
 import { action, internalQuery } from "./_generated/server";
 import { ETH_ADDRESS } from "./seed";
 import {
-  addressFromWord,
+  computeV2PairAddress,
+  computeV3PoolAddress,
   encodeAddress,
   encodeUint,
   sliceWord,
@@ -68,20 +69,28 @@ export const UNISWAP_ADDRESSES: Partial<Record<number, ChainAddresses>> = {
 const V3_FEE_TIERS = [500, 3000, 10000] as const;
 
 // ─── Selectors ───────────────────────────────────────────────────────────
-// Each is keccak256(signature)[0:4].
+// Each is keccak256(signature)[0:4]. Note we no longer call the
+// factory's getPair / getPool: pool addresses are derived locally via
+// CREATE2 (see resolvePoolAddress + convex/swap/abi.ts). The
+// `V2_PAIR_TOKEN0` selector is retained for future debugging — kept
+// to document the contract even though nothing currently calls it.
 
-const V2_FACTORY_GET_PAIR = "0xe6a43905";
 const V2_PAIR_GET_RESERVES = "0x0902f1ac";
 const V2_PAIR_TOKEN0 = "0x0dfe1681";
 
-const V3_FACTORY_GET_POOL = "0x1698ee82";
 const V3_POOL_LIQUIDITY = "0x1a686502";
 
 // IQuoterV2.quoteExact{Input,Output}Single((address,address,uint256,uint24,uint160))
 const V3_QUOTER_EXACT_INPUT_SINGLE = "0xc6a5026a";
 const V3_QUOTER_EXACT_OUTPUT_SINGLE = "0xbd21704a";
 
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+// Typical gas for swapExactTokensForTokens on V2 Router02 — single-hop
+// path, ERC20 → ERC20. The exact figure varies a bit by token (USDT
+// transfer takes a few more units than plain ERC20s), but 150k is the
+// "looks-right" number wallets use as a fallback estimate. V3 doesn't
+// need a hardcoded constant: QuoterV2 returns a gasEstimate field in
+// its response, which is what `decodeQuoterResponse` now extracts.
+const V2_GAS_ESTIMATE_UNITS = 150_000n;
 
 // ─── Tiny ABI helpers ────────────────────────────────────────────────────
 
@@ -223,32 +232,35 @@ function sortPair(
     : { token0: b, token1: a, swapped: true };
 }
 
-// Build the factory.get{Pair,Pool} calldata for cache-miss lookups.
-function buildFactoryCall(args: {
+// Derive a pool address deterministically via CREATE2. Same factory
+// + same tokens (+ same fee for V3) + same init-code hash → same
+// address on every chain that runs Uniswap's canonical deployment.
+// Replaces the previous factory.getPair / factory.getPool RPC: no
+// network round-trip, no need to seed pool addresses for new chains.
+// The actual existence check ("is there a contract here? does it
+// have liquidity?") still happens via the reserves / liquidity probe
+// downstream.
+function derivePoolAddress(args: {
   version: "v2" | "v3";
   token0: string;
   token1: string;
   fee?: number;
   book: ChainAddresses;
-}): { to: string; data: string } {
+}): string {
   if (args.version === "v2") {
-    return {
-      to: args.book.v2.factory,
-      data:
-        V2_FACTORY_GET_PAIR +
-        encodeAddress(args.token0) +
-        encodeAddress(args.token1),
-    };
+    return computeV2PairAddress({
+      factory: args.book.v2.factory,
+      token0: args.token0,
+      token1: args.token1,
+    });
   }
   if (args.fee === undefined) throw new Error("v3 fee required");
-  return {
-    to: args.book.v3.factory,
-    data:
-      V3_FACTORY_GET_POOL +
-      encodeAddress(args.token0) +
-      encodeAddress(args.token1) +
-      encodeUint(BigInt(args.fee)),
-  };
+  return computeV3PoolAddress({
+    factory: args.book.v3.factory,
+    token0: args.token0,
+    token1: args.token1,
+    fee: args.fee,
+  });
 }
 
 // ─── getPool ─────────────────────────────────────────────────────────────
@@ -303,70 +315,76 @@ export const getPool = action({
       },
     );
 
-    let address: string | null = cached ? cached.address : null;
-
-    // 2. Cache miss → factory.
-    if (!address) {
-      const call = buildFactoryCall({
+    // 2. Cache miss → derive deterministically via CREATE2 (no RPC).
+    //    The cache is now an optional override — set
+    //    `uniswapPools.enabled = false` to blacklist a specific pool,
+    //    otherwise the derived address is what we use.
+    const address: string =
+      cached?.address ??
+      derivePoolAddress({
         version: args.version,
         token0,
         token1,
         fee: args.fee,
         book,
       });
-      const hex = await rpc<string>(url, "eth_call", [
-        ethCall(call.to, call.data),
-        "latest",
-      ]);
-      if (!hex || hex === "0x" || hex.length < 66) {
-        address = ZERO_ADDRESS;
-      } else {
-        address = addressFromWord(hex.slice(2));
-      }
-    }
 
-    if (address === ZERO_ADDRESS) {
-      return {
-        chainId: args.chainId,
-        version: args.version,
-        token0,
-        token1,
-        fee: args.fee,
-        address: null,
-        liquidity: null,
-        available: false,
-      };
-    }
+    // 3. Liquidity / existence probe. If no contract was ever
+    //    deployed at the CREATE2-derived address (i.e. the pool was
+    //    never created), the call returns 0x and we treat it as
+    //    no-liquidity rather than throwing.
+    const liquidity = await probePoolLiquidity({
+      url,
+      version: args.version,
+      poolAddress: address,
+    });
 
-    // 3. Liquidity probe.
-    let liquidity: bigint;
-    if (args.version === "v2") {
-      const hex = await rpc<string>(url, "eth_call", [
-        ethCall(address, V2_PAIR_GET_RESERVES),
-        "latest",
-      ]);
-      const { reserve0 } = decodeV2Reserves(hex);
-      liquidity = reserve0;
-    } else {
-      const hex = await rpc<string>(url, "eth_call", [
-        ethCall(address, V3_POOL_LIQUIDITY),
-        "latest",
-      ]);
-      liquidity = BigInt(hex);
-    }
-
+    const exists = liquidity > 0n;
     return {
       chainId: args.chainId,
       version: args.version,
       token0,
       token1,
       fee: args.fee,
-      address,
-      liquidity: liquidity.toString(),
-      available: liquidity > 0n,
+      address: exists ? address : null,
+      liquidity: exists ? liquidity.toString() : null,
+      available: exists,
     };
   },
 });
+
+// Read reserves (v2) or liquidity() (v3) at a pool address. Returns
+// 0n when the call response is empty (no contract deployed there) or
+// when decoding fails — treats both as "no liquidity" rather than
+// throwing, which matters because CREATE2 always yields an address
+// but a pool may never have been initialized at that address.
+async function probePoolLiquidity(args: {
+  url: string;
+  version: "v2" | "v3";
+  poolAddress: string;
+}): Promise<bigint> {
+  try {
+    if (args.version === "v2") {
+      const hex = await rpc<string>(args.url, "eth_call", [
+        ethCall(args.poolAddress, V2_PAIR_GET_RESERVES),
+        "latest",
+      ]);
+      // (32 * 3) hex chars + "0x" = 194. Anything shorter means no
+      // contract / unexpected response.
+      if (!hex || hex.length < 2 + 64 * 3) return 0n;
+      const { reserve0 } = decodeV2Reserves(hex);
+      return reserve0;
+    }
+    const hex = await rpc<string>(args.url, "eth_call", [
+      ethCall(args.poolAddress, V3_POOL_LIQUIDITY),
+      "latest",
+    ]);
+    if (!hex || hex === "0x") return 0n;
+    return BigInt(hex);
+  } catch {
+    return 0n;
+  }
+}
 
 // ─── V2 reserves decoder ────────────────────────────────────────────────
 
@@ -468,30 +486,23 @@ export const getQuote = action({
           token1,
         },
       );
-      let poolAddress = cached ? cached.address : null;
-      if (!poolAddress) {
-        const call = buildFactoryCall({
-          version: "v2",
-          token0,
-          token1,
-          book,
-        });
-        const hex = await rpc<string>(url, "eth_call", [
-          ethCall(call.to, call.data),
-          "latest",
-        ]);
-        poolAddress = !hex || hex.length < 66 ? null : addressFromWord(hex.slice(2));
-      }
-      if (!poolAddress || poolAddress === ZERO_ADDRESS) {
-        throw new Error(`No v2 pool for ${tokenIn} / ${tokenOut}`);
-      }
+      const poolAddress =
+        cached?.address ??
+        derivePoolAddress({ version: "v2", token0, token1, book });
 
-      // 2. Read reserves + compute.
+      // 2. Read reserves + compute. Empty / zero-reserve response
+      //    means no pool was ever initialized at the CREATE2 address.
       const hex = await rpc<string>(url, "eth_call", [
         ethCall(poolAddress, V2_PAIR_GET_RESERVES),
         "latest",
       ]);
+      if (!hex || hex.length < 2 + 64 * 3) {
+        throw new Error(`No v2 pool for ${tokenIn} / ${tokenOut}`);
+      }
       const { reserve0, reserve1 } = decodeV2Reserves(hex);
+      if (reserve0 === 0n || reserve1 === 0n) {
+        throw new Error(`No v2 pool for ${tokenIn} / ${tokenOut}`);
+      }
       const tokenInIsToken0 = tokenIn === token0;
       const reserveIn = tokenInIsToken0 ? reserve0 : reserve1;
       const reserveOut = tokenInIsToken0 ? reserve1 : reserve0;
@@ -588,23 +599,15 @@ export const getQuote = action({
         fee: best.fee,
       },
     );
-    let poolAddress: string;
-    if (cachedWinner) {
-      poolAddress = cachedWinner.address;
-    } else {
-      const call = buildFactoryCall({
+    const poolAddress: string =
+      cachedWinner?.address ??
+      derivePoolAddress({
         version: "v3",
         token0,
         token1,
         fee: best.fee,
         book,
       });
-      const hex = await rpc<string>(url, "eth_call", [
-        ethCall(call.to, call.data),
-        "latest",
-      ]);
-      poolAddress = addressFromWord(hex.slice(2));
-    }
 
     const amountIn = args.kind === "exactIn" ? amount : best.amount;
     const amountOut = args.kind === "exactIn" ? best.amount : amount;
@@ -647,6 +650,10 @@ export type QuoteOption = {
   poolAddress: string | null;
   amountIn: string | null;
   amountOut: string | null;
+  /** Gas units needed to execute this swap (decimal string). V3 reads
+   *  the figure from QuoterV2's response; V2 uses a hardcoded typical
+   *  (no on-chain quoter). null when the option isn't available. */
+  gasEstimateUnits: string | null;
   available: boolean;
   error?: string;
 };
@@ -695,55 +702,63 @@ export const getAllQuotes = action({
         internal.uniswap._cachedPool,
         { chainId: args.chainId, version: "v2", token0, token1 },
       );
-      let poolAddress = cached ? cached.address : null;
-      if (!poolAddress) {
-        const call = buildFactoryCall({
-          version: "v2",
-          token0,
-          token1,
-          book,
-        });
-        const hex = await rpc<string>(url, "eth_call", [
-          ethCall(call.to, call.data),
-          "latest",
-        ]);
-        poolAddress = !hex || hex.length < 66 ? null : addressFromWord(hex.slice(2));
-      }
-      if (!poolAddress || poolAddress === ZERO_ADDRESS) {
+      // CREATE2-derived address on cache miss. The reserves call
+      // below determines whether a pool actually exists there.
+      const poolAddress: string =
+        cached?.address ??
+        derivePoolAddress({ version: "v2", token0, token1, book });
+
+      const hex = await rpc<string>(url, "eth_call", [
+        ethCall(poolAddress, V2_PAIR_GET_RESERVES),
+        "latest",
+      ]);
+      // Empty response → no contract at this address → pool was
+      // never created.
+      if (!hex || hex.length < 2 + 64 * 3) {
         options.push({
           version: "v2",
           poolAddress: null,
           amountIn: null,
           amountOut: null,
+          gasEstimateUnits: null,
           available: false,
           error: "no pool",
         });
       } else {
-        const hex = await rpc<string>(url, "eth_call", [
-          ethCall(poolAddress, V2_PAIR_GET_RESERVES),
-          "latest",
-        ]);
         const { reserve0, reserve1 } = decodeV2Reserves(hex);
-        const tokenInIsToken0 = tokenIn === token0;
-        const reserveIn = tokenInIsToken0 ? reserve0 : reserve1;
-        const reserveOut = tokenInIsToken0 ? reserve1 : reserve0;
-
-        let amountIn: bigint;
-        let amountOut: bigint;
-        if (args.kind === "exactIn") {
-          amountIn = amount;
-          amountOut = v2GetAmountOut(amountIn, reserveIn, reserveOut);
+        if (reserve0 === 0n || reserve1 === 0n) {
+          options.push({
+            version: "v2",
+            poolAddress: null,
+            amountIn: null,
+            amountOut: null,
+            gasEstimateUnits: null,
+            available: false,
+            error: "no pool",
+          });
         } else {
-          amountOut = amount;
-          amountIn = v2GetAmountIn(amountOut, reserveIn, reserveOut);
+          const tokenInIsToken0 = tokenIn === token0;
+          const reserveIn = tokenInIsToken0 ? reserve0 : reserve1;
+          const reserveOut = tokenInIsToken0 ? reserve1 : reserve0;
+
+          let amountIn: bigint;
+          let amountOut: bigint;
+          if (args.kind === "exactIn") {
+            amountIn = amount;
+            amountOut = v2GetAmountOut(amountIn, reserveIn, reserveOut);
+          } else {
+            amountOut = amount;
+            amountIn = v2GetAmountIn(amountOut, reserveIn, reserveOut);
+          }
+          options.push({
+            version: "v2",
+            poolAddress,
+            amountIn: amountIn.toString(),
+            amountOut: amountOut.toString(),
+            gasEstimateUnits: V2_GAS_ESTIMATE_UNITS.toString(),
+            available: true,
+          });
         }
-        options.push({
-          version: "v2",
-          poolAddress,
-          amountIn: amountIn.toString(),
-          amountOut: amountOut.toString(),
-          available: true,
-        });
       }
     } catch (e) {
       options.push({
@@ -751,6 +766,7 @@ export const getAllQuotes = action({
         poolAddress: null,
         amountIn: null,
         amountOut: null,
+        gasEstimateUnits: null,
         available: false,
         error: e instanceof Error ? e.message : String(e),
       });
@@ -791,12 +807,17 @@ export const getAllQuotes = action({
           poolAddress: null,
           amountIn: null,
           amountOut: null,
+          gasEstimateUnits: null,
           available: false,
           error: resp.error?.message ?? "no result",
         });
         continue;
       }
-      let decoded: { amount: bigint; sqrtPriceX96After: bigint };
+      let decoded: {
+        amount: bigint;
+        sqrtPriceX96After: bigint;
+        gasEstimate: bigint;
+      };
       try {
         decoded = decodeQuoterResponse(resp.result);
       } catch (e) {
@@ -806,20 +827,24 @@ export const getAllQuotes = action({
           poolAddress: null,
           amountIn: null,
           amountOut: null,
+          gasEstimateUnits: null,
           available: false,
           error: e instanceof Error ? e.message : "decode failed",
         });
         continue;
       }
 
-      // Resolve pool address from cache; skip factory call for a
-      // lighter response — the UI mostly cares about the price, the
-      // address is informational.
+      // Resolve pool address: cache override if present, otherwise
+      // CREATE2-derive (no RPC). The quoter just succeeded so we
+      // know the pool exists with liquidity; the address is
+      // informational for the UI.
       const cached: { address: string } | null = await ctx.runQuery(
         internal.uniswap._cachedPool,
         { chainId: args.chainId, version: "v3", token0, token1, fee },
       );
-      const poolAddress = cached?.address ?? null;
+      const poolAddress =
+        cached?.address ??
+        derivePoolAddress({ version: "v3", token0, token1, fee, book });
 
       const amountIn =
         args.kind === "exactIn" ? amount.toString() : decoded.amount.toString();
@@ -831,6 +856,7 @@ export const getAllQuotes = action({
         poolAddress,
         amountIn,
         amountOut,
+        gasEstimateUnits: decoded.gasEstimate.toString(),
         available: true,
       });
     }
@@ -871,6 +897,7 @@ function buildQuoterCalldata(args: {
 function decodeQuoterResponse(hex: string): {
   amount: bigint;
   sqrtPriceX96After: bigint;
+  gasEstimate: bigint;
 } {
   if (!hex || !hex.startsWith("0x") || hex.length < 2 + 64 * 4) {
     throw new Error(`Bad quoter response: ${hex}`);
@@ -879,15 +906,18 @@ function decodeQuoterResponse(hex: string): {
   return {
     amount: BigInt("0x" + sliceWord(data, 0)),
     sqrtPriceX96After: BigInt("0x" + sliceWord(data, 1)),
+    // Slot 2 is initializedTicksCrossed (uint32) — not used.
+    gasEstimate: BigInt("0x" + sliceWord(data, 3)),
   };
 }
 
 // Re-exported for tests + reference; never imported by the client.
+// Factory selectors were dropped along with the factory.getPair /
+// factory.getPool RPC paths — pool addresses come from CREATE2 now,
+// see derivePoolAddress + convex/swap/abi.ts.
 export const SELECTORS = {
-  V2_FACTORY_GET_PAIR,
   V2_PAIR_GET_RESERVES,
   V2_PAIR_TOKEN0,
-  V3_FACTORY_GET_POOL,
   V3_POOL_LIQUIDITY,
   V3_QUOTER_EXACT_INPUT_SINGLE,
   V3_QUOTER_EXACT_OUTPUT_SINGLE,

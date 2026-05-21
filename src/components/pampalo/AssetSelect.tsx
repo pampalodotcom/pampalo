@@ -81,6 +81,17 @@ export function TokenSelectButton({
     <button
       type="button"
       onClick={onClick}
+      onPointerDown={(e) => {
+        // Stop the native pointerdown from bubbling to document, where
+        // the dropdown's click-outside listener lives. Without this,
+        // tapping the trigger while the dropdown is open does:
+        //   pointerdown → close (via outside-handler) → re-render with
+        //   pickerOpen=false → click fires with stale closure → toggle
+        //   sees `false`, calls onClick(true) → reopens.
+        // Stopping pointerdown propagation keeps the trigger's own
+        // onClick the single source of truth for toggling.
+        e.nativeEvent.stopPropagation();
+      }}
       aria-expanded={open}
       className={cn(
         "inline-flex shrink-0 items-center gap-1.5",
@@ -134,6 +145,169 @@ function chainNameForId(chainId: number): string {
   return "this network";
 }
 
+// ─── Balance tiles ──────────────────────────────────────────────────────
+// Quick-pick row used outside the dropdown — surfaces tokens the user
+// already holds as compact tiles so they can populate the pay side in
+// one tap. Hides itself entirely when the user has no balances, or
+// when nothing on this side passes the counterpart-chain lock.
+
+export function BalanceTiles({
+  pairs,
+  evmAddress,
+  selected,
+  counterpart,
+  onSelect,
+}: {
+  pairs: TokenPair[];
+  evmAddress: string;
+  /** Currently-selected pair on this side (rendered with a ring). */
+  selected: TokenPair | null;
+  /** Selection on the other side; restricts tiles to its chain and
+   *  hides the exact (symbol, chain) that's already over there. */
+  counterpart: TokenPair | null;
+  onSelect: (pair: TokenPair) => void;
+}) {
+  // Per-row balance lookups. Same shape as the dropdown — react-query
+  // dedupes by queryKey so we're not double-fetching.
+  const rows = pairs.map((pair) => {
+    const pub = usePublicBalance(
+      {
+        chainId: pair.chainId,
+        address: pair.address,
+        symbol: pair.symbol,
+        decimals: pair.decimals,
+      },
+      evmAddress,
+    );
+    const priv = usePrivateBalance(
+      {
+        chainId: pair.chainId,
+        address: pair.address,
+        symbol: pair.symbol,
+        decimals: pair.decimals,
+      },
+      evmAddress,
+    );
+    const total = (pub.data?.balanceWei ?? 0n) + (priv.data?.balanceWei ?? 0n);
+    return { pair, total };
+  });
+
+  const visible = rows.filter((r) => {
+    if (r.total <= 0n) return false;
+    if (counterpart && r.pair.chainId !== counterpart.chainId) return false;
+    if (counterpart && pairKey(r.pair) === pairKey(counterpart)) return false;
+    return true;
+  });
+
+  if (visible.length === 0) return null;
+  return (
+    // Right-aligned so the tiles sit under the trigger pill (which is
+    // also on the right of the SideBox). flex-wrap handles overflow on
+    // narrow modals; justify-end keeps wrapped rows right-aligned too.
+    <div className="flex flex-wrap justify-end gap-1.5">
+      {visible.map(({ pair }) => (
+        <TokenTile
+          key={pairKey(pair)}
+          pair={pair}
+          isSelected={selected !== null && pairKey(pair) === pairKey(selected)}
+          onClick={() => onSelect(pair)}
+        />
+      ))}
+    </div>
+  );
+}
+
+// Tile row that surfaces swap-catalog tokens as quick-pick options.
+// Bidirectional with the pay-side tiles: each side uses the OTHER
+// side's selection as a chain anchor, so picking one side first
+// constrains the other to the same chain.
+//
+//   - `counterpart` set → filter to its chain, exclude the exact
+//     (symbol, chain) already on that side.
+//   - `counterpart` null → show every pair in `pairs` so the row
+//     doesn't look empty when neither side has been chosen yet.
+//
+// Distinct from `BalanceTiles`:
+//   - no balance filter (you might be acquiring, not just moving what
+//     you already hold), and
+//   - no balance hooks → zero RPC cost regardless of how many pairs
+//     the caller passes in.
+export function ChainPeerTiles({
+  pairs,
+  selected,
+  counterpart,
+  onSelect,
+}: {
+  pairs: TokenPair[];
+  /** Currently-selected pair on this side (rendered with a ring). */
+  selected: TokenPair | null;
+  /** Selection on the OTHER side. Constrains tiles to its chain when
+   *  set; when null, no restriction (all `pairs` show). */
+  counterpart: TokenPair | null;
+  onSelect: (pair: TokenPair) => void;
+}) {
+  const visible = counterpart
+    ? pairs.filter(
+        (p) =>
+          p.chainId === counterpart.chainId &&
+          pairKey(p) !== pairKey(counterpart),
+      )
+    : pairs;
+  if (visible.length === 0) return null;
+  return (
+    <div className="flex flex-wrap justify-end gap-1.5">
+      {visible.map((pair) => (
+        <TokenTile
+          key={pairKey(pair)}
+          pair={pair}
+          isSelected={selected !== null && pairKey(pair) === pairKey(selected)}
+          onClick={() => onSelect(pair)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function TokenTile({
+  pair,
+  isSelected,
+  onClick,
+}: {
+  pair: TokenPair;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  const slug = networkSlugForChainId(pair.chainId);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={isSelected}
+      title={`${pair.symbol} on ${chainNameForId(pair.chainId)}`}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border pl-1 pr-2.5 py-0.5",
+        "text-[11px] font-semibold text-ink",
+        "transition-colors",
+        isSelected
+          ? "border-[var(--pub)] bg-[var(--pub-soft)]"
+          : "border-line bg-paper-lo hover:bg-paper",
+      )}
+    >
+      <span className="relative">
+        <AssetMark symbol={pair.symbol} size={18} />
+        {slug && (
+          <span
+            aria-hidden
+            className="absolute -bottom-0.5 -right-0.5 size-2 rounded-full border border-paper-lo"
+            style={{ background: chainDotColor(slug) }}
+          />
+        )}
+      </span>
+      <span>{pair.symbol}</span>
+    </button>
+  );
+}
+
 // ─── Dropdown ────────────────────────────────────────────────────────────
 
 type RowState = {
@@ -141,6 +315,11 @@ type RowState = {
   publicWei: bigint | null;
   privateWei: bigint | null;
   priceUsd: number | null;
+  /** true while the public OR private balance query is still pending
+   *  its first fetch. We need this to distinguish "we know they have
+   *  nothing" from "we haven't checked yet" — the cold-wallet
+   *  auto-fallback below only fires once we're sure. */
+  isLoading: boolean;
 };
 
 export function TokenDropdown({
@@ -152,6 +331,7 @@ export function TokenDropdown({
   evmAddress,
   prices,
   lockChainId,
+  defaultFilter = "all",
 }: {
   /** Full (token, chain) catalogue. Stable identity required. */
   pairs: TokenPair[];
@@ -160,7 +340,8 @@ export function TokenDropdown({
   /** Selection on the OTHER side; we hide it so the user can't pick
    *  the same (symbol, chain) twice. */
   counterpart: TokenPair | null;
-  onSelect: (pair: TokenPair) => void;
+  /** `null` is sent when the user clicks the header's Clear button. */
+  onSelect: (pair: TokenPair | null) => void;
   onClose: () => void;
   evmAddress: string;
   prices: PriceRow[] | undefined;
@@ -169,9 +350,12 @@ export function TokenDropdown({
    *  can't accidentally pick across chains when the other side is
    *  already locked in. */
   lockChainId?: number;
+  /** Initial filter pill. Pay-side defaults to "mine" so the user
+   *  lands on their balances; receive-side falls back to "all". */
+  defaultFilter?: Filter;
 }) {
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>(defaultFilter);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
@@ -230,11 +414,31 @@ export function TokenDropdown({
       publicWei: pub.data?.balanceWei ?? null,
       privateWei: priv.data?.balanceWei ?? null,
       priceUsd: usdPriceFor(pair, prices),
+      isLoading: pub.isLoading || priv.isLoading,
     };
   });
 
   const hasBalance = (r: RowState) =>
     (r.publicWei ?? 0n) + (r.privateWei ?? 0n) > 0n;
+
+  // Cold-wallet auto-fallback: when the picker is told to default to
+  // "mine" (pay side) but the user actually has zero balances of any
+  // tracked asset, switch the initial filter to "all" so they aren't
+  // greeted with an empty list. Only fires while still on the default
+  // — once the user manually clicks a filter pill we never override
+  // their choice. Gated on `allLoaded` so we don't flip to "all"
+  // mid-load before the balance fetches resolve.
+  const allLoaded = rows.every((r) => !r.isLoading);
+  const noBalancesConfirmed = allLoaded && !rows.some(hasBalance);
+  const autoSwitchedRef = useRef(false);
+  useEffect(() => {
+    if (autoSwitchedRef.current) return;
+    if (defaultFilter !== "mine" || filter !== "mine") return;
+    if (noBalancesConfirmed) {
+      autoSwitchedRef.current = true;
+      setFilter("all");
+    }
+  }, [defaultFilter, filter, noBalancesConfirmed]);
 
   const usdValue = (r: RowState) => {
     if (r.priceUsd === null) return 0;
@@ -324,14 +528,26 @@ export function TokenDropdown({
         <h3 className="font-serif text-[15px] font-bold text-ink">
           Select token
         </h3>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-full p-1 text-ink-mute hover:bg-paper-lo"
-          aria-label="Close"
-        >
-          <X className="size-3.5" />
-        </button>
+        <div className="flex items-center gap-1">
+          {selected && (
+            <button
+              type="button"
+              onClick={() => onSelect(null)}
+              className="rounded-md px-2 py-0.5 text-[11px] font-semibold text-ink-mute hover:bg-paper-lo hover:text-ink-soft"
+              title="Clear selection"
+            >
+              Clear
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1 text-ink-mute hover:bg-paper-lo"
+            aria-label="Close"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
       </div>
 
       <div className="px-3 pt-2">
@@ -382,9 +598,11 @@ export function TokenDropdown({
       <div className="mt-2 flex-1 overflow-y-auto px-2 pb-2">
         {isEmpty ? (
           <p className="px-2 py-8 text-center text-[12.5px] text-ink-mute">
-            {lockChainId !== undefined && q.length === 0 && filter === "all"
-              ? `No other assets to swap to on ${chainNameForId(lockChainId)}.`
-              : "Nothing found."}
+            {filter === "mine" && noBalancesConfirmed
+              ? "You have no token balances."
+              : lockChainId !== undefined && q.length === 0 && filter === "all"
+                ? `No other assets to swap to on ${chainNameForId(lockChainId)}.`
+                : "Nothing found."}
           </p>
         ) : (
           <>

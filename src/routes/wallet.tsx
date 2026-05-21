@@ -225,7 +225,11 @@ function Dashboard({ evmAddress }: { evmAddress: string }) {
       />
 
       <section className="rounded-3xl card-cream px-5 pt-4 pb-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
+        {/* Mobile (< sm): stacked — title + description take the full
+            width, network filter sits below as badges so it doesn't
+            squeeze the description into a narrow side column. Desktop
+            keeps the segmented tab control next to the title. */}
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-serif text-[20px] font-bold text-ink">
               Your assets
@@ -239,6 +243,14 @@ function Dashboard({ evmAddress }: { evmAddress: string }) {
             value={filter}
             options={filterOptions}
             onChange={setFilter}
+            className="hidden sm:inline-flex"
+          />
+          <NetworkFilterTabs
+            value={filter}
+            options={filterOptions}
+            onChange={setFilter}
+            appearance="badges"
+            className="sm:hidden"
           />
         </div>
 

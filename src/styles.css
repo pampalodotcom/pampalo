@@ -79,11 +79,17 @@
   --line: rgba(12, 34, 54, 0.1);
   --card-bg: rgba(255, 251, 240, 0.94);
   --card-bd: rgba(255, 255, 255, 0.7);
-  /* Two-layer shadow: a soft, far-reaching diffusion (low alpha, big blur)
-     plus a tighter contact shadow. Eliminates the visible "puddle" edge
-     a single-layer shadow leaves when there's empty space below the card. */
+  /* Three-layer shadow:
+     - extended diffusion: very long, very low alpha — carries the soft
+       blue-grey haze all the way down to the footer on tall desktop
+       layouts so there's no visible "haze ends here" band between the
+       last card and the footer. Removing this layer brings back the
+       cutoff the user reported.
+     - soft diffusion: the main "card sits on something" layer.
+     - contact shadow: tight, dark-ish, sells the card's depth. */
   --card-shadow:
-    0 48px 120px rgba(12, 34, 54, 0.1),
+    0 120px 320px rgba(12, 34, 54, 0.05),
+    0 48px 120px rgba(12, 34, 54, 0.08),
     0 12px 28px rgba(12, 34, 54, 0.08);
   --warn-bg: rgba(214, 138, 22, 0.1);
   --warn-bd: rgba(214, 138, 22, 0.28);
@@ -133,10 +139,11 @@ html[data-theme="dark"] {
   --line: rgba(241, 238, 227, 0.12);
   --card-bg: rgba(18, 36, 56, 0.78);
   --card-bd: rgba(241, 238, 227, 0.1);
-  /* See the light-mode comment above; dark mode runs the same two-layer
-     shadow with a higher base alpha for visibility against the dark paper. */
+  /* See the light-mode comment above; dark mode runs the same three-layer
+     shadow with higher base alphas for visibility against the dark paper. */
   --card-shadow:
-    0 48px 120px rgba(0, 0, 0, 0.32),
+    0 120px 320px rgba(0, 0, 0, 0.18),
+    0 48px 120px rgba(0, 0, 0, 0.26),
     0 12px 28px rgba(0, 0, 0, 0.22);
   --warn-bg: rgba(255, 206, 120, 0.1);
   --warn-bd: rgba(255, 206, 120, 0.28);

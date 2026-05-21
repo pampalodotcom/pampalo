@@ -34,19 +34,39 @@ function applyHtmlAttr(theme: Theme): void {
   document.documentElement.dataset.theme = theme;
 }
 
+// Sky-blue tint for the browser chrome (iOS Safari URL bar / Android
+// Chrome status bar). Values mirror BeachScene's PAL.{light,dark}.clear
+// so the chrome blends into the scene's sky band at the top of the
+// wallet shell. The unconditional <meta name="theme-color"> tag is
+// updated; any `media`-qualified variants (set in __root.tsx for the
+// pre-JS OS-pref fallback) are left alone — they're not used once we
+// have a live theme to follow.
+const SKY_COLOR: Record<Theme, string> = {
+  light: "#a3d9ff",
+  dark: "#0a1830",
+};
+function applyThemeColorMeta(theme: Theme): void {
+  if (typeof document === "undefined") return;
+  const meta = document.querySelector('meta[name="theme-color"]:not([media])');
+  meta?.setAttribute("content", SKY_COLOR[theme]);
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   // Default to "light" on SSR / first paint; sync from localStorage on mount.
   const [theme, setThemeState] = useState<Theme>("light");
 
   useEffect(() => {
     const persisted = readPersistedTheme();
+    const resolved = persisted ?? "light";
     if (persisted) setThemeState(persisted);
-    applyHtmlAttr(persisted ?? "light");
+    applyHtmlAttr(resolved);
+    applyThemeColorMeta(resolved);
   }, []);
 
   const setTheme = useCallback((t: Theme) => {
     setThemeState(t);
     applyHtmlAttr(t);
+    applyThemeColorMeta(t);
     try {
       window.localStorage.setItem(STORAGE_KEY, t);
     } catch {
