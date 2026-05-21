@@ -93,15 +93,52 @@ export type NewWalletDraft = {
 }
 
 export async function registerNewWallet(): Promise<NewWalletDraft> {
-  // 1. Generate wallet locally. The WebAuthn user record only carries a
-  //    static "Pampalo" label — the OS keychain disambiguates by
-  //    credential id / creation time.
+  return await registerWalletInternal({ source: 'fresh' })
+}
+
+// Recover account — the v1 path for a user who has a recovery phrase
+// but no enrolled passkey on this device. Mechanically the same as
+// `registerNewWallet`: register a new passkey, encrypt the mnemonic
+// under its PRF-derived KEK, insert a fresh wallet row. The only diffs
+// from registration are (a) the mnemonic is supplied by the user
+// rather than generated, and (b) the WebAuthn displayName is
+// `Pampalo (Recovered)` so the OS keychain can distinguish recovered
+// passkeys from originals in the picker. See ADR 0003.
+export async function recoverAccount(mnemonic: string): Promise<SignInOutcome> {
+  const draft = await registerWalletInternal({ source: 'recovered', mnemonic })
+  // Registration has a mnemonic-reveal interstitial, after which the
+  // caller invokes `finalizeNewWallet` to persist sessionToken +
+  // addresses to the keystore. Recovery has no such interstitial —
+  // the user already has the phrase by definition — so we inline the
+  // finalization here. Without this, refreshAddress() reads null from
+  // the keystore, auth state stays `anonymous`, and /wallet either
+  // bounces back to / or shows the "Unlock with passkey" prompt.
+  setSessionToken(draft.sessionToken)
+  setAddresses(draft.addresses)
+  return { addresses: draft.addresses, sessionToken: draft.sessionToken }
+}
+
+type RegisterSource =
+  | { source: 'fresh' }
+  | { source: 'recovered'; mnemonic: string }
+
+async function registerWalletInternal(
+  opts: RegisterSource,
+): Promise<NewWalletDraft> {
+  // 1. Resolve the mnemonic. Either freshly generated (registration)
+  //    or supplied by the user (recovery). Labelling diverges so the
+  //    OS keychain can disambiguate the two passkeys when both end up
+  //    in the same iCloud Keychain / Google Password Manager.
   const dekBytes = generateDekBytes()
-  const wallet = Wallet.createRandom()
+  const wallet: HDNodeWallet =
+    opts.source === 'recovered'
+      ? Wallet.fromPhrase(opts.mnemonic)
+      : Wallet.createRandom()
   const mnemonic = wallet.mnemonic?.phrase
   if (!mnemonic) throw new Error('ethers did not return a mnemonic')
   const addresses = deriveAddresses(wallet)
-  const passkeyDisplayName = 'Pampalo'
+  const passkeyDisplayName =
+    opts.source === 'recovered' ? 'Pampalo (Recovered)' : 'Pampalo'
 
   // 2. Server start (records the random userIdBytes + challenge).
   const start = await postJson<Record<string, never>, RegStartRes>(
