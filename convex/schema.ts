@@ -193,4 +193,25 @@ export default defineSchema({
     g: v.string(), // gasPriceWei
     t: v.number(),
   }).index("by_n_t", ["n", "t"]),
+
+  // Cached Uniswap pool addresses. Pool addresses are deterministic
+  // (CREATE2 from factory + tokens [+ fee for v3]) and can always be
+  // recomputed on-chain via factory.getPair / factory.getPool, but
+  // caching avoids one RPC per quote and gives us a place to mark a
+  // pool as disabled if it ever depegs / loses all liquidity.
+  //
+  // Token ordering is canonical: token0 < token1 (lowercased hex). The
+  // `getPool` action normalizes user input before lookup so callers
+  // don't need to sort.
+  uniswapPools: defineTable({
+    networkId: v.id("supportedNetworks"),
+    version: v.union(v.literal("v2"), v.literal("v3")),
+    token0: v.string(), // lowercased; token0 < token1
+    token1: v.string(), // lowercased
+    fee: v.optional(v.number()), // v3 only: 100/500/3000/10000
+    address: v.string(), // lowercased pool address
+    enabled: v.boolean(),
+  })
+    .index("by_pair", ["networkId", "version", "token0", "token1", "fee"])
+    .index("by_networkId", ["networkId"]),
 });
