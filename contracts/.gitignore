@@ -1,0 +1,12 @@
+node_modules
+dist
+
+# Hardhat
+cache
+artifacts
+typechain-types
+ignition/deployments
+
+# Env
+.env
+.env.local
