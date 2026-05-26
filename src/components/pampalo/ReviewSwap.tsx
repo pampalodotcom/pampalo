@@ -1,14 +1,7 @@
-import { useMemo, useState } from "react";
-import {
-  ArrowDown,
-  ArrowLeft,
-  Check,
-  ChevronDown,
-  ChevronRight,
-} from "lucide-react";
+import { useState } from "react";
+import { ArrowDown, ArrowLeft } from "lucide-react";
 import { weiToNumber } from "@/lib/balances";
 import { applySlippageMax, applySlippageMin } from "@/lib/uniswap-swap";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -18,6 +11,11 @@ import {
 } from "@/components/ui/tooltip";
 import { AssetMark } from "./AssetMark";
 import { type TokenPair } from "./AssetSelect";
+import {
+  GasTierPicker,
+  GAS_TIER_MULTIPLIER,
+  type GasTier,
+} from "./GasTierPicker";
 import {
   NetworkChip,
   networkSlugForChainId,
@@ -29,34 +27,10 @@ import {
 // and a gas-tier selector with live USD-cost previews per tier.
 // Receives all data via props — owns nothing except the selected
 // tier so the user can back out without losing other modal state.
+// Tier picker chrome (slower/standard/faster/stupid + multiplier math)
+// lives in GasTierPicker so the SendModal review pane can reuse it.
 
-export type GasTier = "slower" | "standard" | "faster" | "stupid";
-
-const TIERS: GasTier[] = ["slower", "standard", "faster", "stupid"];
-
-// Multipliers applied to the cached gasPriceWei. Self-explanatory at
-// the extremes; standard = exactly what the gas cron last observed,
-// "stupid fast" is the "I'd rather burn dollars than wait" tier.
-const TIER_MULTIPLIER: Record<GasTier, number> = {
-  slower: 0.85,
-  standard: 1.0,
-  faster: 1.4,
-  stupid: 2.2,
-};
-
-const TIER_LABEL: Record<GasTier, string> = {
-  slower: "Slower",
-  standard: "Standard",
-  faster: "Faster",
-  stupid: "Stupid fast",
-};
-
-const TIER_HINT: Record<GasTier, string> = {
-  slower: "may take a few blocks",
-  standard: "current network rate",
-  faster: "priority bump",
-  stupid: "next-block, no questions asked",
-};
+export type { GasTier } from "./GasTierPicker";
 
 type PriceRow = {
   shortId: string;
@@ -156,50 +130,23 @@ export function ReviewSwap({
         })()
       : null;
 
-  // ── Per-tier gas math ───────────────────────────────────────────────
-  // For each tier we precompute both the *price* (gwei/unit, shown
-  // for the wallet-curious) and the *cost* (USD, shown for everyone
-  // else). Gas data and USD price are independent: if the gas-price
-  // cron has data but ETH/USD hasn't loaded, we can still show gwei;
-  // if neither is loaded, the tier rows fall back to "—".
-  const gasByTier = useMemo<
-    Record<GasTier, { gweiPerUnit: number | null; usd: number | null }>
-  >(() => {
-    const empty = { gweiPerUnit: null, usd: null };
-    const out: Record<GasTier, { gweiPerUnit: number | null; usd: number | null }> = {
-      slower: { ...empty },
-      standard: { ...empty },
-      faster: { ...empty },
-      stupid: { ...empty },
-    };
-    if (!gas?.gasPriceWei) return out;
-    const basePriceWei = BigInt(gas.gasPriceWei);
-    if (basePriceWei <= 0n) return out;
-    const gasUnits = quote.gasEstimateUnits
-      ? BigInt(quote.gasEstimateUnits)
-      : null;
-
-    for (const t of TIERS) {
-      // multiplier × basePriceWei, with 2-dp scaling to keep bigint
-      // math exact for the table of multipliers above.
-      const scaledWei =
-        (basePriceWei * BigInt(Math.round(TIER_MULTIPLIER[t] * 100))) / 100n;
-      // Convert to gwei via Number. Even on the worst real chain
-      // (mainnet at 1000 gwei × 2.2) this stays well under 2^53.
-      out[t].gweiPerUnit = Number(scaledWei) / 1e9;
-      // USD only when we know how much gas the swap will burn AND
-      // the ETH/USD price is loaded.
-      if (gasUnits === null || ethUsdPrice === null) continue;
-      // Divide-first via gwei to keep Number in safe range under the
-      // 2.2× multiplier at congestion peak.
-      const totalGwei = (gasUnits * scaledWei) / 1_000_000_000n;
-      const ethCost = Number(totalGwei) / 1e9;
-      out[t].usd = ethCost * ethUsdPrice;
+  // Per-tier gas math lives in GasTierPicker. We still need the
+  // *selected*-tier USD for the cost-breakdown rows below, so recompute
+  // it locally — same formula as the picker but only for the active
+  // tier, to keep this component a thin caller.
+  const gasUnits = quote.gasEstimateUnits
+    ? BigInt(quote.gasEstimateUnits)
+    : null;
+  const selectedGasUsd = (() => {
+    if (!gas?.gasPriceWei || gasUnits === null || ethUsdPrice === null) {
+      return null;
     }
-    return out;
-  }, [quote.gasEstimateUnits, gas?.gasPriceWei, ethUsdPrice]);
-
-  const selectedGasUsd = gasByTier[tier].usd;
+    const base = BigInt(gas.gasPriceWei);
+    const scaled =
+      (base * BigInt(Math.round(GAS_TIER_MULTIPLIER[tier] * 100))) / 100n;
+    const totalGwei = (gasUnits * scaled) / 1_000_000_000n;
+    return (Number(totalGwei) / 1e9) * ethUsdPrice;
+  })();
   // Total cost falls back to just the pay-side USD when gas isn't
   // available yet — better than rendering "—" for the headline number.
   const totalCostUsd =
@@ -308,66 +255,15 @@ export function ReviewSwap({
       {/* Gas tier picker — collapsed by default. Header summarises
           the current pick + cost; expanding reveals the full
           slower/standard/faster/stupid menu. */}
-      <div className="rounded-xl border border-border bg-muted/30">
-        <button
-          type="button"
-          onClick={() => setFeeOpen((o) => !o)}
-          aria-expanded={feeOpen}
-          className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
-        >
-          <span className="flex items-center gap-1.5">
-            {feeOpen ? (
-              <ChevronDown className="size-3 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="size-3 text-muted-foreground" />
-            )}
-            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              Network fee
-            </span>
-            {!feeOpen && (
-              <span className="text-[12px] font-medium text-ink">
-                {TIER_LABEL[tier]}
-              </span>
-            )}
-          </span>
-          {!feeOpen && (
-            <span className="flex flex-col items-end leading-tight">
-              <span className="font-mono text-[12px] text-ink">
-                {selectedGasUsd !== null ? `≈ ${fmtUsd(selectedGasUsd)}` : "—"}
-              </span>
-              <span className="font-mono text-[10px] text-ink-mute">
-                {gasByTier[tier].gweiPerUnit !== null
-                  ? `${formatGwei(gasByTier[tier].gweiPerUnit)} gwei`
-                  : !gas?.gasPriceWei
-                    ? "estimating…"
-                    : "—"}
-              </span>
-            </span>
-          )}
-        </button>
-        {feeOpen && (
-          <div className="px-3 pb-3">
-            {!gas?.gasPriceWei && (
-              <p className="mb-1.5 text-right text-[10px] text-muted-foreground">
-                Estimating gas…
-              </p>
-            )}
-            <ul className="flex flex-col gap-1">
-              {TIERS.map((t) => (
-                <li key={t}>
-                  <TierRow
-                    tier={t}
-                    selected={t === tier}
-                    gweiPerUnit={gasByTier[t].gweiPerUnit}
-                    usd={gasByTier[t].usd}
-                    onSelect={() => setTier(t)}
-                  />
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
+      <GasTierPicker
+        tier={tier}
+        onTierChange={setTier}
+        open={feeOpen}
+        onToggle={() => setFeeOpen((o) => !o)}
+        gasPriceWei={gas?.gasPriceWei ?? null}
+        gasUnits={gasUnits}
+        ethUsdPrice={ethUsdPrice}
+      />
 
       {/* Cost breakdown — separates the asset value the user is
           actually spending from the network fee they'll pay on top.
@@ -482,59 +378,6 @@ function RouteBadge({ quote }: { quote: Quote }) {
   );
 }
 
-function TierRow({
-  tier,
-  selected,
-  gweiPerUnit,
-  usd,
-  onSelect,
-}: {
-  tier: GasTier;
-  selected: boolean;
-  gweiPerUnit: number | null;
-  usd: number | null;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      className={cn(
-        "flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm",
-        "transition-colors",
-        selected
-          ? "bg-primary/10 ring-1 ring-primary/20"
-          : "hover:bg-foreground/5",
-      )}
-    >
-      <span className="flex items-center gap-2">
-        <span
-          aria-hidden
-          className={cn(
-            "inline-flex size-4 items-center justify-center rounded-full border",
-            selected
-              ? "border-primary bg-primary text-primary-foreground"
-              : "border-border bg-background",
-          )}
-        >
-          {selected && <Check className="size-2.5" />}
-        </span>
-        <span className="font-medium text-ink">{TIER_LABEL[tier]}</span>
-        <span className="text-[10.5px] text-ink-mute">{TIER_HINT[tier]}</span>
-      </span>
-      <span className="flex flex-col items-end leading-tight">
-        <span className="font-mono text-xs text-ink">
-          {usd === null ? "—" : `≈ ${fmtUsd(usd)}`}
-        </span>
-        <span className="font-mono text-[10px] text-ink-mute">
-          {gweiPerUnit === null ? "—" : `${formatGwei(gweiPerUnit)} gwei`}
-        </span>
-      </span>
-    </button>
-  );
-}
-
 // ─── Helpers ────────────────────────────────────────────────────────────
 
 function chainDot(slug: NetworkSlug): string {
@@ -559,13 +402,4 @@ function formatAmount(n: number, decimals: number): string {
     maximumFractionDigits: maxDp,
     useGrouping: false,
   });
-}
-
-// Gwei display rounds adaptively: chains like Ethereum sit around tens
-// of gwei (whole-number is fine); Base / Arbitrum sit at fractions of
-// a gwei (need 2-3 dp to actually be informative).
-function formatGwei(gwei: number): string {
-  if (gwei >= 1) return gwei.toFixed(1);
-  if (gwei >= 0.01) return gwei.toFixed(3);
-  return gwei.toExponential(2);
 }

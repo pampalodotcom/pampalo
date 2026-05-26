@@ -11,7 +11,8 @@
     "dev:docs": "pnpm --filter @pampalo/docs-site dev --port 5173",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run && pnpm test:hardhat",
+    "test:hardhat": "pnpm --filter @pampalo/contracts test",
     "lint": "eslint",
     "format": "prettier --write . && eslint --fix",
     "check": "prettier --check ."

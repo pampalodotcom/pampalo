@@ -163,3 +163,150 @@ export const getTokenBalance = action({
     };
   },
 });
+
+// ─── Send-flow helpers ──────────────────────────────────────────────────
+// Three thin passthroughs that keep the Alchemy key server-side while the
+// client owns transaction construction + signing. Per ADR 0004 each one
+// is atomic and leaks no more than the existing balance proxies:
+//
+//   getNonce             — pending nonce for an address. Same leak as
+//                          `getNativeBalance` (chainId + address).
+//   sendRawTransaction   — broadcast a hex-encoded signed transaction.
+//                          The signed tx is necessarily public at the
+//                          moment it broadcasts.
+//   getTransactionStatus — receipt + current block, used by the post-send
+//                          tracking UI to compute confirmations without
+//                          paying the RPC cost from the client. txHash
+//                          is public on-chain.
+//
+// Gas pricing is intentionally NOT a server action — the client reads
+// the latestGas cron query and applies a tier multiplier. eth_estimateGas
+// is intentionally NOT exposed — the client uses fallback constants
+// (21k native / 65k ERC20 × 1.2). See ADR 0004.
+
+export type NonceResult = {
+  chainId: number;
+  address: string;
+  /** Decimal string; "pending" tag includes any in-flight tx the user
+   *  has already broadcast, so two sends in quick succession get
+   *  monotonically increasing nonces without a stuck-tx collision. */
+  nonce: string;
+  fetchedAt: number;
+};
+
+export const getNonce = action({
+  args: {
+    chainId: v.number(),
+    address: v.string(),
+  },
+  handler: async (ctx, args): Promise<NonceResult> => {
+    const network: NetworkForAction | null = await ctx.runQuery(
+      internal.rpcProxy._networkForAction,
+      { chainId: args.chainId },
+    );
+    if (!network) throw new Error(`Unknown or disabled chainId ${args.chainId}`);
+    const url = alchemyUrl(network.alchemySubdomain);
+    const addr = normalizeAddress(args.address);
+    const nonceHex: string = await rpc(url, "eth_getTransactionCount", [
+      addr,
+      "pending",
+    ]);
+    return {
+      chainId: args.chainId,
+      address: addr,
+      nonce: BigInt(nonceHex).toString(),
+      fetchedAt: Date.now(),
+    };
+  },
+});
+
+export type SendRawTransactionResult = {
+  chainId: number;
+  txHash: string;
+};
+
+export const sendRawTransaction = action({
+  args: {
+    chainId: v.number(),
+    /** 0x-prefixed RLP-encoded signed transaction. */
+    rawTx: v.string(),
+  },
+  handler: async (ctx, args): Promise<SendRawTransactionResult> => {
+    const network: NetworkForAction | null = await ctx.runQuery(
+      internal.rpcProxy._networkForAction,
+      { chainId: args.chainId },
+    );
+    if (!network) throw new Error(`Unknown or disabled chainId ${args.chainId}`);
+    if (!/^0x[0-9a-fA-F]+$/.test(args.rawTx)) {
+      throw new Error("rawTx must be 0x-prefixed hex");
+    }
+    const url = alchemyUrl(network.alchemySubdomain);
+    const txHash = await rpc<string>(url, "eth_sendRawTransaction", [
+      args.rawTx,
+    ]);
+    return { chainId: args.chainId, txHash };
+  },
+});
+
+export type TransactionStatusResult = {
+  chainId: number;
+  txHash: string;
+  /** null when the transaction isn't mined yet. */
+  blockNumber: number | null;
+  /** null = pending. true = success. false = reverted. */
+  status: boolean | null;
+  /** Latest block on the chain. Used for confirmation count math. */
+  currentBlock: number;
+  /** Best-effort confirmations count (currentBlock - blockNumber + 1).
+   *  0 while pending. */
+  confirmations: number;
+  fetchedAt: number;
+};
+
+export const getTransactionStatus = action({
+  args: {
+    chainId: v.number(),
+    txHash: v.string(),
+  },
+  handler: async (ctx, args): Promise<TransactionStatusResult> => {
+    const network: NetworkForAction | null = await ctx.runQuery(
+      internal.rpcProxy._networkForAction,
+      { chainId: args.chainId },
+    );
+    if (!network) throw new Error(`Unknown or disabled chainId ${args.chainId}`);
+    if (!/^0x[0-9a-fA-F]{64}$/.test(args.txHash)) {
+      throw new Error(`Invalid txHash: ${args.txHash}`);
+    }
+    const url = alchemyUrl(network.alchemySubdomain);
+
+    // Receipt + current head in parallel.
+    type Receipt = {
+      blockNumber: string;
+      status: string;
+    } | null;
+    const [receipt, blockHex] = await Promise.all([
+      rpc<Receipt>(url, "eth_getTransactionReceipt", [args.txHash]),
+      rpc<string>(url, "eth_blockNumber", []),
+    ]);
+
+    const currentBlock = Number(BigInt(blockHex));
+    let blockNumber: number | null = null;
+    let status: boolean | null = null;
+    let confirmations = 0;
+    if (receipt) {
+      blockNumber = Number(BigInt(receipt.blockNumber));
+      status = receipt.status === "0x1";
+      confirmations = Math.max(0, currentBlock - blockNumber + 1);
+    }
+
+    return {
+      chainId: args.chainId,
+      txHash: args.txHash,
+      blockNumber,
+      status,
+      currentBlock,
+      confirmations,
+      fetchedAt: Date.now(),
+    };
+  },
+});

@@ -455,6 +455,96 @@ export async function exportMnemonic(): Promise<string> {
   return mnemonic
 }
 
+// ─── Sign Transaction ────────────────────────────────────────────────────
+// Mirrors `exportMnemonic` but signs a raw transaction request instead of
+// returning the mnemonic. The plaintext mnemonic never leaves this
+// closure — caller only sees the hex-encoded signed tx string ready for
+// `eth_sendRawTransaction`. Triggers the same opportunistic prefs sync
+// because the DEK is briefly alive (CLIENT_SIDE_FIRST.md "tx-signing
+// piggyback").
+
+export type SignableTransactionRequest = {
+  chainId: number;
+  to: string;
+  value?: string | bigint; // wei
+  data?: string;
+  nonce?: number;
+  gasLimit?: string | bigint;
+  // Legacy and 1559 fee fields. Only one set will be applied; if
+  // maxFeePerGas/maxPriorityFeePerGas are provided ethers builds a type-2
+  // transaction, otherwise it falls back to a legacy one.
+  gasPrice?: string | bigint;
+  maxFeePerGas?: string | bigint;
+  maxPriorityFeePerGas?: string | bigint;
+  type?: number;
+}
+
+export async function signTransactionWithPasskey(
+  tx: SignableTransactionRequest,
+): Promise<string> {
+  let blob = getBlob()
+  if (!blob) {
+    const boot = await bootstrapFromCookie()
+    if (!boot) throw new Error('Session expired — please sign in again.')
+    blob = boot.blob
+  }
+  const cred = blob.credentials[0]
+
+  const localChallenge = bufferToBase64Url(
+    crypto.getRandomValues(new Uint8Array(32)),
+  )
+  const { prfOutput } = await runGetForPrf({
+    challenge: localChallenge,
+    rpId: getRpId() ?? rpIdHint(),
+    allowCredentialId: bufferToBase64Url(cred.credentialId),
+    allowCredentialTransports: cred.transports,
+  })
+  if (!prfOutput) throw new PrfNotSupportedError()
+
+  const kek = await deriveKekFromPrfOutput(prfOutput)
+  const dekBytes = await aesGcmDecrypt(kek, cred.wrappedDek, cred.wrappedDekIv)
+  const dekKey = await importDekBytes(new Uint8Array(dekBytes), false)
+  const mnemonicBuf = await aesGcmDecrypt(
+    dekKey,
+    blob.mnemonicCiphertext,
+    blob.mnemonicIv,
+  )
+  const mnemonic = bufferToUtf8(mnemonicBuf)
+
+  let wallet: HDNodeWallet | null = null
+  try {
+    wallet = Wallet.fromPhrase(mnemonic)
+    // ethers TransactionRequest accepts bigint OR decimal strings; passing
+    // through directly means callers don't have to care about the diff.
+    // 1559 vs legacy is mutually exclusive: if the caller supplied 1559
+    // fields we drop the legacy gasPrice (and vice versa) so ethers
+    // doesn't throw `received both gasPrice and maxFeePerGas`.
+    const useEip1559 = tx.maxFeePerGas != null
+    const signed = await wallet.signTransaction({
+      chainId: tx.chainId,
+      to: tx.to,
+      value: tx.value ?? 0n,
+      data: tx.data ?? '0x',
+      nonce: tx.nonce,
+      gasLimit: tx.gasLimit,
+      gasPrice: useEip1559 ? undefined : tx.gasPrice,
+      maxFeePerGas: useEip1559 ? tx.maxFeePerGas : undefined,
+      maxPriorityFeePerGas: useEip1559 ? tx.maxPriorityFeePerGas : undefined,
+      type: tx.type ?? (useEip1559 ? 2 : undefined),
+    })
+    // Trigger (b): tx-sign piggyback for encrypted-prefs sync.
+    const sessionToken = getSessionToken()
+    if (sessionToken) {
+      await syncOnTxSign(dekKey, sessionToken)
+    }
+    return signed
+  } finally {
+    new Uint8Array(dekBytes).fill(0)
+    new Uint8Array(mnemonicBuf).fill(0)
+    wallet = null
+  }
+}
+
 // ─── Sign out ────────────────────────────────────────────────────────────
 
 export async function signOut(): Promise<void> {

@@ -33,6 +33,33 @@ export type TokenRef = {
   symbol: string;
 };
 
+export type Nonce = {
+  chainId: number;
+  address: string;
+  /** Decimal string. "pending"-tagged so consecutive sends don't collide. */
+  nonce: string;
+  fetchedAt: number;
+};
+
+export type BroadcastResult = {
+  chainId: number;
+  txHash: string;
+};
+
+export type TxStatus = {
+  chainId: number;
+  txHash: string;
+  /** null while the receipt isn't available yet. */
+  blockNumber: number | null;
+  /** null = pending; true = success; false = reverted. */
+  status: boolean | null;
+  /** Latest block on the chain at fetch time. */
+  currentBlock: number;
+  /** currentBlock − blockNumber + 1; 0 while pending. */
+  confirmations: number;
+  fetchedAt: number;
+};
+
 export interface RpcClient {
   /** Source of this client: 'proxy' when calls go through the Convex
    *  action, 'direct' when calls go straight to the user's RPC URL. */
@@ -40,6 +67,12 @@ export interface RpcClient {
 
   getNativeBalance: (chainId: number, address: string) => Promise<NativeBalance>;
   getTokenBalance: (token: TokenRef, address: string) => Promise<TokenBalance>;
+
+  // Send-flow methods. Per ADR 0004 each is atomic and leaks no more
+  // than the balance methods above.
+  getNonce: (chainId: number, address: string) => Promise<Nonce>;
+  sendRawTransaction: (chainId: number, rawTx: string) => Promise<BroadcastResult>;
+  getTransactionStatus: (chainId: number, txHash: string) => Promise<TxStatus>;
 }
 
 // ─── Proxy client (current default) ──────────────────────────────────────
@@ -68,6 +101,24 @@ class ProxiedRpcClient implements RpcClient {
       tokenAddress: token.tokenAddress,
       decimals: token.decimals,
       symbol: token.symbol,
+    });
+  }
+
+  getNonce(chainId: number, address: string): Promise<Nonce> {
+    return this.convex.action(api.rpcProxy.getNonce, { chainId, address });
+  }
+
+  sendRawTransaction(chainId: number, rawTx: string): Promise<BroadcastResult> {
+    return this.convex.action(api.rpcProxy.sendRawTransaction, {
+      chainId,
+      rawTx,
+    });
+  }
+
+  getTransactionStatus(chainId: number, txHash: string): Promise<TxStatus> {
+    return this.convex.action(api.rpcProxy.getTransactionStatus, {
+      chainId,
+      txHash,
     });
   }
 }
@@ -160,6 +211,62 @@ export class DirectRpcClient implements RpcClient {
       balanceWei: BigInt(hex).toString(),
       decimals: token.decimals,
       symbol: token.symbol,
+      fetchedAt: Date.now(),
+    };
+  }
+
+  async getNonce(chainId: number, address: string): Promise<Nonce> {
+    const c = this.cfg(chainId);
+    const addr = normalizeAddress(address);
+    const nonceHex = await jsonRpc<string>(c.url, "eth_getTransactionCount", [
+      addr,
+      "pending",
+    ]);
+    return {
+      chainId,
+      address: addr,
+      nonce: BigInt(nonceHex).toString(),
+      fetchedAt: Date.now(),
+    };
+  }
+
+  async sendRawTransaction(chainId: number, rawTx: string): Promise<BroadcastResult> {
+    const c = this.cfg(chainId);
+    if (!/^0x[0-9a-fA-F]+$/.test(rawTx)) {
+      throw new Error("rawTx must be 0x-prefixed hex");
+    }
+    const txHash = await jsonRpc<string>(c.url, "eth_sendRawTransaction", [
+      rawTx,
+    ]);
+    return { chainId, txHash };
+  }
+
+  async getTransactionStatus(chainId: number, txHash: string): Promise<TxStatus> {
+    const c = this.cfg(chainId);
+    if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+      throw new Error(`Invalid txHash: ${txHash}`);
+    }
+    type Receipt = { blockNumber: string; status: string } | null;
+    const [receipt, blockHex] = await Promise.all([
+      jsonRpc<Receipt>(c.url, "eth_getTransactionReceipt", [txHash]),
+      jsonRpc<string>(c.url, "eth_blockNumber", []),
+    ]);
+    const currentBlock = Number(BigInt(blockHex));
+    let blockNumber: number | null = null;
+    let status: boolean | null = null;
+    let confirmations = 0;
+    if (receipt) {
+      blockNumber = Number(BigInt(receipt.blockNumber));
+      status = receipt.status === "0x1";
+      confirmations = Math.max(0, currentBlock - blockNumber + 1);
+    }
+    return {
+      chainId,
+      txHash,
+      blockNumber,
+      status,
+      currentBlock,
+      confirmations,
       fetchedAt: Date.now(),
     };
   }
