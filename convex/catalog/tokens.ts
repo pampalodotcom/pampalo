@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query } from "./_generated/server";
+import { query } from "../_generated/server";
 
 // Every supported token across all enabled networks. Used by the wallet
 // dashboard so a single subscription covers the full catalogue.

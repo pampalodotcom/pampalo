@@ -18,7 +18,7 @@ export function SyncIndicator() {
     auth.state.status === "authenticated" ? auth.state.sessionToken : null;
 
   const upstream = useQuery(
-    api.preferences.getPreferencesRevision,
+    api.preferences.mutations.getPreferencesRevision,
     sessionToken ? { sessionToken } : "skip",
   );
   const local = useLastSeenRevision();

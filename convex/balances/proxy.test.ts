@@ -1,10 +1,26 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { api, internal } from './_generated/api'
-import schema from './schema'
+import { api, internal } from '../_generated/api'
+import schema from '../schema'
 
-const modules = import.meta.glob('./**/*.ts')
+// Glob the entire convex/ tree so convex-test can resolve cross-module
+// internal references (e.g. internal.catalog.networks._networkForAction
+// from balances/proxy.ts).
+//
+// Wart: vite's `import.meta.glob` canonicalizes paths to the shortest
+// relative form, so sibling matches come back as `./proxy.ts` while
+// others come back as `../auth/ceremony.ts`. convex-test's single-prefix
+// lookup then fails to resolve our own module. Re-add the folder name
+// to sibling keys so every key shares the same `../<folder>/...` shape.
+// See ADR 0005.
+const FOLDER = 'balances'
+const raw = import.meta.glob('../**/*.ts')
+const modules = Object.fromEntries(
+  Object.entries(raw).map(([k, v]) =>
+    k.startsWith('./') ? [`../${FOLDER}/${k.slice(2)}`, v] : [k, v],
+  ),
+)
 
 // ─── Fixtures ────────────────────────────────────────────────────────────
 
@@ -30,7 +46,7 @@ const TOKEN_BALANCE_HEX =
 
 // Seed the minimum catalogue these tests need: Ethereum (1) + Base (8453).
 async function seedNetworks(t: ReturnType<typeof convexTest>) {
-  await t.mutation(internal.seed.addNetwork, {
+  await t.mutation(internal.catalog.seed.addNetwork, {
     chainId: 1,
     name: 'Ethereum',
     alchemySubdomain: 'eth-mainnet',
@@ -39,7 +55,7 @@ async function seedNetworks(t: ReturnType<typeof convexTest>) {
     isNative: true,
     enabled: true,
   })
-  await t.mutation(internal.seed.addNetwork, {
+  await t.mutation(internal.catalog.seed.addNetwork, {
     chainId: 8453,
     name: 'Base',
     alchemySubdomain: 'base-mainnet',
@@ -107,7 +123,7 @@ describe('rpcProxy.getNativeBalance', () => {
     const t = convexTest(schema, modules)
     await seedNetworks(t)
 
-    const result = await t.action(api.rpcProxy.getNativeBalance, {
+    const result = await t.action(api.balances.proxy.getNativeBalance, {
       chainId: 1,
       address: TEST_ADDRESS,
     })
@@ -135,7 +151,7 @@ describe('rpcProxy.getNativeBalance', () => {
     const t = convexTest(schema, modules)
     await seedNetworks(t)
 
-    const result = await t.action(api.rpcProxy.getNativeBalance, {
+    const result = await t.action(api.balances.proxy.getNativeBalance, {
       chainId: 8453,
       address: TEST_ADDRESS,
     })
@@ -152,7 +168,7 @@ describe('rpcProxy.getNativeBalance', () => {
     await seedNetworks(t)
 
     await expect(
-      t.action(api.rpcProxy.getNativeBalance, {
+      t.action(api.balances.proxy.getNativeBalance, {
         chainId: 999,
         address: TEST_ADDRESS,
       }),
@@ -164,7 +180,7 @@ describe('rpcProxy.getNativeBalance', () => {
     await seedNetworks(t)
 
     await expect(
-      t.action(api.rpcProxy.getNativeBalance, {
+      t.action(api.balances.proxy.getNativeBalance, {
         chainId: 1,
         address: 'not-an-address',
       }),
@@ -177,7 +193,7 @@ describe('rpcProxy.getTokenBalance', () => {
     const t = convexTest(schema, modules)
     await seedNetworks(t)
 
-    const result = await t.action(api.rpcProxy.getTokenBalance, {
+    const result = await t.action(api.balances.proxy.getTokenBalance, {
       chainId: 1,
       address: TEST_ADDRESS,
       tokenAddress: USDC_MAINNET,
@@ -216,7 +232,7 @@ describe('rpcProxy.getTokenBalance', () => {
     const t = convexTest(schema, modules)
     await seedNetworks(t)
 
-    const result = await t.action(api.rpcProxy.getTokenBalance, {
+    const result = await t.action(api.balances.proxy.getTokenBalance, {
       chainId: 1,
       address: TEST_ADDRESS,
       tokenAddress: AUDD_MAINNET,
@@ -238,7 +254,7 @@ describe('rpcProxy.getTokenBalance', () => {
     const t = convexTest(schema, modules)
     await seedNetworks(t)
 
-    const result = await t.action(api.rpcProxy.getTokenBalance, {
+    const result = await t.action(api.balances.proxy.getTokenBalance, {
       chainId: 8453,
       address: TEST_ADDRESS,
       tokenAddress: USDC_BASE,
@@ -257,7 +273,7 @@ describe('rpcProxy.getTokenBalance', () => {
     const t = convexTest(schema, modules)
     await seedNetworks(t)
 
-    const result = await t.action(api.rpcProxy.getTokenBalance, {
+    const result = await t.action(api.balances.proxy.getTokenBalance, {
       chainId: 8453,
       address: TEST_ADDRESS,
       tokenAddress: AUDD_BASE,
@@ -281,7 +297,7 @@ describe('rpcProxy.getTokenBalance', () => {
     await seedNetworks(t)
 
     await expect(
-      t.action(api.rpcProxy.getTokenBalance, {
+      t.action(api.balances.proxy.getTokenBalance, {
         chainId: 1,
         address: TEST_ADDRESS,
         tokenAddress: '0xnotatoken',

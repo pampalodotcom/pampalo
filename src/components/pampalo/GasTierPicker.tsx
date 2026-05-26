@@ -72,12 +72,12 @@ export function GasTierPicker({
    *  collapsed-by-default chrome ReviewSwap uses. */
   open?: boolean;
   onToggle?: () => void;
-  /** Cached gas-price from `api.gas.latestForChain`. null while loading. */
+  /** Cached gas-price from `api.prices.gas.latestForChain`. null while loading. */
   gasPriceWei: string | null | undefined;
   /** Gas-units estimate for the tx the user is about to sign. When
    *  unknown, USD column shows "—" but gwei still renders. */
   gasUnits: bigint | null;
-  /** USD per ETH from `api.prices.listLatest`. null while loading. */
+  /** USD per ETH from `api.prices.feeds.listLatest`. null while loading. */
   ethUsdPrice: number | null;
 }) {
   const figures = useMemo<Record<GasTier, TierFigures>>(() => {

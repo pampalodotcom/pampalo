@@ -1,7 +1,13 @@
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { internalAction } from "./_generated/server";
+import { internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
+import { internalAction } from "../_generated/server";
+import {
+  alchemyUrl,
+  rpcBatch,
+  type RpcRequest,
+  type RpcResponse,
+} from "../lib/alchemy";
 
 // Polls Chainlink price feeds + per-network gas prices and writes the
 // results back through internal mutations. Runs on cron (see crons.ts).
@@ -10,36 +16,6 @@ import { internalAction } from "./_generated/server";
 // encoding/decoding so this action runs in the default Convex runtime.
 
 const AGGREGATOR_LATEST_ROUND_DATA_SELECTOR = "0xfeaf968c";
-
-function alchemyUrl(subdomain: string): string {
-  const key = process.env.ALCHEMY_API_KEY;
-  if (!key) throw new Error("ALCHEMY_API_KEY not set in Convex environment.");
-  return `https://${subdomain}.g.alchemy.com/v2/${key}`;
-}
-
-type RpcRequest = { jsonrpc: "2.0"; id: number; method: string; params: unknown[] };
-type RpcResponse<T> = {
-  jsonrpc: "2.0";
-  id: number;
-  result?: T;
-  error?: { code: number; message: string };
-};
-
-async function rpcBatch<T>(url: string, calls: Array<RpcRequest>): Promise<Array<RpcResponse<T>>> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(calls),
-  });
-  if (!res.ok) {
-    throw new Error(`RPC HTTP ${res.status}: ${await res.text().catch(() => "")}`);
-  }
-  const body = (await res.json()) as Array<RpcResponse<T>>;
-  if (!Array.isArray(body)) {
-    throw new Error("RPC response was not an array");
-  }
-  return body;
-}
 
 // Decode the int256 / uint80 / uint256 tuple returned by latestRoundData().
 // The return ABI is (uint80, int256, uint256, uint256, uint80). Each slot
@@ -101,7 +77,7 @@ export const refreshPrices = internalAction({
       feedDecimals: number;
       chainId: number | null;
       alchemySubdomain: string | null;
-    }> = await ctx.runQuery(internal.prices._enabledFeeds, {});
+    }> = await ctx.runQuery(internal.prices.feeds._enabledFeeds, {});
 
     if (feeds.length === 0) return { fetched: 0, written: 0 };
 
@@ -166,14 +142,14 @@ export const refreshPrices = internalAction({
     if (!args.skipShadow) {
       await ctx.scheduler.runAfter(
         SHADOW_DELAY_MS,
-        internal.refresh.refreshPrices,
+        internal.prices.refresh.refreshPrices,
         { skipShadow: true },
       );
     }
 
     if (results.length === 0) return { fetched: feeds.length, written: 0 };
     const { appended, dedupedHistory }: { appended: number; dedupedHistory: number } =
-      await ctx.runMutation(internal.prices._writeRefresh, { results });
+      await ctx.runMutation(internal.prices.feeds._writeRefresh, { results });
     return {
       fetched: feeds.length,
       written: results.length,
@@ -192,7 +168,7 @@ export const refreshGas = internalAction({
       _id: Id<"supportedNetworks">;
       chainId: number;
       alchemySubdomain: string;
-    }> = await ctx.runQuery(internal.gas._enabledNetworks, {});
+    }> = await ctx.runQuery(internal.prices.gas._enabledNetworks, {});
 
     if (networks.length === 0) return { fetched: 0, written: 0 };
 
@@ -265,7 +241,7 @@ export const refreshGas = internalAction({
 
     if (results.length === 0) return { fetched: networks.length, written: 0 };
     const { appended, dedupedHistory }: { appended: number; dedupedHistory: number } =
-      await ctx.runMutation(internal.gas._writeRefresh, { results });
+      await ctx.runMutation(internal.prices.gas._writeRefresh, { results });
     return {
       fetched: networks.length,
       written: results.length,
@@ -276,17 +252,17 @@ export const refreshGas = internalAction({
 });
 
 // Optional one-shot helpers callable from the CLI for manual testing:
-//   pnpm convex run refresh:refreshPricesNow
-//   pnpm convex run refresh:refreshGasNow
+//   pnpm convex run prices/refresh:refreshPricesNow
+//   pnpm convex run prices/refresh:refreshGasNow
 export const refreshPricesNow = internalAction({
   args: {},
   handler: async (ctx): Promise<unknown> =>
     // skipShadow so manual runs don't spawn a self-scheduling chain.
-    await ctx.runAction(internal.refresh.refreshPrices, { skipShadow: true }),
+    await ctx.runAction(internal.prices.refresh.refreshPrices, { skipShadow: true }),
 });
 
 export const refreshGasNow = internalAction({
   args: {},
   handler: async (ctx): Promise<unknown> =>
-    await ctx.runAction(internal.refresh.refreshGas, {}),
+    await ctx.runAction(internal.prices.refresh.refreshGas, {}),
 });

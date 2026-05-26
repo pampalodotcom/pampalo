@@ -154,9 +154,9 @@ function usdPriceFor(token: Token, prices: PriceRow[] | undefined): number | nul
 }
 
 function Dashboard({ evmAddress }: { evmAddress: string }) {
-  const tokensRaw = useQuery(api.tokens.list, {});
-  const prices = useQuery(api.prices.listLatest, {});
-  const networksRaw = useQuery(api.networks.list, {});
+  const tokensRaw = useQuery(api.catalog.tokens.list, {});
+  const prices = useQuery(api.prices.feeds.listLatest, {});
+  const networksRaw = useQuery(api.catalog.networks.list, {});
   const [testnetsEnabled] = useTestnetsEnabled();
 
   const [filter, setFilter] = useState<NetworkFilter>("all");

@@ -127,8 +127,8 @@ export function SendModal({
   /** User's EVM address — needed for picker balances + nonce lookup. */
   evmAddress: string;
 }) {
-  const tokensRaw = useQuery(api.tokens.list, {});
-  const prices = useQuery(api.prices.listLatest, {});
+  const tokensRaw = useQuery(api.catalog.tokens.list, {});
+  const prices = useQuery(api.prices.feeds.listLatest, {});
 
   const pairs = useMemo<TokenPair[] | null>(() => {
     if (!tokensRaw) return null;
@@ -175,7 +175,7 @@ export function SendModal({
 
   const activeChainId = token?.chainId ?? null;
   const gas = useQuery(
-    api.gas.latestForChain,
+    api.prices.gas.latestForChain,
     activeChainId !== null ? { chainId: activeChainId } : "skip",
   );
 

@@ -8,20 +8,26 @@
  * @module
  */
 
-import type * as auth from "../auth.js";
-import type * as authNode from "../authNode.js";
+import type * as auth_ceremony from "../auth/ceremony.js";
+import type * as auth_node from "../auth/node.js";
+import type * as balances_proxy from "../balances/proxy.js";
+import type * as balances_types from "../balances/types.js";
+import type * as catalog_networks from "../catalog/networks.js";
+import type * as catalog_seed from "../catalog/seed.js";
+import type * as catalog_tokens from "../catalog/tokens.js";
 import type * as crons from "../crons.js";
-import type * as gas from "../gas.js";
 import type * as http from "../http.js";
-import type * as networks from "../networks.js";
-import type * as preferences from "../preferences.js";
-import type * as prices from "../prices.js";
-import type * as refresh from "../refresh.js";
-import type * as rpcProxy from "../rpcProxy.js";
-import type * as seed from "../seed.js";
+import type * as lib_alchemy from "../lib/alchemy.js";
+import type * as lib_evm from "../lib/evm.js";
+import type * as preferences_mutations from "../preferences/mutations.js";
+import type * as prices_feeds from "../prices/feeds.js";
+import type * as prices_gas from "../prices/gas.js";
+import type * as prices_refresh from "../prices/refresh.js";
+import type * as send_proxy from "../send/proxy.js";
+import type * as send_types from "../send/types.js";
 import type * as swap_abi from "../swap/abi.js";
-import type * as tokens from "../tokens.js";
-import type * as uniswap from "../uniswap.js";
+import type * as swap_actions from "../swap/actions.js";
+import type * as swap_types from "../swap/types.js";
 
 import type {
   ApiFromModules,
@@ -30,20 +36,26 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  auth: typeof auth;
-  authNode: typeof authNode;
+  "auth/ceremony": typeof auth_ceremony;
+  "auth/node": typeof auth_node;
+  "balances/proxy": typeof balances_proxy;
+  "balances/types": typeof balances_types;
+  "catalog/networks": typeof catalog_networks;
+  "catalog/seed": typeof catalog_seed;
+  "catalog/tokens": typeof catalog_tokens;
   crons: typeof crons;
-  gas: typeof gas;
   http: typeof http;
-  networks: typeof networks;
-  preferences: typeof preferences;
-  prices: typeof prices;
-  refresh: typeof refresh;
-  rpcProxy: typeof rpcProxy;
-  seed: typeof seed;
+  "lib/alchemy": typeof lib_alchemy;
+  "lib/evm": typeof lib_evm;
+  "preferences/mutations": typeof preferences_mutations;
+  "prices/feeds": typeof prices_feeds;
+  "prices/gas": typeof prices_gas;
+  "prices/refresh": typeof prices_refresh;
+  "send/proxy": typeof send_proxy;
+  "send/types": typeof send_types;
   "swap/abi": typeof swap_abi;
-  tokens: typeof tokens;
-  uniswap: typeof uniswap;
+  "swap/actions": typeof swap_actions;
+  "swap/types": typeof swap_types;
 }>;
 
 /**

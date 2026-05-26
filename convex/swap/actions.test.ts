@@ -1,9 +1,9 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { api, internal } from "./_generated/api";
-import schema from "./schema";
-import { ETH_ADDRESS } from "./seed";
+import { api, internal } from "../_generated/api";
+import schema from "../schema";
+import { ETH_ADDRESS } from "../catalog/seed";
 import {
   computeV2PairAddress,
   computeV3PoolAddress,
@@ -13,9 +13,17 @@ import {
   tokenInFromQuoterCalldata,
   tokenOutFromQuoterCalldata,
   uintResult,
-} from "./swap/abi";
+} from "./abi";
 
-const modules = import.meta.glob("./**/*.ts");
+// See balances/proxy.test.ts and ADR 0005 for the rationale behind the
+// sibling-prefix normalization.
+const FOLDER = "swap";
+const raw = import.meta.glob("../**/*.ts");
+const modules = Object.fromEntries(
+  Object.entries(raw).map(([k, v]) =>
+    k.startsWith("./") ? [`../${FOLDER}/${k.slice(2)}`, v] : [k, v],
+  ),
+);
 
 // ─── Fixtures ───────────────────────────────────────────────────────────
 // All addresses lowercased to match the canonical form.
@@ -103,7 +111,7 @@ afterEach(() => {
 // ─── Seeders ────────────────────────────────────────────────────────────
 
 async function seedMainnet(t: ReturnType<typeof convexTest>) {
-  await t.mutation(internal.seed.addNetwork, {
+  await t.mutation(internal.catalog.seed.addNetwork, {
     chainId: 1,
     name: "Ethereum",
     alchemySubdomain: "eth-mainnet",
@@ -115,7 +123,7 @@ async function seedMainnet(t: ReturnType<typeof convexTest>) {
 }
 
 async function seedV2UsdcWeth(t: ReturnType<typeof convexTest>) {
-  await t.mutation(internal.seed.addUniswapPool, {
+  await t.mutation(internal.catalog.seed.addUniswapPool, {
     chainId: 1,
     version: "v2",
     token0: USDC,
@@ -130,7 +138,7 @@ async function seedV3UsdcWethAll(t: ReturnType<typeof convexTest>) {
     [3000, USDC_WETH_V3_3000],
     [10000, USDC_WETH_V3_10000],
   ] as const) {
-    await t.mutation(internal.seed.addUniswapPool, {
+    await t.mutation(internal.catalog.seed.addUniswapPool, {
       chainId: 1,
       version: "v3",
       token0: USDC,
@@ -154,7 +162,7 @@ describe("uniswap.getPool", () => {
       reservesResult(r0, r1),
     );
 
-    const result = await t.action(api.uniswap.getPool, {
+    const result = await t.action(api.swap.actions.getPool, {
       chainId: 1,
       version: "v2",
       tokenA: USDC,
@@ -188,7 +196,7 @@ describe("uniswap.getPool", () => {
       reservesResult(0n, 0n),
     );
 
-    const result = await t.action(api.uniswap.getPool, {
+    const result = await t.action(api.swap.actions.getPool, {
       chainId: 1,
       version: "v2",
       tokenA: AUDD,
@@ -216,7 +224,7 @@ describe("uniswap.getPool", () => {
     });
     setHandler(expectedPair, SELECTORS.V2_PAIR_GET_RESERVES, () => "0x");
 
-    const result = await t.action(api.uniswap.getPool, {
+    const result = await t.action(api.swap.actions.getPool, {
       chainId: 1,
       version: "v2",
       tokenA: AUDD,
@@ -239,7 +247,7 @@ describe("uniswap.getPool", () => {
       uintResult(liq),
     );
 
-    const result = await t.action(api.uniswap.getPool, {
+    const result = await t.action(api.swap.actions.getPool, {
       chainId: 1,
       version: "v3",
       tokenA: USDC,
@@ -261,7 +269,7 @@ describe("uniswap.getPool", () => {
       reservesResult(1n, 1n),
     );
 
-    const result = await t.action(api.uniswap.getPool, {
+    const result = await t.action(api.swap.actions.getPool, {
       chainId: 1,
       version: "v2",
       tokenA: ETH_ADDRESS,
@@ -277,7 +285,7 @@ describe("uniswap.getPool", () => {
     const t = convexTest(schema, modules);
     await seedMainnet(t);
     await expect(
-      t.action(api.uniswap.getPool, {
+      t.action(api.swap.actions.getPool, {
         chainId: 1,
         version: "v3",
         tokenA: USDC,
@@ -290,7 +298,7 @@ describe("uniswap.getPool", () => {
     const t = convexTest(schema, modules);
     await seedMainnet(t);
     await expect(
-      t.action(api.uniswap.getPool, {
+      t.action(api.swap.actions.getPool, {
         chainId: 999,
         version: "v2",
         tokenA: USDC,
@@ -314,7 +322,7 @@ describe("uniswap.getQuote (v2)", () => {
     );
 
     const amountIn = 1000n * 10n ** 6n; // 1000 USDC
-    const result = await t.action(api.uniswap.getQuote, {
+    const result = await t.action(api.swap.actions.getQuote, {
       chainId: 1,
       version: "v2",
       tokenIn: USDC,
@@ -348,7 +356,7 @@ describe("uniswap.getQuote (v2)", () => {
     );
 
     const amountOut = 1n * 10n ** 17n; // 0.1 WETH
-    const result = await t.action(api.uniswap.getQuote, {
+    const result = await t.action(api.swap.actions.getQuote, {
       chainId: 1,
       version: "v2",
       tokenIn: USDC,
@@ -377,7 +385,7 @@ describe("uniswap.getQuote (v2)", () => {
 
     // tokenIn = WETH = token1; tokenOut = USDC = token0.
     const amountIn = 1n * 10n ** 18n;
-    const result = await t.action(api.uniswap.getQuote, {
+    const result = await t.action(api.swap.actions.getQuote, {
       chainId: 1,
       version: "v2",
       tokenIn: WETH,
@@ -416,7 +424,7 @@ describe("uniswap.getQuote (v3)", () => {
     });
 
     const amountIn = 2000n * 10n ** 6n;
-    const result = await t.action(api.uniswap.getQuote, {
+    const result = await t.action(api.swap.actions.getQuote, {
       chainId: 1,
       version: "v3",
       tokenIn: USDC,
@@ -452,7 +460,7 @@ describe("uniswap.getQuote (v3)", () => {
     });
 
     const desiredOut = 1n * 10n ** 18n; // 1 ETH
-    const result = await t.action(api.uniswap.getQuote, {
+    const result = await t.action(api.swap.actions.getQuote, {
       chainId: 1,
       version: "v3",
       tokenIn: USDC,
@@ -478,7 +486,7 @@ describe("uniswap.getQuote (v3)", () => {
       return quoterResult(1000n * 10n ** 6n);
     });
 
-    const result = await t.action(api.uniswap.getQuote, {
+    const result = await t.action(api.swap.actions.getQuote, {
       chainId: 1,
       version: "v3",
       tokenIn: ETH_ADDRESS,
@@ -495,7 +503,7 @@ describe("uniswap.getQuote (v3)", () => {
     await seedMainnet(t);
     await seedV2UsdcWeth(t);
     await expect(
-      t.action(api.uniswap.getQuote, {
+      t.action(api.swap.actions.getQuote, {
         chainId: 1,
         version: "v2",
         tokenIn: USDC,
@@ -511,7 +519,7 @@ describe("uniswap.getQuote (v3)", () => {
     await seedMainnet(t);
     await seedV2UsdcWeth(t);
     await expect(
-      t.action(api.uniswap.getQuote, {
+      t.action(api.swap.actions.getQuote, {
         chainId: 1,
         version: "v2",
         tokenIn: USDC,
@@ -549,7 +557,7 @@ describe("uniswap.getAllQuotes", () => {
     });
 
     const amountIn = 2000n * 10n ** 6n;
-    const result = await t.action(api.uniswap.getAllQuotes, {
+    const result = await t.action(api.swap.actions.getAllQuotes, {
       chainId: 1,
       tokenIn: USDC,
       tokenOut: WETH,
@@ -589,7 +597,7 @@ describe("uniswap.getAllQuotes", () => {
     setHandler(auddWethV2, SELECTORS.V2_PAIR_GET_RESERVES, () => "0x");
     setHandler(V3_QUOTER, SELECTORS.V3_QUOTER_EXACT_INPUT_SINGLE, () => "0x");
 
-    const result = await t.action(api.uniswap.getAllQuotes, {
+    const result = await t.action(api.swap.actions.getAllQuotes, {
       chainId: 1,
       tokenIn: AUDD,
       tokenOut: WETH,

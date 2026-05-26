@@ -1,11 +1,11 @@
 import { v } from "convex/values";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import {
   internalMutation,
   internalQuery,
   query,
-} from "./_generated/server";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
+} from "../_generated/server";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 
 const PENDING_TTL_MS = 5 * 60 * 1000; // 5 min
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days

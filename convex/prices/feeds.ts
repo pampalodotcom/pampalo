@@ -4,7 +4,7 @@ import {
   internalMutation,
   internalQuery,
   query,
-} from "./_generated/server";
+} from "../_generated/server";
 
 // ─── Public reads ────────────────────────────────────────────────────────
 

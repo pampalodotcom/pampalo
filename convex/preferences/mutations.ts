@@ -9,8 +9,8 @@
 // client shouldn't be able to bypass it).
 
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
-import { sessionByTokenOrNull } from "./auth";
+import { mutation, query } from "../_generated/server";
+import { sessionByTokenOrNull } from "../auth/ceremony";
 
 // Same cap as documented in CLIENT_SIDE_FIRST.md. Generous enough that
 // realistic prefs never approach it; tight enough that a programming error

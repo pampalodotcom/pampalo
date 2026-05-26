@@ -101,8 +101,8 @@ export function SwapModal({
   /** User's EVM address — needed by the asset picker to show live balances. */
   evmAddress: string;
 }) {
-  const tokensRaw = useQuery(api.tokens.list, {});
-  const prices = useQuery(api.prices.listLatest, {});
+  const tokensRaw = useQuery(api.catalog.tokens.list, {});
+  const prices = useQuery(api.prices.feeds.listLatest, {});
 
   // Flatten the catalogue into (token, chain) pairs the picker can
   // render. Memoised so the picker's per-row balance hooks see the
@@ -150,11 +150,11 @@ export function SwapModal({
   // below the Available Quotes list.
   const activeChainId = tokenIn?.chainId ?? tokenOut?.chainId ?? null;
   const gas = useQuery(
-    api.gas.latestForChain,
+    api.prices.gas.latestForChain,
     activeChainId !== null ? { chainId: activeChainId } : "skip",
   );
 
-  const getAllQuotes = useAction(api.uniswap.getAllQuotes);
+  const getAllQuotes = useAction(api.swap.actions.getAllQuotes);
   const [quotes, setQuotes] = useState<QuoteOption[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

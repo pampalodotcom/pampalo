@@ -6,8 +6,8 @@ import {
   verifyRegistrationResponse,
 } from "@simplewebauthn/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
-import { internalAction } from "./_generated/server";
+import { internal } from "../_generated/api";
+import { internalAction } from "../_generated/server";
 
 // All inputs from the client are base64url-encoded strings as produced by
 // @simplewebauthn/browser; @simplewebauthn/server consumes these directly.
@@ -26,7 +26,7 @@ export const verifyAndCompleteRegistration = internalAction({
     }),
   },
   handler: async (ctx, args) => {
-    const pending = await ctx.runQuery(internal.auth._findPendingRegistration, {
+    const pending = await ctx.runQuery(internal.auth.ceremony._findPendingRegistration, {
       userIdBytes: args.userIdBytes,
     });
     if (!pending) throw new Error("registration ceremony expired or unknown");
@@ -52,7 +52,7 @@ export const verifyAndCompleteRegistration = internalAction({
     const transports = reg.credential.transports ?? [];
 
     const completion: { sessionToken: string; expiresAt: number } =
-      await ctx.runMutation(internal.auth._completeRegistration, {
+      await ctx.runMutation(internal.auth.ceremony._completeRegistration, {
         pendingId: pending._id,
         userIdBytes: args.userIdBytes,
         credential: {
@@ -87,7 +87,7 @@ export const verifyAndCompleteAuthentication = internalAction({
     }
     const credentialIdBytes = base64UrlToBuffer(rawIdB64Url);
     const credential = await ctx.runQuery(
-      internal.auth._findCredentialByCredentialId,
+      internal.auth.ceremony._findCredentialByCredentialId,
       { credentialId: credentialIdBytes },
     );
     if (!credential) throw new Error("unknown credential");
@@ -95,7 +95,7 @@ export const verifyAndCompleteAuthentication = internalAction({
     // Reconstruct the challenge from the assertion's clientDataJSON.
     const challengeBytes = extractChallengeFromAssertion(args.assertion);
     const pending = await ctx.runQuery(
-      internal.auth._findPendingAuthenticationByChallenge,
+      internal.auth.ceremony._findPendingAuthenticationByChallenge,
       { challenge: challengeBytes },
     );
     if (!pending) throw new Error("auth ceremony expired or unknown");
@@ -123,7 +123,7 @@ export const verifyAndCompleteAuthentication = internalAction({
     }
 
     const completion: { sessionToken: string; expiresAt: number } =
-      await ctx.runMutation(internal.auth._completeAuthentication, {
+      await ctx.runMutation(internal.auth.ceremony._completeAuthentication, {
         credentialDocId: credential._id,
         pendingAuthDocId: pending._id,
         newCounter: verification.authenticationInfo.newCounter,

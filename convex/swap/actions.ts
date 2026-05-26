@@ -1,14 +1,20 @@
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
-import { action, internalQuery } from "./_generated/server";
-import { ETH_ADDRESS } from "./seed";
+import { internal } from "../_generated/api";
+import { action, internalQuery } from "../_generated/server";
+import { ETH_ADDRESS } from "../catalog/seed";
 import {
   computeV2PairAddress,
   computeV3PoolAddress,
   encodeAddress,
   encodeUint,
   sliceWord,
-} from "./swap/abi";
+} from "./abi";
+import type {
+  AllQuotesResult,
+  PoolResult,
+  QuoteOption,
+  QuoteResult,
+} from "./types";
 
 // Public Uniswap reads: pool lookup + quotes. Matches the conventions
 // in refresh.ts / rpcProxy.ts:
@@ -265,17 +271,6 @@ function derivePoolAddress(args: {
 
 // ─── getPool ─────────────────────────────────────────────────────────────
 
-export type PoolResult = {
-  chainId: number;
-  version: "v2" | "v3";
-  token0: string;
-  token1: string;
-  fee?: number;
-  address: string | null; // null if no pool exists
-  liquidity: string | null; // v2: token0 reserve; v3: liquidity(). null if no pool.
-  available: boolean; // address != 0x0 AND liquidity > 0
-};
-
 export const getPool = action({
   args: {
     chainId: v.number(),
@@ -286,7 +281,7 @@ export const getPool = action({
   },
   handler: async (ctx, args): Promise<PoolResult> => {
     const network: { alchemySubdomain: string } | null = await ctx.runQuery(
-      internal.uniswap._networkForUniswap,
+      internal.swap.actions._networkForUniswap,
       { chainId: args.chainId },
     );
     if (!network) {
@@ -305,7 +300,7 @@ export const getPool = action({
 
     // 1. DB cache.
     const cached: { address: string } | null = await ctx.runQuery(
-      internal.uniswap._cachedPool,
+      internal.swap.actions._cachedPool,
       {
         chainId: args.chainId,
         version: args.version,
@@ -429,22 +424,6 @@ function v2GetAmountIn(amountOut: bigint, reserveIn: bigint, reserveOut: bigint)
 
 // ─── getQuote ────────────────────────────────────────────────────────────
 
-export type QuoteKind = "exactIn" | "exactOut";
-
-export type QuoteResult = {
-  chainId: number;
-  version: "v2" | "v3";
-  kind: QuoteKind;
-  tokenIn: string; // resolved (WETH if ETH sentinel was passed)
-  tokenOut: string;
-  amountIn: string; // wei
-  amountOut: string; // wei
-  poolAddress: string;
-  fee?: number; // v3
-  sqrtPriceX96After?: string; // v3 only
-  fetchedAt: number;
-};
-
 export const getQuote = action({
   args: {
     chainId: v.number(),
@@ -458,7 +437,7 @@ export const getQuote = action({
   },
   handler: async (ctx, args): Promise<QuoteResult> => {
     const network: { alchemySubdomain: string } | null = await ctx.runQuery(
-      internal.uniswap._networkForUniswap,
+      internal.swap.actions._networkForUniswap,
       { chainId: args.chainId },
     );
     if (!network) {
@@ -478,7 +457,7 @@ export const getQuote = action({
     if (args.version === "v2") {
       // 1. Resolve pool — cache, then factory.
       const cached: { address: string } | null = await ctx.runQuery(
-        internal.uniswap._cachedPool,
+        internal.swap.actions._cachedPool,
         {
           chainId: args.chainId,
           version: "v2",
@@ -590,7 +569,7 @@ export const getQuote = action({
 
     // Resolve pool address — DB cache for the winning tier, factory fallback.
     const cachedWinner: { address: string } | null = await ctx.runQuery(
-      internal.uniswap._cachedPool,
+      internal.swap.actions._cachedPool,
       {
         chainId: args.chainId,
         version: "v3",
@@ -644,30 +623,6 @@ function parseAmount(s: string): bigint {
 // string so the UI can render them dimmed rather than throwing the
 // whole call away.
 
-export type QuoteOption = {
-  version: "v2" | "v3";
-  fee?: number; // v3 only
-  poolAddress: string | null;
-  amountIn: string | null;
-  amountOut: string | null;
-  /** Gas units needed to execute this swap (decimal string). V3 reads
-   *  the figure from QuoterV2's response; V2 uses a hardcoded typical
-   *  (no on-chain quoter). null when the option isn't available. */
-  gasEstimateUnits: string | null;
-  available: boolean;
-  error?: string;
-};
-
-export type AllQuotesResult = {
-  chainId: number;
-  kind: QuoteKind;
-  tokenIn: string; // resolved (WETH if ETH sentinel was passed)
-  tokenOut: string;
-  amount: string; // the input the user specified
-  options: QuoteOption[];
-  fetchedAt: number;
-};
-
 export const getAllQuotes = action({
   args: {
     chainId: v.number(),
@@ -678,7 +633,7 @@ export const getAllQuotes = action({
   },
   handler: async (ctx, args): Promise<AllQuotesResult> => {
     const network: { alchemySubdomain: string } | null = await ctx.runQuery(
-      internal.uniswap._networkForUniswap,
+      internal.swap.actions._networkForUniswap,
       { chainId: args.chainId },
     );
     if (!network) {
@@ -699,7 +654,7 @@ export const getAllQuotes = action({
     // ── V2 ──
     try {
       const cached: { address: string } | null = await ctx.runQuery(
-        internal.uniswap._cachedPool,
+        internal.swap.actions._cachedPool,
         { chainId: args.chainId, version: "v2", token0, token1 },
       );
       // CREATE2-derived address on cache miss. The reserves call
@@ -839,7 +794,7 @@ export const getAllQuotes = action({
       // know the pool exists with liquidity; the address is
       // informational for the UI.
       const cached: { address: string } | null = await ctx.runQuery(
-        internal.uniswap._cachedPool,
+        internal.swap.actions._cachedPool,
         { chainId: args.chainId, version: "v3", token0, token1, fee },
       );
       const poolAddress =

@@ -14,7 +14,7 @@ export type AssetRef = {
 };
 
 // ─── Public balances (real) ──────────────────────────────────────────────
-// Hits `api.rpcProxy.getNativeBalance` / `getTokenBalance` via the
+// Hits `api.balances.proxy.getNativeBalance` / `getTokenBalance` via the
 // `useRpcClient()` indirection — the server holds the Alchemy API key.
 
 type PublicBalance = {

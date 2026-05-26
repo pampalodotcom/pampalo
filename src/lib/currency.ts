@@ -45,7 +45,7 @@ export function useDisplayCurrency(): [DisplayCurrency, (c: DisplayCurrency) => 
 }
 
 // ─── Price math ──────────────────────────────────────────────────────────
-// Inputs come from `api.prices.listLatest` — raw int answers + feedDecimals.
+// Inputs come from `api.prices.feeds.listLatest` — raw int answers + feedDecimals.
 // All conversions are done as numbers (JS double) because display precision
 // at ~$thousands of ETH is well within Float64 safety. Wei → ETH uses
 // BigInt division first to keep integer math accurate.

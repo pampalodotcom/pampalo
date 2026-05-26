@@ -88,14 +88,14 @@ class ProxiedRpcClient implements RpcClient {
   constructor(private readonly convex: ConvexClient) {}
 
   getNativeBalance(chainId: number, address: string): Promise<NativeBalance> {
-    return this.convex.action(api.rpcProxy.getNativeBalance, {
+    return this.convex.action(api.balances.proxy.getNativeBalance, {
       chainId,
       address,
     });
   }
 
   getTokenBalance(token: TokenRef, address: string): Promise<TokenBalance> {
-    return this.convex.action(api.rpcProxy.getTokenBalance, {
+    return this.convex.action(api.balances.proxy.getTokenBalance, {
       chainId: token.chainId,
       address,
       tokenAddress: token.tokenAddress,
@@ -105,18 +105,18 @@ class ProxiedRpcClient implements RpcClient {
   }
 
   getNonce(chainId: number, address: string): Promise<Nonce> {
-    return this.convex.action(api.rpcProxy.getNonce, { chainId, address });
+    return this.convex.action(api.send.proxy.getNonce, { chainId, address });
   }
 
   sendRawTransaction(chainId: number, rawTx: string): Promise<BroadcastResult> {
-    return this.convex.action(api.rpcProxy.sendRawTransaction, {
+    return this.convex.action(api.send.proxy.sendRawTransaction, {
       chainId,
       rawTx,
     });
   }
 
   getTransactionStatus(chainId: number, txHash: string): Promise<TxStatus> {
-    return this.convex.action(api.rpcProxy.getTransactionStatus, {
+    return this.convex.action(api.send.proxy.getTransactionStatus, {
       chainId,
       txHash,
     });
