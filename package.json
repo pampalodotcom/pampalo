@@ -10,6 +10,7 @@
     "dev:web": "vite dev --port 3000",
     "dev:docs": "pnpm --filter @pampalo/docs-site dev --port 5173",
     "build": "vite build",
+    "build:verifiers": "bash scripts/build-verifiers.sh",
     "preview": "vite preview",
     "test": "vitest run && pnpm test:hardhat",
     "test:hardhat": "pnpm --filter @pampalo/contracts test",

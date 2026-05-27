@@ -1,0 +1,10 @@
+[package]
+name = "transfer_external"
+type = "bin"
+authors = [""]
+
+# Only external dep is the Poseidon2 hash crate; everything else
+# (leaf reconstruction, merkle root, nullifier, balance check) is
+# inlined in src/main.nr so this circuit is self-contained.
+[dependencies]
+poseidon = { tag = "v0.3.0", git = "https://github.com/noir-lang/poseidon" }
