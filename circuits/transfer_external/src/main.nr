@@ -1,9 +1,12 @@
 use poseidon::poseidon2;
+use pum_lib::{compute_merkle_root, compute_nullifier, reconstruct_leaf, HEIGHT};
 
-// Self-contained transfer-with-withdrawal circuit. Drop-in analogue
-// of `transfer` plus an external-withdrawal branch per output slot.
-// No `pum_lib`, no `std::collections::map::HashMap`; only external
-// dep is the Poseidon2 hash crate.
+// Transfer-with-withdrawal circuit. Drop-in analogue of `transfer`
+// plus an external-withdrawal branch per output slot. Hash helpers
+// and HEIGHT are imported from `pum_lib` to keep all circuits in
+// lockstep on tree layout and nullifier domain separator; the
+// balance-conservation logic stays local to this file (same as
+// `transfer`).
 //
 // Per output slot:
 //   - If `external_address == 0`, it's an internal note: its
@@ -21,7 +24,6 @@ use poseidon::poseidon2;
 // `assert_balanced` is identical to the `transfer` circuit.
 
 global NOTE_COUNT: u32 = 3;
-global HEIGHT: u32 = 12;
 
 struct InputNote {
     asset_id: Field,
@@ -169,43 +171,3 @@ fn assert_balanced(
     }
 }
 
-// ----- Inlined hash helpers (formerly in pum_lib) --------------------
-
-fn reconstruct_leaf(
-    asset_id: Field,
-    asset_amount: Field,
-    owner: Field,
-    secret: Field,
-) -> Field {
-    poseidon2::Poseidon2::hash([asset_id, asset_amount, owner, secret], 4)
-}
-
-fn compute_nullifier(
-    leaf_index: Field,
-    owner: Field,
-    secret: Field,
-    asset_id: Field,
-    asset_amount: Field,
-) -> Field {
-    poseidon2::Poseidon2::hash(
-        [leaf_index, owner, secret, asset_id, asset_amount],
-        5,
-    )
-}
-
-fn compute_merkle_root(
-    leaf: Field,
-    path: [Field; HEIGHT - 1],
-    path_indices: [Field; HEIGHT - 1],
-) -> Field {
-    let mut current = leaf;
-    for i in 0..HEIGHT - 1 {
-        let (hash_left, hash_right) = if path_indices[i] == 0 {
-            (path[i], current)
-        } else {
-            (current, path[i])
-        };
-        current = poseidon2::Poseidon2::hash([hash_left, hash_right], 2);
-    }
-    current
-}

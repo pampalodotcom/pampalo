@@ -1,9 +1,13 @@
 use poseidon::poseidon2;
+use pum_lib::{compute_merkle_root, compute_nullifier, reconstruct_leaf, HEIGHT};
 
-// Self-contained internal-transfer circuit. No `pum_lib`, no
-// `std::collections::map::HashMap`. The only external dependency is
-// the Poseidon2 hash crate. Everything else (leaf reconstruction,
-// merkle root, nullifier, balance check) is inlined below.
+// Internal-transfer circuit. Hash helpers (leaf reconstruction,
+// merkle root, nullifier) and the tree height live in `pum_lib` so
+// every circuit -- deposit, transfer, transfer_external, withdraw --
+// stays in lockstep on tree layout and nullifier domain separator.
+// The balance-conservation logic stays local to this file: only
+// transfer and transfer_external need it, and it pairs tightly with
+// the per-note verification in main().
 //
 // Protocol shape: each transfer spends up to NOTE_COUNT existing
 // notes (input_notes) and creates up to NOTE_COUNT new notes
@@ -21,7 +25,6 @@ use poseidon::poseidon2;
 //      the input and output sides.
 
 global NOTE_COUNT: u32 = 3;
-global HEIGHT: u32 = 12;
 
 struct InputNote {
     asset_id: Field,
@@ -149,47 +152,6 @@ fn assert_balanced(
             assert(in_sum == out_sum);
         }
     }
-}
-
-// ----- Inlined hash helpers (formerly in pum_lib) --------------------
-
-fn reconstruct_leaf(
-    asset_id: Field,
-    asset_amount: Field,
-    owner: Field,
-    secret: Field,
-) -> Field {
-    poseidon2::Poseidon2::hash([asset_id, asset_amount, owner, secret], 4)
-}
-
-fn compute_nullifier(
-    leaf_index: Field,
-    owner: Field,
-    secret: Field,
-    asset_id: Field,
-    asset_amount: Field,
-) -> Field {
-    poseidon2::Poseidon2::hash(
-        [leaf_index, owner, secret, asset_id, asset_amount],
-        5,
-    )
-}
-
-fn compute_merkle_root(
-    leaf: Field,
-    path: [Field; HEIGHT - 1],
-    path_indices: [Field; HEIGHT - 1],
-) -> Field {
-    let mut current = leaf;
-    for i in 0..HEIGHT - 1 {
-        let (hash_left, hash_right) = if path_indices[i] == 0 {
-            (path[i], current)
-        } else {
-            (current, path[i])
-        };
-        current = poseidon2::Poseidon2::hash([hash_left, hash_right], 2);
-    }
-    current
 }
 
 // ----- Test fixture --------------------------------------------------
