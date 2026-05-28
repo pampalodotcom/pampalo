@@ -1,5 +1,6 @@
 import { ArrowLeftRight, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DepositButton } from "./deposit/DepositButton";
 import { SplitBar } from "./SplitBar";
 import { SunIcon, MoonIcon } from "./SunMoonIcons";
 import { SyncIndicator } from "./SyncIndicator";
@@ -17,6 +18,8 @@ type Props = {
    *  Swap so the visual order matches the verb order most users expect:
    *  Send → Swap. */
   onSend?: () => void;
+  /** Optional: render the prominent Deposit CTA below the split bar. */
+  onDeposit?: () => void;
 };
 
 function formatUsd(n: number, dp = 2): string {
@@ -41,6 +44,7 @@ export function BalanceCard({
   className,
   onSwap,
   onSend,
+  onDeposit,
 }: Props) {
   const isLoading =
     loading || totalUsd === null || publicUsd === null || privateUsd === null;
@@ -140,6 +144,8 @@ export function BalanceCard({
       </div>
 
       <SplitBar publicValue={pub} privateValue={priv} height={8} />
+
+      {onDeposit && <DepositButton onClick={onDeposit} className="mt-1" />}
     </section>
   );
 }

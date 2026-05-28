@@ -1,4 +1,4 @@
-import { ArrowRight, Shield } from "lucide-react";
+import { Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { weiToNumber } from "@/lib/balances";
 import { AssetMark } from "./AssetMark";
@@ -28,10 +28,8 @@ export type AssetRowData = {
 
 /**
  * "shield" → move public → private. "unshield" → private → public.
- * "pick" → open the move panel and let the user choose (used by the
- * single Move button on the desktop layout).
  */
-export type MoveIntent = "shield" | "unshield" | "pick";
+export type MoveIntent = "shield" | "unshield";
 
 function fmtToken(n: number, dp: number): string {
   return n.toLocaleString("en-US", {
@@ -228,7 +226,7 @@ export function AssetRow({
         )}
       </div>
 
-      {/* ─── Desktop: horizontal row with single Move button ─── */}
+      {/* ─── Desktop: horizontal row ─── */}
       <div className="hidden sm:flex sm:items-center sm:gap-5">
         <AssetMark symbol={asset.symbol} size={42} />
 
@@ -253,24 +251,6 @@ export function AssetRow({
             )}
           </div>
         </div>
-
-        {onMove && (
-          <button
-            type="button"
-            onClick={() => onMove("pick")}
-            className={cn(
-              "inline-flex items-center gap-1.5 shrink-0",
-              "h-[34px] px-3.5 rounded-full",
-              "border border-line bg-paper-lo text-ink",
-              "text-[12.5px] font-semibold",
-              "transition-colors hover:bg-[var(--pub-soft)] hover:text-[var(--pub)]",
-              "focus-visible:outline-none focus-visible:ring-3",
-              "focus-visible:ring-[var(--pub-soft-2)]",
-            )}
-          >
-            Move <ArrowRight className="size-3.5" />
-          </button>
-        )}
       </div>
     </div>
   );

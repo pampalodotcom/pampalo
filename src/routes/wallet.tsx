@@ -7,6 +7,7 @@ import { api } from "../../convex/_generated/api";
 import { AccountAvatar } from "@/components/pampalo/AccountAvatar";
 import { AssetRow, type AssetRowData } from "@/components/pampalo/AssetRow";
 import { BalanceCard } from "@/components/pampalo/BalanceCard";
+import { DepositSheet } from "@/components/pampalo/deposit/DepositSheet";
 import { BeachScene } from "@/components/pampalo/BeachScene";
 import { BrandLockup } from "@/components/pampalo/BrandLockup";
 import {
@@ -320,6 +321,7 @@ function BalanceCardConnected({
 }) {
   const [swapOpen, setSwapOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [depositOpen, setDepositOpen] = useState(false);
   if (!tokens) {
     return (
       <BalanceCard
@@ -349,6 +351,7 @@ function BalanceCardConnected({
         evmAddress={evmAddress}
         onSwap={() => setSwapOpen(true)}
         onSend={() => setSendOpen(true)}
+        onDeposit={() => setDepositOpen(true)}
       />
       <SwapModal
         open={swapOpen}
@@ -360,6 +363,11 @@ function BalanceCardConnected({
         onOpenChange={setSendOpen}
         evmAddress={evmAddress}
       />
+      <DepositSheet
+        open={depositOpen}
+        onOpenChange={setDepositOpen}
+        address={evmAddress}
+      />
     </>
   );
 }
@@ -370,12 +378,14 @@ function BalanceCardWithBalances({
   evmAddress,
   onSwap,
   onSend,
+  onDeposit,
 }: {
   tokens: Token[];
   prices: PriceRow[] | null;
   evmAddress: string;
   onSwap?: () => void;
   onSend?: () => void;
+  onDeposit?: () => void;
 }) {
   // Aggregate by symbol — one balance lookup per (chainId, address).
   // React allows this because the token list is stable across renders;
@@ -448,6 +458,7 @@ function BalanceCardWithBalances({
       privateUsd={stillLoading ? null : privateUsd}
       onSwap={onSwap}
       onSend={onSend}
+      onDeposit={onDeposit}
     />
   );
 }

@@ -46,3 +46,36 @@ Any time that a deposit, transaction or withdrawal transaction inserts a note - 
 
 - Noir (for ZK proof generation and proving)
 - OpenZeppelin (AccessControlEnumerable)
+
+### Deployment
+
+A single script handles the full chain: token mocks, Pampalo + verifiers,
+the Poseidon2 huff hasher, `setPoseidon`, MockOracles, and
+`addSupportedAsset` for the launch set. It's safely re-runnable on the
+same chain — already-deployed contracts are skipped via Ignition's
+deployment records, and post-deploy steps (Poseidon2 setup, asset
+registration) check for the already-done state.
+
+Configure `contracts/.env` (or repo-root `.env.local`):
+
+```
+MNEMONIC=...               # BIP-39 phrase; accounts[0] must be funded
+ALCHEMY_API_KEY=...        # used by every network entry
+ETHERSCAN_API_KEY=...      # for Etherscan v2 / Basescan verification
+```
+
+Deploy:
+
+```
+pnpm --filter @pampalo/contracts deploy:sepolia
+pnpm --filter @pampalo/contracts deploy:base-sepolia
+```
+
+Outputs land in `contracts/deployments/<chainId>.json`. After the
+script finishes, you can mint test tokens to stress-test accounts
+(`usdc.mint(addr, amount)`) and bump per-address caps via
+`pampalo.setAddressMonthlyCap(addr, usdCents)`.
+
+Mainnet deploys are not yet wired up — swap `MockOracle` for
+`ChainlinkOracle` (already implemented) before pointing the script at
+Base or Mainnet. See `CONTRACTS_PLAN.md` §4.3 for the launch sets.

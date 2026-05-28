@@ -43,6 +43,8 @@ function alchemyUrl(subdomain: string): string {
     : ''
 }
 
+console.log(alchemyUrl('base-sepolia'))
+
 // HD-wallet accounts shape — Hardhat derives signers from the
 // mnemonic on demand. Empty list when MNEMONIC is unset so the
 // config still loads (read-only access via any network is fine).
@@ -94,6 +96,12 @@ export default defineConfig({
       url: alchemyUrl('eth-sepolia'),
       accounts: hdAccounts,
       chainId: 11155111,
+    },
+    baseSepolia: {
+      type: 'http',
+      url: alchemyUrl('base-sepolia'),
+      accounts: hdAccounts,
+      chainId: 84532,
     },
   },
 
