@@ -108,7 +108,7 @@ the source layout).
 | `CommbankDotEthModule` (`ignition/modules/CommbankDotEth.ts`) | `PampaloPrivateMoneyV1Module` (`ignition/modules/PampaloPrivateMoneyV1.ts`) |
 | `DEPOSIT_ROLE` | Keep — also add `VIGILANT_CITIZEN_ROLE`, `FINANCE_MANAGER_ROLE` (see §4). |
 | `import "@openzeppelin/contracts/access/AccessControl.sol"` | `AccessControlEnumerable.sol` per `contracts/README.md` §Libraries. Gives us `getRoleMember`/`getRoleMemberCount` for the "show all vigilant citizens" view. |
-| ASCII banner comment in source `.sol` | Remove. Replace with a one-line `@title` + `@notice` NatSpec. |
+| ASCII banner comment in source `.sol` | Remove. Replace with a one-line `@title` + `@notice` NatSpec, and a Pampalo ASCII beach scene |
 
 Storage variable names (`depositVerifier`, `transferVerifier`,
 `withdrawVerifier`, `transferExternalVerifier`, `nullifierUsed`,
