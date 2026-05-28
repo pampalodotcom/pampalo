@@ -1,0 +1,35 @@
+use pum_lib;
+
+fn main(
+    hash: pub Field,
+    asset_id: pub Field,
+    asset_amount: pub Field,
+    owner: Field,
+    secret: Field,
+) {
+    let reconstructed_leaf = pum_lib::calculate_leaf(asset_id, asset_amount, owner, secret);
+
+    assert(reconstructed_leaf == hash);
+}
+
+#[test]
+fn test_main() {
+    let hash = 15877031116292595040191017675338240539290338653409019794000313907399651592164;
+    let asset_id = 1096978651789611665652906124278561787240579697095;
+    let amount = 5;
+    let owner = 10812186542955647827474372651967207045861174805371180171801345448553285386806;
+    let secret = 2389312107716289199307843900794656424062350252250388738019021107824217896920;
+
+    main(hash, asset_id, amount, owner, secret);
+}
+
+#[test]
+fn test_main2() {
+    let hash = 21217282240525232011794137784606906545231270109799091189910048425821337480855;
+    let asset_id = 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9;
+    let amount = 5000000;
+    let owner = 10812186542955647827474372651967207045861174805371180171801345448553285386806;
+    let secret = 2389312107716289199307843900794656424062350252250388738019021107824217896920;
+
+    main(hash, asset_id, amount, owner, secret);
+}

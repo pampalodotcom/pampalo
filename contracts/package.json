@@ -1,0 +1,27 @@
+{
+  "name": "@pampalo/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "test:gas": "hardhat test --gas-stats",
+    "deploy:sepolia": "hardhat ignition deploy ignition/modules/HelloWorld.ts --network sepolia",
+    "deploy:mainnet": "hardhat ignition deploy ignition/modules/HelloWorld.ts --network mainnet"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ignition": "^3.0.5",
+    "@nomicfoundation/hardhat-ignition-ethers": "^3.0.5",
+    "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.1",
+    "@types/chai": "^4.3.20",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.10.2",
+    "chai": "^5.3.3",
+    "dotenv": "^16.5.0",
+    "ethers": "^6.16.0",
+    "hardhat": "^3.1.2",
+    "mocha": "^11.7.5",
+    "typescript": "~5.8.3"
+  }
+}

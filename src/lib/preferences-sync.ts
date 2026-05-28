@@ -50,7 +50,7 @@ export async function pullDuringCeremony(
   const convex = getConvexClient();
   if (!convex) return;
 
-  const row = await convex.query(api.preferences.getEncryptedPreferences, {
+  const row = await convex.query(api.preferences.mutations.getEncryptedPreferences, {
     sessionToken,
   });
   if (!row) return;
@@ -76,7 +76,7 @@ export async function pushDuringCeremony(
   const prefs = getCurrentPrefsSnapshot();
   const { ciphertext, iv } = await encryptJsonWithDek(dek, prefs);
   const { revision } = await convex.mutation(
-    api.preferences.writeEncryptedPreferences,
+    api.preferences.mutations.writeEncryptedPreferences,
     { sessionToken, ciphertext, iv },
   );
   markPushed(revision);
@@ -154,7 +154,7 @@ export async function syncExplicit(): Promise<void> {
     // local view (LWW with current-device winning).
     const convex = getConvexClient();
     if (convex) {
-      const row = await convex.query(api.preferences.getEncryptedPreferences, {
+      const row = await convex.query(api.preferences.mutations.getEncryptedPreferences, {
         sessionToken,
       });
       if (row) {

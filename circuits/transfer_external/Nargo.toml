@@ -1,0 +1,12 @@
+[package]
+name = "transfer_external"
+type = "bin"
+authors = [""]
+
+# pum_lib carries the cross-circuit hash helpers (compute_merkle_root,
+# compute_nullifier, reconstruct_leaf) and the HEIGHT constant. Keeping
+# them shared means deposit / transfer / transfer_external / withdraw
+# can't drift on tree layout or nullifier domain separator.
+[dependencies]
+poseidon = { tag = "v0.3.0", git = "https://github.com/noir-lang/poseidon" }
+pum_lib = { path = "../pum_lib" }

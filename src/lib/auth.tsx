@@ -128,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const sessionToken =
     state.status === "authenticated" ? state.sessionToken : null;
   const blobQuery = useQuery(
-    api.auth.getEncryptedBlob,
+    api.auth.ceremony.getEncryptedBlob,
     sessionToken ? { sessionToken } : "skip",
   );
   useEffect(() => {

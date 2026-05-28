@@ -1,4 +1,4 @@
-import { ArrowLeftRight } from "lucide-react";
+import { ArrowLeftRight, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SplitBar } from "./SplitBar";
 import { SunIcon, MoonIcon } from "./SunMoonIcons";
@@ -13,6 +13,10 @@ type Props = {
   className?: string;
   /** Optional: render a top-right Swap button that calls this on click. */
   onSwap?: () => void;
+  /** Optional: render a top-right Send button. Rendered to the left of
+   *  Swap so the visual order matches the verb order most users expect:
+   *  Send → Swap. */
+  onSend?: () => void;
 };
 
 function formatUsd(n: number, dp = 2): string {
@@ -36,6 +40,7 @@ export function BalanceCard({
   loading,
   className,
   onSwap,
+  onSend,
 }: Props) {
   const isLoading =
     loading || totalUsd === null || publicUsd === null || privateUsd === null;
@@ -56,6 +61,24 @@ export function BalanceCard({
       <div className="flex items-center justify-between gap-3">
         <p className="eyebrow">Total Balance</p>
         <div className="flex items-center gap-2">
+          {onSend && (
+            <button
+              type="button"
+              onClick={onSend}
+              className={cn(
+                "inline-flex items-center gap-1.5",
+                "h-[28px] px-3 rounded-full",
+                "border border-line bg-paper-lo text-ink",
+                "text-[12px] font-semibold",
+                "transition-colors hover:bg-[var(--pub-soft)] hover:text-[var(--pub)]",
+                "focus-visible:outline-none focus-visible:ring-3",
+                "focus-visible:ring-[var(--pub-soft-2)]",
+              )}
+            >
+              <Send className="size-3.5" />
+              Send
+            </button>
+          )}
           {onSwap && (
             <button
               type="button"

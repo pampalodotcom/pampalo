@@ -10,8 +10,10 @@
     "dev:web": "vite dev --port 3000",
     "dev:docs": "pnpm --filter @pampalo/docs-site dev --port 5173",
     "build": "vite build",
+    "build:verifiers": "bash scripts/build-verifiers.sh",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run && pnpm test:hardhat",
+    "test:hardhat": "pnpm --filter @pampalo/contracts test",
     "lint": "eslint",
     "format": "prettier --write . && eslint --fix",
     "check": "prettier --check ."
@@ -75,7 +77,13 @@
       "lightningcss"
     ],
     "overrides": {
-      "ws@>=8.0.0 <8.20.1": ">=8.20.1"
+      "ws@>=8.0.0 <8.20.1": ">=8.20.1",
+      "lodash-es@>=4.0.0 <=4.17.22": ">=4.17.23",
+      "diff@>=6.0.0 <8.0.3": ">=8.0.3",
+      "serialize-javascript@<=7.0.2": ">=7.0.3",
+      "serialize-javascript@<7.0.5": ">=7.0.5",
+      "lodash-es@>=4.0.0 <=4.17.23": ">=4.18.0",
+      "lodash-es@<=4.17.23": ">=4.18.0"
     }
   }
 }

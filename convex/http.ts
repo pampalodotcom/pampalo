@@ -132,7 +132,7 @@ http.route({
   method: "POST",
   handler: httpAction(async (ctx, req) => {
     const result: { userIdBytes: ArrayBuffer; challenge: ArrayBuffer } =
-      await ctx.runMutation(internal.auth._startRegistration, {});
+      await ctx.runMutation(internal.auth.ceremony._startRegistration, {});
     return jsonResponse(req, {
       userIdBytes: arrayBufferToBase64Url(result.userIdBytes),
       challenge: arrayBufferToBase64Url(result.challenge),
@@ -169,7 +169,7 @@ http.route({
     try {
       const wp = body.walletPayload;
       result = await ctx.runAction(
-        internal.authNode.verifyAndCompleteRegistration,
+        internal.auth.node.verifyAndCompleteRegistration,
         {
           userIdBytes: base64UrlToArrayBuffer(body.userIdBytes),
           expectedRPID: rpIdForRequest(req),
@@ -229,7 +229,7 @@ http.route({
   method: "POST",
   handler: httpAction(async (ctx, req) => {
     const result: { challenge: ArrayBuffer } = await ctx.runMutation(
-      internal.auth._startAuthentication,
+      internal.auth.ceremony._startAuthentication,
       {},
     );
     return jsonResponse(req, {
@@ -256,7 +256,7 @@ http.route({
     let result: { sessionToken: string; expiresAt: number };
     try {
       result = await ctx.runAction(
-        internal.authNode.verifyAndCompleteAuthentication,
+        internal.auth.node.verifyAndCompleteAuthentication,
         {
           expectedRPID: rpIdForRequest(req),
           expectedOrigin:
@@ -310,7 +310,7 @@ http.route({
   handler: httpAction(async (ctx, req) => {
     const token = readCookie(req, SESSION_COOKIE);
     if (token) {
-      await ctx.runMutation(internal.auth._deleteSessionByToken, { token });
+      await ctx.runMutation(internal.auth.ceremony._deleteSessionByToken, { token });
     }
     const headers = new Headers({
       "Content-Type": "application/json",
@@ -337,7 +337,7 @@ http.route({
   handler: httpAction(async (ctx, req) => {
     const token = readCookie(req, SESSION_COOKIE);
     if (!token) return errorResponse(req, 401, "no session");
-    const blob = await ctx.runQuery(internal.auth._bootstrapBlob, { token });
+    const blob = await ctx.runQuery(internal.auth.ceremony._bootstrapBlob, { token });
     if (!blob) return errorResponse(req, 401, "session invalid");
     return jsonResponse(req, {
       sessionToken: blob.sessionToken,
