@@ -147,6 +147,10 @@ export function SendModal({
   const [token, setToken] = useState<TokenPair | null>(null);
   const [recipient, setRecipient] = useState("");
   const [amount, setAmount] = useState("");
+  // Which denomination the amount input represents. Defaults to the
+  // token; clicking the toggle below the input flips between native
+  // token units and USD.
+  const [inputMode, setInputMode] = useState<"token" | "usd">("token");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("compose");
   const [submitted, setSubmitted] = useState<SubmittedTx | null>(null);
@@ -168,6 +172,7 @@ export function SendModal({
       setError(null);
       setAmount("");
       setRecipient("");
+      setInputMode("token");
       setTier("standard");
       setFeeOpen(false);
     }
@@ -181,14 +186,26 @@ export function SendModal({
 
   const recipientLc = normalizeRecipient(recipient);
 
-  // Parse the typed amount in token-native units. Errors are surfaced
-  // in the inline message — the review button stays disabled until
-  // this resolves to a positive bigint.
+  const tokenPrice = token ? usdPriceFor(token, prices ?? undefined) : null;
+
+  // Parse the typed amount → token-native wei. When the input is
+  // denominated in USD we divide by the price first; truncating to
+  // `decimals` before parseUnits keeps the result a valid bigint even
+  // when the float division produces more places than the token has.
   const amountWei: bigint | null = (() => {
     if (!token) return null;
     if (!amount) return null;
     try {
-      const parsed = parseUnits(amount, token.decimals);
+      let tokenStr: string;
+      if (inputMode === "usd") {
+        if (tokenPrice === null || tokenPrice <= 0) return null;
+        const usd = Number(amount);
+        if (!Number.isFinite(usd) || usd <= 0) return null;
+        tokenStr = (usd / tokenPrice).toFixed(token.decimals);
+      } else {
+        tokenStr = amount;
+      }
+      const parsed = parseUnits(tokenStr, token.decimals);
       if (parsed <= 0n) return null;
       return parsed;
     } catch {
@@ -197,10 +214,8 @@ export function SendModal({
   })();
 
   const amountUsd = (() => {
-    if (!token || amountWei === null) return null;
-    const price = usdPriceFor(token, prices ?? undefined);
-    if (price === null) return null;
-    return weiToNumber(amountWei, token.decimals) * price;
+    if (!token || amountWei === null || tokenPrice === null) return null;
+    return weiToNumber(amountWei, token.decimals) * tokenPrice;
   })();
 
   // Self-send guard — pasting your own address is almost always a
@@ -368,24 +383,53 @@ export function SendModal({
       ? weiToNumber(balanceWei, token.decimals)
       : null;
 
+  // Block over-balance sends at the compose stage. The RPC would
+  // revert anyway, but the user pays gas for the revert and loses the
+  // tx; better to refuse to even build it.
+  const isOverBalance =
+    amountWei !== null && balanceWei !== null && amountWei > balanceWei;
+
   function fillMax() {
     if (!token || balanceWei === null) return;
     // Reserve a gas margin only for native sends — token transfers cost
     // gas in ETH, not the token, so the full balance is legitimately
     // sendable.
+    let maxWei: bigint;
     if (isNativeToken(token.address)) {
       // Leave 0.0005 ETH for gas headroom (rough, conservative — works
       // on mainnet at 50 gwei and on cheap L2s). User can still type
       // a higher number manually if they really want.
       const gasReserveWei = parseUnits("0.0005", 18);
-      const max = balanceWei > gasReserveWei ? balanceWei - gasReserveWei : 0n;
-      if (max <= 0n) {
+      maxWei = balanceWei > gasReserveWei ? balanceWei - gasReserveWei : 0n;
+      if (maxWei <= 0n) {
         toast("Not enough ETH for gas");
         return;
       }
-      setAmount(weiToNumber(max, token.decimals).toString());
     } else {
-      setAmount(weiToNumber(balanceWei, token.decimals).toString());
+      maxWei = balanceWei;
+    }
+    const tokenAmt = weiToNumber(maxWei, token.decimals);
+    if (inputMode === "usd" && tokenPrice !== null) {
+      setAmount((tokenAmt * tokenPrice).toFixed(2));
+    } else {
+      setAmount(tokenAmt.toString());
+    }
+  }
+
+  function toggleInputMode() {
+    if (!token || tokenPrice === null || tokenPrice <= 0) return;
+    if (inputMode === "token") {
+      const tokenAmt = Number(amount);
+      if (amount && Number.isFinite(tokenAmt)) {
+        setAmount((tokenAmt * tokenPrice).toFixed(2));
+      }
+      setInputMode("usd");
+    } else {
+      const usd = Number(amount);
+      if (amount && Number.isFinite(usd)) {
+        setAmount((usd / tokenPrice).toString());
+      }
+      setInputMode("token");
     }
   }
 
@@ -393,7 +437,8 @@ export function SendModal({
     token !== null &&
     amountWei !== null &&
     recipientLc !== null &&
-    !isSelfSend;
+    !isSelfSend &&
+    !isOverBalance;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -453,9 +498,14 @@ export function SendModal({
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0"
-                  className="min-w-0 flex-1 bg-transparent text-2xl font-semibold outline-none"
+                  className="input-fit-content min-w-[1.5ch] max-w-full bg-transparent text-2xl font-semibold outline-none"
                 />
-                <div className="relative">
+                {token && (
+                  <span className="shrink-0 text-base font-medium text-ink-mute/70">
+                    {inputMode === "usd" ? "USD" : token.symbol}
+                  </span>
+                )}
+                <div className="relative ml-auto">
                   <TokenSelectButton
                     token={token}
                     open={pickerOpen}
@@ -472,6 +522,7 @@ export function SendModal({
                       onSelect={(p) => {
                         setToken(p);
                         setAmount("");
+                        setInputMode("token");
                         setPickerOpen(false);
                       }}
                       onClose={() => setPickerOpen(false)}
@@ -479,10 +530,36 @@ export function SendModal({
                   )}
                 </div>
               </div>
-              <div className="mt-1 flex h-[16px] min-w-0 items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                <span className="min-w-0 truncate font-mono">
-                  {amountUsd === null ? "" : `≈ ${fmtUsd(amountUsd)}`}
-                </span>
+              <div className="mt-1 flex h-[16px] min-w-0 items-center justify-between gap-2 text-[11px]">
+                <div className="flex min-w-0 items-center gap-2">
+                  {isOverBalance ? (
+                    <span className="min-w-0 truncate text-destructive">
+                      Insufficient balance
+                    </span>
+                  ) : (
+                    <span className="min-w-0 truncate font-mono text-muted-foreground">
+                      {(() => {
+                        if (amountWei === null || !token) return "";
+                        if (inputMode === "token") {
+                          return amountUsd === null
+                            ? ""
+                            : `≈ ${fmtUsd(amountUsd)}`;
+                        }
+                        const tokenAmt = weiToNumber(amountWei, token.decimals);
+                        return `≈ ${formatAmount(tokenAmt, token.decimals)} ${token.symbol}`;
+                      })()}
+                    </span>
+                  )}
+                  {token && tokenPrice !== null && (
+                    <button
+                      type="button"
+                      onClick={toggleInputMode}
+                      className="shrink-0 text-[10.5px] font-medium text-ink-mute underline-offset-2 hover:text-ink hover:underline"
+                    >
+                      View in {inputMode === "token" ? "USD" : token.symbol}
+                    </button>
+                  )}
+                </div>
                 {token && <ChainPill chainId={token.chainId} />}
               </div>
               {/* Balance + Max button on its own row. Hidden until a
@@ -511,6 +588,7 @@ export function SendModal({
                   onSelect={(p) => {
                     setToken(p);
                     setAmount("");
+                    setInputMode("token");
                   }}
                 />
               </div>
@@ -895,8 +973,8 @@ function TrackingPane({
 function StatusBanner({ status }: { status: TrackingStatus }) {
   if (status.kind === "confirmed") {
     return (
-      <div className="flex items-center gap-2 rounded-xl border border-[var(--pub)]/30 bg-[var(--pub-soft)] px-3 py-2.5 text-[13px] text-ink">
-        <CheckCircle2 className="size-4 text-[var(--pub)]" />
+      <div className="flex items-center gap-2 rounded-xl border border-[var(--priv)]/30 bg-[var(--priv-soft)] px-3 py-2.5 text-[13px] text-ink">
+        <CheckCircle2 className="size-4 text-[var(--priv)]" />
         <span className="flex-1">
           Confirmed in block #{status.blockNumber.toLocaleString()}.
         </span>
