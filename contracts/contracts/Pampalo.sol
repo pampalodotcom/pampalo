@@ -6,6 +6,8 @@ import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions
 
 import "./PoseidonMerkleTree.sol";
 import {IVerifier} from "./verifiers/DepositVerifier.sol";
+import {IPriceOracle} from "./oracles/IPriceOracle.sol";
+import {DateMath} from "./libraries/DateMath.sol";
 
 //                                                ☼
 //                       .  .  .             .  .  .
@@ -14,14 +16,28 @@ import {IVerifier} from "./verifiers/DepositVerifier.sol";
 //                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
 /// @title  Pampalo
-/// @notice ZK private-money protocol. Public ERC-20 (or native ETH)
-///         enters the contract via `shield` / `shieldNative` and
-///         becomes an unlinkable on-chain note in a Poseidon merkle
-///         tree; the note's owner is identified by a Poseidon hash
-///         of their secret key, not their EVM address. Holders spend
-///         notes privately via `transfer`, or back into the public
-///         layer via `unshield` / `unshieldBundled`.
+/// @notice ZK private-money protocol with on-chain compliance guards.
+///         Public ERC-20 (or native ETH) enters the contract via
+///         `shield` / `shieldNative` — but rather than landing in the
+///         merkle tree immediately, the shielded asset is escrowed and
+///         a 1-hour wait begins. During the wait a vigilant-citizen
+///         role may `contestShield` to refund the shielder. After the
+///         wait the leaf is inserted by `executeShield` (anyone may
+///         call), or earlier via `executeShieldImmediate` for the
+///         booth-operator bypass. Holders spend notes privately via
+///         `transfer`, or back into the public layer via `unshield` /
+///         `unshieldBundled`. Per-address monthly USD caps gate the
+///         crossover paths; supported-asset registry + Chainlink-style
+///         oracles convert (asset, amount) → USD cents.
+///
+/// @dev    See ADR 0006 (cap charge-at-queue with refund on cancel /
+///         contest) and ADR 0007 (no SHIELD_ROLE; contest mechanism
+///         replaces it).
 contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
+  // ──────────────────────────────────────────────────────────────────────
+  // Verifier addresses + constants (upstream-named — bytecode-bound)
+  // ──────────────────────────────────────────────────────────────────────
+
   address public depositVerifier;
   address public transferVerifier;
   address public withdrawVerifier;
@@ -40,6 +56,98 @@ contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
   address public immutable ETH_ADDRESS =
     0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
+  // ──────────────────────────────────────────────────────────────────────
+  // Roles
+  // ──────────────────────────────────────────────────────────────────────
+
+  bytes32 public constant VIGILANT_CITIZEN_ROLE =
+    keccak256("VIGILANT_CITIZEN_ROLE");
+  bytes32 public constant FINANCE_MANAGER_ROLE =
+    keccak256("FINANCE_MANAGER_ROLE");
+  bytes32 public constant BOOTH_OPERATOR_ROLE =
+    keccak256("BOOTH_OPERATOR_ROLE");
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Supported assets + price oracles
+  // ──────────────────────────────────────────────────────────────────────
+
+  struct AssetConfig {
+    IPriceOracle oracle;
+    uint8 assetDecimals;
+    bool enabled;
+  }
+  mapping(address => AssetConfig) public supportedAssets;
+
+  event AssetSupported(address indexed asset, address indexed oracle);
+  event AssetDisabled(address indexed asset);
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Shield queue
+  // ──────────────────────────────────────────────────────────────────────
+
+  struct PendingShield {
+    address shielder;
+    address asset;
+    uint256 amount;
+    uint256 leafCommitment;
+    uint64 unlockTime;
+    uint64 usdCentsCharged;
+    bool cancelled;
+  }
+  mapping(uint256 => PendingShield) public pendingShields;
+  uint256 public nextPendingId;
+
+  uint64 public shieldWaitTime = 1 hours;
+  uint64 public constant MIN_SHIELD_WAIT_TIME = 1 minutes;
+
+  event ShieldQueued(
+    uint256 indexed id,
+    address indexed shielder,
+    address indexed asset,
+    uint256 amount,
+    uint256 leafCommitment,
+    uint64 unlockTime,
+    bytes encryptedPayload
+  );
+  event ShieldExecuted(uint256 indexed id);
+  event ShieldCancelled(uint256 indexed id, address indexed by);
+  event ShieldContested(uint256 indexed id, address indexed by, string reason);
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Monthly caps
+  // ──────────────────────────────────────────────────────────────────────
+
+  struct MonthlyVolume {
+    uint64 monthKey;
+    uint192 usdCentsUsed;
+  }
+  mapping(address => MonthlyVolume) public shieldUsage;
+  mapping(address => MonthlyVolume) public unshieldUsage;
+
+  uint256 public defaultMonthlyCapUsdCents = 100_00; // $100.00
+  mapping(address => uint256) public addressMonthlyCapUsdCents; // 0 = use default
+
+  event ShieldCapCharged(address indexed user, uint256 usdCents);
+  event UnshieldCapCharged(address indexed user, uint256 usdCents);
+  event ShieldCapRefunded(address indexed user, uint256 usdCents);
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Kill switch
+  // ──────────────────────────────────────────────────────────────────────
+
+  bool public depositsHalted;
+  event DepositsHalted(address indexed by);
+  event DepositsResumed(address indexed by);
+
+  modifier whenDepositsOpen() {
+    require(!depositsHalted, "deposits halted");
+    _;
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Construction
+  // ──────────────────────────────────────────────────────────────────────
+
   constructor(
     address _depositVerifier,
     address _transferVerifier,
@@ -52,10 +160,78 @@ contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
     transferExternalVerifier = _transferExternalVerifier;
 
     _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    _grantRole(VIGILANT_CITIZEN_ROLE, msg.sender);
+    _grantRole(FINANCE_MANAGER_ROLE, msg.sender);
+    _grantRole(BOOTH_OPERATOR_ROLE, msg.sender);
   }
 
   // ──────────────────────────────────────────────────────────────────────
-  // shield — public ERC-20 → private note
+  // Admin — supported assets
+  // ──────────────────────────────────────────────────────────────────────
+
+  function addSupportedAsset(
+    address asset,
+    IPriceOracle oracle,
+    uint8 assetDecimals
+  ) external onlyRole(FINANCE_MANAGER_ROLE) {
+    supportedAssets[asset] = AssetConfig({
+      oracle: oracle,
+      assetDecimals: assetDecimals,
+      enabled: true
+    });
+    emit AssetSupported(asset, address(oracle));
+  }
+
+  function disableSupportedAsset(address asset)
+    external
+    onlyRole(FINANCE_MANAGER_ROLE)
+  {
+    supportedAssets[asset].enabled = false;
+    emit AssetDisabled(asset);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Admin — caps
+  // ──────────────────────────────────────────────────────────────────────
+
+  function setDefaultMonthlyCap(uint256 usdCents)
+    external
+    onlyRole(FINANCE_MANAGER_ROLE)
+  {
+    defaultMonthlyCapUsdCents = usdCents;
+  }
+
+  function setAddressMonthlyCap(address user, uint256 usdCents)
+    external
+    onlyRole(FINANCE_MANAGER_ROLE)
+  {
+    addressMonthlyCapUsdCents[user] = usdCents;
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Admin — wait time + kill switch
+  // ──────────────────────────────────────────────────────────────────────
+
+  function setShieldWaitTime(uint64 newWait)
+    external
+    onlyRole(FINANCE_MANAGER_ROLE)
+  {
+    require(newWait >= MIN_SHIELD_WAIT_TIME, "wait too short");
+    shieldWaitTime = newWait;
+  }
+
+  function weAreFull() external onlyRole(FINANCE_MANAGER_ROLE) {
+    depositsHalted = true;
+    emit DepositsHalted(msg.sender);
+  }
+
+  function weFoundRoom() external onlyRole(FINANCE_MANAGER_ROLE) {
+    depositsHalted = false;
+    emit DepositsResumed(msg.sender);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // shield — public ERC-20 → queued private note
   // ──────────────────────────────────────────────────────────────────────
 
   function shield(
@@ -63,8 +239,8 @@ contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
     uint256 _amount,
     bytes calldata _proof,
     bytes32[] calldata _publicInputs,
-    bytes[] calldata _payload
-  ) public {
+    bytes calldata _encryptedPayload
+  ) external whenDepositsOpen returns (uint256 id) {
     bool ok = IERC20(_erc20).transferFrom(msg.sender, address(this), _amount);
     require(ok, "failed to transfer shield");
 
@@ -80,20 +256,14 @@ contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
     );
     require(_amount == uint256(_publicInputs[2]), "Amount mismatch");
 
-    _insert(uint256(_publicInputs[0]));
-
-    for (uint256 i = 0; i < 3 && i < _payload.length; i++) {
-      if (_payload[i].length != 0) {
-        emit NotePayload(_payload[i]);
-      }
-    }
+    return _queueShield(_erc20, _amount, _publicInputs[0], _encryptedPayload);
   }
 
   function shieldNative(
     bytes calldata _proof,
     bytes32[] calldata _publicInputs,
-    bytes[] calldata _payload
-  ) public payable {
+    bytes calldata _encryptedPayload
+  ) external payable whenDepositsOpen returns (uint256 id) {
     bool isValidProof = IVerifier(depositVerifier).verify(
       _proof,
       _publicInputs
@@ -106,12 +276,110 @@ contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
     );
     require(msg.value == uint256(_publicInputs[2]), "msg.value mismatch");
 
-    _insert(uint256(_publicInputs[0]));
+    return
+      _queueShield(ETH_ADDRESS, msg.value, _publicInputs[0], _encryptedPayload);
+  }
 
-    for (uint256 i = 0; i < 3 && i < _payload.length; i++) {
-      if (_payload[i].length != 0) {
-        emit NotePayload(_payload[i]);
-      }
+  function _queueShield(
+    address asset,
+    uint256 amount,
+    bytes32 leafCommitment,
+    bytes calldata encryptedPayload
+  ) internal returns (uint256 id) {
+    _assertSupportedAsset(asset);
+
+    uint64 usdCents = _chargeShield(msg.sender, asset, amount);
+
+    id = nextPendingId++;
+    uint64 unlockTime = uint64(block.timestamp) + shieldWaitTime;
+
+    pendingShields[id] = PendingShield({
+      shielder: msg.sender,
+      asset: asset,
+      amount: amount,
+      leafCommitment: uint256(leafCommitment),
+      unlockTime: unlockTime,
+      usdCentsCharged: usdCents,
+      cancelled: false
+    });
+
+    emit ShieldQueued(
+      id,
+      msg.sender,
+      asset,
+      amount,
+      uint256(leafCommitment),
+      unlockTime,
+      encryptedPayload
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Shield queue lifecycle
+  // ──────────────────────────────────────────────────────────────────────
+
+  function executeShield(uint256 id) external {
+    PendingShield storage p = pendingShields[id];
+    require(p.shielder != address(0), "unknown pending id");
+    require(!p.cancelled, "cancelled");
+    require(block.timestamp >= p.unlockTime, "still in wait");
+
+    _insert(p.leafCommitment);
+    emit ShieldExecuted(id);
+    delete pendingShields[id];
+  }
+
+  function executeShieldImmediate(uint256 id)
+    external
+    onlyRole(BOOTH_OPERATOR_ROLE)
+  {
+    PendingShield storage p = pendingShields[id];
+    require(p.shielder != address(0), "unknown pending id");
+    require(!p.cancelled, "cancelled");
+
+    _insert(p.leafCommitment);
+    emit ShieldExecuted(id);
+    delete pendingShields[id];
+  }
+
+  function cancelShield(uint256 id) external {
+    PendingShield storage p = pendingShields[id];
+    require(p.shielder == msg.sender, "not shielder");
+    require(!p.cancelled, "already cancelled");
+    require(block.timestamp < p.unlockTime, "already executable");
+
+    _refundEscrow(p.shielder, p.asset, p.amount);
+    _refundShieldCap(p.shielder, p.usdCentsCharged);
+
+    p.cancelled = true;
+    emit ShieldCancelled(id, msg.sender);
+  }
+
+  function contestShield(uint256 id, string calldata reason)
+    external
+    onlyRole(VIGILANT_CITIZEN_ROLE)
+  {
+    PendingShield storage p = pendingShields[id];
+    require(p.shielder != address(0), "unknown pending id");
+    require(!p.cancelled, "already cancelled");
+    require(bytes(reason).length > 0, "reason required");
+
+    _refundEscrow(p.shielder, p.asset, p.amount);
+    _refundShieldCap(p.shielder, p.usdCentsCharged);
+
+    p.cancelled = true;
+    emit ShieldContested(id, msg.sender, reason);
+  }
+
+  function _refundEscrow(address shielder, address asset, uint256 amount)
+    internal
+  {
+    if (asset == ETH_ADDRESS) {
+      (bool success, ) = shielder.call{value: amount}("");
+      require(success, "ETH refund failed");
+    } else {
+      bool success = IERC20(asset).transfer(shielder, amount);
+      require(success, "ERC20 refund failed");
     }
   }
 
@@ -161,7 +429,7 @@ contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
   }
 
   // ──────────────────────────────────────────────────────────────────────
-  // unshield — private note(s) → public ERC-20/ETH (single recipient)
+  // unshield — private note(s) → public ERC-20/ETH
   // ──────────────────────────────────────────────────────────────────────
 
   function unshield(
@@ -187,31 +455,12 @@ contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
       }
     }
 
-    for (uint256 i = 0; i < NOTES_INPUT_LENGTH; i++) {
-      uint256 assetIndex = EXIT_ASSET_START_INDEX + i;
-      uint256 amountIndex = EXIT_AMOUNT_START_INDEX + i;
-      uint256 addressIndex = EXIT_ADDRESSES_START_INDEX + i;
-
-      address exitAsset = address(uint160(uint256(_publicInputs[assetIndex])));
-      uint256 exitAmount = uint256(_publicInputs[amountIndex]);
-      address exitAddress = address(
-        uint160(uint256(_publicInputs[addressIndex]))
-      );
-
-      if (exitAmount > 0) {
-        if (exitAsset == ETH_ADDRESS) {
-          require(
-            address(this).balance >= exitAmount,
-            "Insufficient ETH balance"
-          );
-          (bool success, ) = exitAddress.call{value: exitAmount}("");
-          require(success, "ETH transfer failed");
-        } else {
-          bool success = IERC20(exitAsset).transfer(exitAddress, exitAmount);
-          require(success, "Token transfer failed");
-        }
-      }
-    }
+    _processExitsAndCharge(
+      _publicInputs,
+      EXIT_ASSET_START_INDEX,
+      EXIT_AMOUNT_START_INDEX,
+      EXIT_ADDRESSES_START_INDEX
+    );
   }
 
   // ──────────────────────────────────────────────────────────────────────
@@ -253,40 +502,136 @@ contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
       }
     }
 
-    uint256 exitAssetStartIndex = 7;
-    uint256 exitAmountStartIndex = exitAssetStartIndex + NOTES_INPUT_LENGTH;
-    uint256 exitAddressStartIndex = exitAmountStartIndex + NOTES_INPUT_LENGTH;
+    uint256 exitAssetStart = 7;
+    uint256 exitAmountStart = exitAssetStart + NOTES_INPUT_LENGTH;
+    uint256 exitAddressStart = exitAmountStart + NOTES_INPUT_LENGTH;
 
-    for (uint256 i = 0; i < NOTES_INPUT_LENGTH; i++) {
-      uint256 assetIndex = exitAssetStartIndex + i;
-      uint256 amountIndex = exitAmountStartIndex + i;
-      uint256 addressIndex = exitAddressStartIndex + i;
-
-      address exitAsset = address(uint160(uint256(_publicInputs[assetIndex])));
-      uint256 exitAmount = uint256(_publicInputs[amountIndex]);
-      address exitAddress = address(
-        uint160(uint256(_publicInputs[addressIndex]))
-      );
-
-      if (exitAmount > 0 && exitAddress != address(0)) {
-        if (exitAsset == ETH_ADDRESS) {
-          require(
-            address(this).balance >= exitAmount,
-            "Insufficient ETH balance"
-          );
-          (bool success, ) = exitAddress.call{value: exitAmount}("");
-          require(success, "ETH transfer failed");
-        } else {
-          bool success = IERC20(exitAsset).transfer(exitAddress, exitAmount);
-          require(success, "Token transfer failed");
-        }
-      }
-    }
+    _processExitsAndCharge(
+      _publicInputs,
+      exitAssetStart,
+      exitAmountStart,
+      exitAddressStart
+    );
 
     for (uint256 i = 0; i < 3 && i < _payload.length; i++) {
       if (_payload[i].length != 0) {
         emit NotePayload(_payload[i]);
       }
     }
+  }
+
+  /// @dev Shared exit-processing path for unshield + unshieldBundled.
+  ///      Iterates the 3 exit slots, asserts each non-zero asset is
+  ///      supported, sums the USD value across all exits, charges the
+  ///      total to msg.sender's unshieldUsage, and forwards the funds.
+  function _processExitsAndCharge(
+    bytes32[] calldata publicInputs,
+    uint256 exitAssetStart,
+    uint256 exitAmountStart,
+    uint256 exitAddressStart
+  ) internal {
+    uint256 totalUsdCents = 0;
+
+    for (uint256 i = 0; i < NOTES_INPUT_LENGTH; i++) {
+      address exitAsset = address(
+        uint160(uint256(publicInputs[exitAssetStart + i]))
+      );
+      uint256 exitAmount = uint256(publicInputs[exitAmountStart + i]);
+      address exitAddress = address(
+        uint160(uint256(publicInputs[exitAddressStart + i]))
+      );
+
+      if (exitAmount == 0) continue;
+      if (exitAddress == address(0)) continue;
+
+      _assertSupportedAsset(exitAsset);
+      AssetConfig storage cfg = supportedAssets[exitAsset];
+      totalUsdCents += cfg.oracle.priceUsdCents(
+        exitAmount,
+        cfg.assetDecimals
+      );
+
+      if (exitAsset == ETH_ADDRESS) {
+        require(
+          address(this).balance >= exitAmount,
+          "Insufficient ETH balance"
+        );
+        (bool success, ) = exitAddress.call{value: exitAmount}("");
+        require(success, "ETH transfer failed");
+      } else {
+        bool success = IERC20(exitAsset).transfer(exitAddress, exitAmount);
+        require(success, "Token transfer failed");
+      }
+    }
+
+    if (totalUsdCents > 0) {
+      _chargeUnshieldRaw(msg.sender, totalUsdCents);
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Internal — cap accounting
+  // ──────────────────────────────────────────────────────────────────────
+
+  function _chargeShield(address user, address asset, uint256 amount)
+    internal
+    returns (uint64)
+  {
+    AssetConfig storage cfg = supportedAssets[asset];
+    uint256 usdCents = cfg.oracle.priceUsdCents(amount, cfg.assetDecimals);
+    require(usdCents <= type(uint64).max, "usdCents overflow");
+
+    _bumpUsage(shieldUsage, user, uint64(usdCents));
+    emit ShieldCapCharged(user, usdCents);
+    return uint64(usdCents);
+  }
+
+  function _chargeUnshieldRaw(address user, uint256 usdCents) internal {
+    require(usdCents <= type(uint64).max, "usdCents overflow");
+    _bumpUsage(unshieldUsage, user, uint64(usdCents));
+    emit UnshieldCapCharged(user, usdCents);
+  }
+
+  function _bumpUsage(
+    mapping(address => MonthlyVolume) storage usage,
+    address user,
+    uint64 usdCents
+  ) internal {
+    uint64 mk = DateMath.monthKey(block.timestamp);
+    MonthlyVolume storage vol = usage[user];
+    if (vol.monthKey != mk) {
+      vol.monthKey = mk;
+      vol.usdCentsUsed = 0;
+    }
+
+    uint256 cap = addressMonthlyCapUsdCents[user];
+    if (cap == 0) cap = defaultMonthlyCapUsdCents;
+
+    uint256 newUsed = uint256(vol.usdCentsUsed) + uint256(usdCents);
+    require(newUsed <= cap, "monthly cap exceeded");
+    vol.usdCentsUsed = uint192(newUsed);
+  }
+
+  function _refundShieldCap(address user, uint64 usdCents) internal {
+    if (usdCents == 0) return;
+
+    uint64 mk = DateMath.monthKey(block.timestamp);
+    MonthlyVolume storage vol = shieldUsage[user];
+    if (vol.monthKey != mk) {
+      // The cap was charged in a prior month — that month's budget is
+      // already gone in the bucket and won't be reused. Refunding it
+      // into the new month would be a free top-up; skip.
+      return;
+    }
+    if (uint256(vol.usdCentsUsed) <= uint256(usdCents)) {
+      vol.usdCentsUsed = 0;
+    } else {
+      vol.usdCentsUsed = uint192(uint256(vol.usdCentsUsed) - uint256(usdCents));
+    }
+    emit ShieldCapRefunded(user, usdCents);
+  }
+
+  function _assertSupportedAsset(address asset) internal view {
+    require(supportedAssets[asset].enabled, "asset not supported");
   }
 }

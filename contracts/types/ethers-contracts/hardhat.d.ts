@@ -14,16 +14,12 @@ declare module "@nomicfoundation/hardhat-ethers/types" {
 getContractFactory(name: 'PoseidonMerkleTree', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.PoseidonMerkleTree__factory>
 getContractFactory(name: 'FourDEC', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.FourDEC__factory>
 getContractFactory(name: 'TestablePoseidonMerkleTree', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.TestablePoseidonMerkleTree__factory>
+getContractFactory(name: 'MockOracle', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.MockOracle__factory>
 getContractFactory(name: 'USDC', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.USDC__factory>
 getContractFactory(name: 'BaseZKHonkVerifier', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.BaseZKHonkVerifier__factory>
 getContractFactory(name: 'DepositVerifier', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.DepositVerifier__factory>
 getContractFactory(name: 'Errors', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.Errors__factory>
 getContractFactory(name: 'IVerifier', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.IVerifier__factory>
-getContractFactory(name: 'ZKTranscriptLib', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.ZKTranscriptLib__factory>
-getContractFactory(name: 'BaseZKHonkVerifier', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.BaseZKHonkVerifier__factory>
-getContractFactory(name: 'Errors', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.Errors__factory>
-getContractFactory(name: 'IVerifier', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.IVerifier__factory>
-getContractFactory(name: 'TransferExternalVerifier', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.TransferExternalVerifier__factory>
 getContractFactory(name: 'ZKTranscriptLib', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.ZKTranscriptLib__factory>
 getContractFactory(name: 'BaseZKHonkVerifier', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.BaseZKHonkVerifier__factory>
 getContractFactory(name: 'Errors', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.Errors__factory>
@@ -35,21 +31,25 @@ getContractFactory(name: 'Errors', signerOrOptions?: ethers.Signer | FactoryOpti
 getContractFactory(name: 'IVerifier', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.IVerifier__factory>
 getContractFactory(name: 'WithdrawVerifier', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.WithdrawVerifier__factory>
 getContractFactory(name: 'ZKTranscriptLib', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.ZKTranscriptLib__factory>
+getContractFactory(name: 'BaseZKHonkVerifier', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.BaseZKHonkVerifier__factory>
+getContractFactory(name: 'Errors', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.Errors__factory>
+getContractFactory(name: 'IVerifier', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.IVerifier__factory>
+getContractFactory(name: 'TransferExternalVerifier', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.TransferExternalVerifier__factory>
+getContractFactory(name: 'ZKTranscriptLib', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.ZKTranscriptLib__factory>
+getContractFactory(name: 'AggregatorV3Interface', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.AggregatorV3Interface__factory>
+getContractFactory(name: 'ChainlinkOracle', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.ChainlinkOracle__factory>
+getContractFactory(name: 'IPriceOracle', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.IPriceOracle__factory>
 
   getContractAt(name: 'Pampalo', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.Pampalo>
 getContractAt(name: 'PoseidonMerkleTree', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.PoseidonMerkleTree>
 getContractAt(name: 'FourDEC', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.FourDEC>
 getContractAt(name: 'TestablePoseidonMerkleTree', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.TestablePoseidonMerkleTree>
+getContractAt(name: 'MockOracle', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.MockOracle>
 getContractAt(name: 'USDC', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.USDC>
 getContractAt(name: 'BaseZKHonkVerifier', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.BaseZKHonkVerifier>
 getContractAt(name: 'DepositVerifier', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.DepositVerifier>
 getContractAt(name: 'Errors', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.Errors>
 getContractAt(name: 'IVerifier', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.IVerifier>
-getContractAt(name: 'ZKTranscriptLib', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.ZKTranscriptLib>
-getContractAt(name: 'BaseZKHonkVerifier', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.BaseZKHonkVerifier>
-getContractAt(name: 'Errors', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.Errors>
-getContractAt(name: 'IVerifier', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.IVerifier>
-getContractAt(name: 'TransferExternalVerifier', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.TransferExternalVerifier>
 getContractAt(name: 'ZKTranscriptLib', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.ZKTranscriptLib>
 getContractAt(name: 'BaseZKHonkVerifier', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.BaseZKHonkVerifier>
 getContractAt(name: 'Errors', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.Errors>
@@ -61,21 +61,25 @@ getContractAt(name: 'Errors', address: string | ethers.Addressable, signer?: eth
 getContractAt(name: 'IVerifier', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.IVerifier>
 getContractAt(name: 'WithdrawVerifier', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.WithdrawVerifier>
 getContractAt(name: 'ZKTranscriptLib', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.ZKTranscriptLib>
+getContractAt(name: 'BaseZKHonkVerifier', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.BaseZKHonkVerifier>
+getContractAt(name: 'Errors', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.Errors>
+getContractAt(name: 'IVerifier', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.IVerifier>
+getContractAt(name: 'TransferExternalVerifier', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.TransferExternalVerifier>
+getContractAt(name: 'ZKTranscriptLib', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.ZKTranscriptLib>
+getContractAt(name: 'AggregatorV3Interface', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.AggregatorV3Interface>
+getContractAt(name: 'ChainlinkOracle', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.ChainlinkOracle>
+getContractAt(name: 'IPriceOracle', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.IPriceOracle>
 
   deployContract(name: 'Pampalo', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.Pampalo>
 deployContract(name: 'PoseidonMerkleTree', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.PoseidonMerkleTree>
 deployContract(name: 'FourDEC', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.FourDEC>
 deployContract(name: 'TestablePoseidonMerkleTree', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.TestablePoseidonMerkleTree>
+deployContract(name: 'MockOracle', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.MockOracle>
 deployContract(name: 'USDC', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.USDC>
 deployContract(name: 'BaseZKHonkVerifier', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.BaseZKHonkVerifier>
 deployContract(name: 'DepositVerifier', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.DepositVerifier>
 deployContract(name: 'Errors', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.Errors>
 deployContract(name: 'IVerifier', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IVerifier>
-deployContract(name: 'ZKTranscriptLib', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.ZKTranscriptLib>
-deployContract(name: 'BaseZKHonkVerifier', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.BaseZKHonkVerifier>
-deployContract(name: 'Errors', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.Errors>
-deployContract(name: 'IVerifier', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IVerifier>
-deployContract(name: 'TransferExternalVerifier', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.TransferExternalVerifier>
 deployContract(name: 'ZKTranscriptLib', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.ZKTranscriptLib>
 deployContract(name: 'BaseZKHonkVerifier', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.BaseZKHonkVerifier>
 deployContract(name: 'Errors', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.Errors>
@@ -87,21 +91,25 @@ deployContract(name: 'Errors', signerOrOptions?: ethers.Signer | DeployContractO
 deployContract(name: 'IVerifier', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IVerifier>
 deployContract(name: 'WithdrawVerifier', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.WithdrawVerifier>
 deployContract(name: 'ZKTranscriptLib', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.ZKTranscriptLib>
+deployContract(name: 'BaseZKHonkVerifier', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.BaseZKHonkVerifier>
+deployContract(name: 'Errors', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.Errors>
+deployContract(name: 'IVerifier', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IVerifier>
+deployContract(name: 'TransferExternalVerifier', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.TransferExternalVerifier>
+deployContract(name: 'ZKTranscriptLib', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.ZKTranscriptLib>
+deployContract(name: 'AggregatorV3Interface', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.AggregatorV3Interface>
+deployContract(name: 'ChainlinkOracle', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.ChainlinkOracle>
+deployContract(name: 'IPriceOracle', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IPriceOracle>
 
   deployContract(name: 'Pampalo', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.Pampalo>
 deployContract(name: 'PoseidonMerkleTree', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.PoseidonMerkleTree>
 deployContract(name: 'FourDEC', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.FourDEC>
 deployContract(name: 'TestablePoseidonMerkleTree', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.TestablePoseidonMerkleTree>
+deployContract(name: 'MockOracle', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.MockOracle>
 deployContract(name: 'USDC', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.USDC>
 deployContract(name: 'BaseZKHonkVerifier', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.BaseZKHonkVerifier>
 deployContract(name: 'DepositVerifier', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.DepositVerifier>
 deployContract(name: 'Errors', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.Errors>
 deployContract(name: 'IVerifier', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IVerifier>
-deployContract(name: 'ZKTranscriptLib', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.ZKTranscriptLib>
-deployContract(name: 'BaseZKHonkVerifier', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.BaseZKHonkVerifier>
-deployContract(name: 'Errors', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.Errors>
-deployContract(name: 'IVerifier', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IVerifier>
-deployContract(name: 'TransferExternalVerifier', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.TransferExternalVerifier>
 deployContract(name: 'ZKTranscriptLib', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.ZKTranscriptLib>
 deployContract(name: 'BaseZKHonkVerifier', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.BaseZKHonkVerifier>
 deployContract(name: 'Errors', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.Errors>
@@ -113,6 +121,14 @@ deployContract(name: 'Errors', args: any[], signerOrOptions?: ethers.Signer | De
 deployContract(name: 'IVerifier', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IVerifier>
 deployContract(name: 'WithdrawVerifier', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.WithdrawVerifier>
 deployContract(name: 'ZKTranscriptLib', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.ZKTranscriptLib>
+deployContract(name: 'BaseZKHonkVerifier', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.BaseZKHonkVerifier>
+deployContract(name: 'Errors', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.Errors>
+deployContract(name: 'IVerifier', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IVerifier>
+deployContract(name: 'TransferExternalVerifier', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.TransferExternalVerifier>
+deployContract(name: 'ZKTranscriptLib', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.ZKTranscriptLib>
+deployContract(name: 'AggregatorV3Interface', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.AggregatorV3Interface>
+deployContract(name: 'ChainlinkOracle', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.ChainlinkOracle>
+deployContract(name: 'IPriceOracle', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IPriceOracle>
 
     // default types
     getContractFactory(

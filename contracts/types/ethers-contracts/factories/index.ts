@@ -2,6 +2,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export * as mocks from './mocks/index.js';
+export * as oracles from './oracles/index.js';
 export * as verifiers from './verifiers/index.js';
 export { Pampalo__factory } from './Pampalo__factory.js';
 export { PoseidonMerkleTree__factory } from './PoseidonMerkleTree__factory.js';

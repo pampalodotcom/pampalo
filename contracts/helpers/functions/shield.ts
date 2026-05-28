@@ -1,6 +1,7 @@
 import type { ShieldNote } from "@pampalo/shared/types/notes";
 import { Shield } from "@pampalo/shared/classes/Shield";
 import { poseidon2Hash } from "@zkpassport/poseidon2";
+import type { ethers } from "ethers";
 
 // Witness + proof generator for the `shield` circuit. Given a
 // ShieldNote (assetId / assetAmount / owner / secret), computes the
@@ -37,4 +38,21 @@ export const getShieldDetails = async (shieldNote: ShieldNote) => {
   });
 
   return { proof };
+};
+
+// Test convenience: queue a shield (or shieldNative) and immediately
+// flush it via executeShieldImmediate. Used by spend-path tests so
+// they don't have to drag the queue's wait into every assertion.
+// Returns the pending id used.
+export const shieldAndExecute = async (
+  pampalo: ethers.Contract,
+  runner: ethers.Signer,
+  shieldCall: () => Promise<ethers.ContractTransactionResponse>,
+): Promise<bigint> => {
+  const id = (await pampalo.nextPendingId()) as bigint;
+  await (await shieldCall()).wait();
+  await pampalo
+    .connect(runner)
+    .getFunction("executeShieldImmediate")(id);
+  return id;
 };

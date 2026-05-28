@@ -2,15 +2,22 @@ import { getNoirClasses } from "@/helpers/objects/get-noir-classes.js";
 import { getMerkleTree } from "@/helpers/objects/poseidon-merkle-tree.js";
 import PampaloModule from "@/ignition/modules/Pampalo.js";
 import TokensModule from "@/ignition/modules/Tokens.js";
+import { ETH_ADDRESS } from "@pampalo/shared/constants/tree";
 import { ethers } from "ethers";
 import hre from "hardhat";
 import Poseidon2HuffJson from "../contracts/utils/Poseidon2Huff.json" with { type: "json" };
 
 // One-shot test fixture: deploys the Pampalo contract + verifier
-// libraries, the token mocks (USDC, FourDEC), and the prebuilt
-// Poseidon2 huff hasher. Returns the deployed contracts, the off-
-// chain merkle tree mirror, the four bb.js classes pre-initialized,
-// and the signers. Used by every Hardhat test in this suite.
+// libraries, the token mocks (USDC, FourDEC), the prebuilt Poseidon2
+// huff hasher, and a MockOracle for USDC + ETH registered as supported
+// assets. Cap-aware tests can re-target the oracle prices or override
+// per-address caps via FINANCE_MANAGER_ROLE (granted to Signers[0]).
+//
+// MockOracle defaults: 1 USDC = $1.00 (100 cents/unit), 1 ETH = $0.01
+// (100 cents/unit at 18 decimals). The ETH default is deliberately
+// low so the existing shield tests don't bump into the $100 default
+// monthly cap; tests that exercise realistic cap behavior reset the
+// price first.
 
 export const getTestingAPI = async () => {
   const connection = await hre.network.connect();
@@ -26,8 +33,6 @@ export const getTestingAPI = async () => {
 
   const { pampalo } = await connection.ignition.deploy(PampaloModule);
 
-  // The Poseidon2 huff hasher ships as raw bytecode, not Solidity, so
-  // we deploy it via ContractFactory with an empty ABI.
   const poseidon2HuffFactory = new ethers.ContractFactory(
     [],
     Poseidon2HuffJson.bytecode,
@@ -38,6 +43,26 @@ export const getTestingAPI = async () => {
   const poseidon2Address = await poseidon2Huff.getAddress();
 
   await pampalo.setPoseidon(poseidon2Address);
+
+  // Oracles + supported-asset registration
+  const MockOracleFactory = await connection.ethers.getContractFactory(
+    "MockOracle",
+  );
+  const usdcOracle = (await MockOracleFactory.deploy(
+    100n,
+  )) as unknown as ethers.Contract;
+  await usdcOracle.waitForDeployment();
+  const ethOracle = (await MockOracleFactory.deploy(
+    100n,
+  )) as unknown as ethers.Contract;
+  await ethOracle.waitForDeployment();
+
+  await pampalo.addSupportedAsset(
+    await usdcDeployment.getAddress(),
+    await usdcOracle.getAddress(),
+    6,
+  );
+  await pampalo.addSupportedAsset(ETH_ADDRESS, await ethOracle.getAddress(), 18);
 
   const {
     shieldNoir,
@@ -53,9 +78,12 @@ export const getTestingAPI = async () => {
   const tree = await getMerkleTree();
 
   return {
+    connection,
     pampalo,
     usdcDeployment,
     fourDecDeployment,
+    usdcOracle,
+    ethOracle,
     shieldNoir,
     shieldBackend,
     transferNoir,

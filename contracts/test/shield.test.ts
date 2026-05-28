@@ -1,16 +1,15 @@
 import { approve } from "@/helpers/functions/approve.js";
 import { getShieldDetails } from "@/helpers/functions/shield.js";
-import { createShieldPayload } from "@/helpers/functions/transfer.js";
 import { getTestingAPI } from "@/helpers/get-testing-api.js";
 import { PoseidonMerkleTree } from "@pampalo/shared/classes/PoseidonMerkleTree";
 import { poseidon2Hash } from "@zkpassport/poseidon2";
 import { expect } from "chai";
 import { ethers, parseEther } from "ethers";
 
-// Exercises the full bb.js prover path for `shield` / `shieldNative`.
-// First green run of this test means the prover, the verifiers, the
-// huff hasher, the merkle tree, and the off-chain tree mirror are all
-// wired correctly.
+// Exercises the full bb.js prover path for `shield` / `shieldNative`,
+// driven through the queue + booth-bypass flow so the leaf actually
+// makes it into the tree within the test transaction. Wait-time
+// semantics are tested separately in shield-wait.test.ts.
 
 describe("shield", () => {
   let Signers: ethers.Signer[];
@@ -26,6 +25,20 @@ describe("shield", () => {
   const ownerSecret =
     10036677144260647934022413515521823129584317400947571241312859176539726523915n;
   const owner = BigInt(poseidon2Hash([ownerSecret]).toString());
+
+  // Snapshot the next pending-shield id BEFORE shield() so we know
+  // which queue slot to flush. shield() returns the id but ethers
+  // tx receipts don't surface return values without parsing the
+  // event log — easier to just read nextPendingId beforehand.
+  const queueAndExecute = async (
+    runner: ethers.Signer,
+    shieldTx: () => Promise<ethers.ContractTransactionResponse>,
+  ) => {
+    const id = (await pampalo.nextPendingId()) as bigint;
+    await (await shieldTx()).wait();
+    await pampalo.connect(runner).getFunction("executeShieldImmediate")(id);
+    return id;
+  };
 
   before(async () => {
     ({ pampalo, Signers, usdcDeployment, tree } = await getTestingAPI());
@@ -43,26 +56,18 @@ describe("shield", () => {
 
     await usdcDeployment.approve(await pampalo.getAddress(), assetAmount);
 
-    const shieldPayload = await createShieldPayload(
-      {
-        secret,
-        owner: owner.toString(),
-        asset_id: assetId,
-        asset_amount: assetAmount.toString(),
-      },
-      Signers[0],
-    );
-
     const usdcBalanceBefore = await usdcDeployment.balanceOf(
       Signers[0].address,
     );
 
-    await pampalo.shield(
-      assetId,
-      assetAmount,
-      proof.proof,
-      proof.publicInputs,
-      shieldPayload,
+    await queueAndExecute(Signers[0], () =>
+      pampalo.shield(
+        assetId,
+        assetAmount,
+        proof.proof,
+        proof.publicInputs,
+        "0x",
+      ),
     );
 
     const usdcBalanceAfter = await usdcDeployment.balanceOf(Signers[0].address);
@@ -85,27 +90,16 @@ describe("shield", () => {
       owner,
     });
 
-    const shieldPayload = await createShieldPayload(
-      {
-        secret,
-        owner: owner.toString(),
-        asset_id: ethAddress,
-        asset_amount: amount.toString(),
-      },
-      Signers[0],
-    );
-
     const provider = Signers[0].provider!;
     const userBalanceBefore = await provider.getBalance(Signers[0].address);
     const pampaloBalanceBefore = await provider.getBalance(
       await pampalo.getAddress(),
     );
 
-    await pampalo.shieldNative(
-      proof.proof,
-      proof.publicInputs,
-      shieldPayload,
-      { value: amount },
+    await queueAndExecute(Signers[0], () =>
+      pampalo.shieldNative(proof.proof, proof.publicInputs, "0x", {
+        value: amount,
+      }),
     );
 
     const userBalanceAfter = await provider.getBalance(Signers[0].address);
@@ -139,22 +133,8 @@ describe("shield", () => {
       Signers[0].address,
     );
 
-    const shieldPayload = await createShieldPayload(
-      {
-        secret,
-        owner: owner.toString(),
-        asset_id: assetId,
-        asset_amount: amount.toString(),
-      },
-      Signers[0],
-    );
-
-    await pampalo.shield(
-      assetId,
-      amount,
-      proof.proof,
-      proof.publicInputs,
-      shieldPayload,
+    await queueAndExecute(Signers[0], () =>
+      pampalo.shield(assetId, amount, proof.proof, proof.publicInputs, "0x"),
     );
 
     const usdcBalanceAfter = await usdcDeployment.balanceOf(Signers[0].address);
