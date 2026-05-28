@@ -15,5 +15,5 @@ todos.json
 
 data/*
 
-contracts/types
+contracts/types/*
 contracts/cache

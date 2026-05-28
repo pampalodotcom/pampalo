@@ -95,6 +95,12 @@ export default defineConfig({
       accounts: hdAccounts,
       chainId: 11155111,
     },
+    baseSepolia: {
+      type: 'http',
+      url: alchemyUrl('base-sepolia'),
+      accounts: hdAccounts,
+      chainId: 84532,
+    },
   },
 
   verify: {
