@@ -1,5 +1,5 @@
 import hre from "hardhat";
-import HelloWorldModule from "../../ignition/modules/HelloWorld.js";
+import HelloWorldModule from "@/ignition/modules/HelloWorld.js";
 
 // Lightweight test fixture in the shape of the larger project's
 // `getTestingAPI`: one async call returns deployed contracts +

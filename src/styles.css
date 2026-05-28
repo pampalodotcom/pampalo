@@ -106,6 +106,12 @@
   --priv-soft: rgba(28, 138, 94, 0.1);
   --priv-soft-2: rgba(28, 138, 94, 0.18);
 
+  /* Sea palette — mirrors BeachScene PAL.{light,dark}.sea{Shallow,Deep} so
+     the page background that sits behind the cards reads as the same
+     water the hero scene paints. */
+  --sea-shallow: #2eb6c2;
+  --sea-deep: #0e5266;
+
   /* shadcn semantic tokens, mostly used by ui/* primitives. */
   --background: var(--paper);
   --foreground: var(--ink);
@@ -157,6 +163,9 @@ html[data-theme="dark"] {
   --priv-hi: #6dd6a2;
   --priv-soft: rgba(79, 194, 138, 0.14);
   --priv-soft-2: rgba(79, 194, 138, 0.22);
+
+  --sea-shallow: #1a4a6a;
+  --sea-deep: #051428;
 
   --card: rgba(18, 36, 56, 0.96);
   --popover: rgba(18, 36, 56, 0.96);
@@ -282,6 +291,68 @@ body {
   height: 80px;
   background: linear-gradient(to bottom, transparent, var(--color-paper));
   pointer-events: none;
+}
+
+/* Lets an <input> shrink to fit its typed content so a sibling unit
+   label can sit inline directly after the value. Supported in Chrome
+   123+, Safari 17.4+, Firefox 134+. Older browsers fall back to the
+   input's normal flex-basis behaviour. */
+.input-fit-content {
+  field-sizing: content;
+}
+
+/* Sticky water strip — a thin band of sea anchored to the viewport top
+   so the ocean is always peeking through behind/around scrolled content.
+   Rendered as the first child of the root layout; the BeachScene hero
+   (later in DOM, position:relative) paints on top of it at scroll=0, so
+   the strip only emerges once the user scrolls past the hero. Card
+   containers carry z-10 so they sit above the band. */
+.water-band {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  pointer-events: none;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    var(--sea-shallow) 0%,
+    color-mix(in srgb, var(--sea-shallow), var(--sea-deep) 40%) 100%
+  );
+  transition: background 1.2s ease;
+}
+
+/* Subtle drifting shimmer to suggest moving water without a full WebGL
+   scene. One repeating radial-gradient translated horizontally. */
+.water-band::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    ellipse 90px 12px at 50% 50%,
+    rgba(255, 255, 255, 0.14),
+    transparent 70%
+  );
+  background-size: 220px 100%;
+  background-repeat: repeat-x;
+  animation: water-drift 16s linear infinite;
+  will-change: background-position;
+}
+
+@keyframes water-drift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -220px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .water-band::before {
+    animation: none;
+  }
 }
 
 .rise-in {

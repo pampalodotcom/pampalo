@@ -7,8 +7,12 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "test:gas": "hardhat test --gas-stats",
-    "deploy:sepolia": "hardhat ignition deploy ignition/modules/HelloWorld.ts --network sepolia",
-    "deploy:mainnet": "hardhat ignition deploy ignition/modules/HelloWorld.ts --network mainnet"
+    "deploy:sepolia": "hardhat ignition deploy ignition/modules/Pampalo.ts --network sepolia",
+    "deploy:base": "hardhat ignition deploy ignition/modules/Pampalo.ts --network base"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.1.0",
+    "@pampalo/shared": "workspace:*"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^3.0.5",

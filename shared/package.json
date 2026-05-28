@@ -1,0 +1,25 @@
+{
+  "name": "@pampalo/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./classes/*": "./classes/*.ts",
+    "./constants/*": "./constants/*.ts",
+    "./types/*": "./types/*.ts"
+  },
+  "scripts": {
+    "tsc": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aztec/bb.js": "5.0.0-nightly.20260324",
+    "@noir-lang/noir_js": "1.0.0-beta.21",
+    "@zkpassport/poseidon2": "^0.6.2",
+    "eciesjs": "^0.4.16",
+    "ethers": "^6.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "~5.8.3"
+  }
+}

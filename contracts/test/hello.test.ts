@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { getTestingAPI } from "./helpers/get-testing-api.js";
+import { getTestingAPI } from "@/helpers/get-testing-api.js";
 
 describe("HelloWorld", () => {
   it("starts with the default greeting", async () => {

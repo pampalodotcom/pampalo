@@ -9,17 +9,8 @@
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
     "noImplicitAny": true,
-    "outDir": "./dist",
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./*"]
-    }
+    "declaration": true,
+    "noEmit": true
   },
-  "include": [
-    "./hardhat.config.ts",
-    "./ignition/**/*",
-    "./test/**/*",
-    "./scripts/**/*",
-    "./helpers/**/*"
-  ]
+  "include": ["./classes/**/*", "./constants/**/*", "./types/**/*"]
 }

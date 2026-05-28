@@ -105,6 +105,13 @@ function RootComponent() {
                 flows below the content on tall pages. Toaster is OUTSIDE
                 this column so its `<section>` doesn't end up as a flex
                 sibling that competes with Footer for the bottom slot. */}
+            {/* Sticky sea strip — pinned to the top of the viewport so a
+                slice of water is always in view as the user scrolls. Lives
+                here (before the Outlet) so the BeachScene hero, when at
+                rest, paints on top of it; only once the hero scrolls out
+                does the strip become visible. See .water-band in
+                styles.css. */}
+            <div className="water-band" aria-hidden="true" />
             <div className="flex min-h-dvh flex-col">
               <Outlet />
               <Footer />
