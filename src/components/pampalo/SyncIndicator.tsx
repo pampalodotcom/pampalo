@@ -55,15 +55,18 @@ export function SyncIndicator() {
       type="button"
       onClick={onTap}
       disabled={syncing}
-      aria-label="Sync preferences from another device"
-      className="inline-flex items-center gap-1.5 rounded-full bg-paper-lo border border-line px-2.5 py-1 text-[11px] font-medium text-ink-soft hover:text-ink hover:bg-paper disabled:opacity-60"
+      aria-label={syncing ? "Syncing preferences" : "Sync preferences from another device"}
+      title={syncing ? "Syncing…" : "Sync Preferences"}
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-paper-lo border border-line size-7 sm:size-auto sm:px-2.5 sm:py-1 justify-center text-[11px] font-medium text-ink-soft hover:text-ink hover:bg-paper disabled:opacity-60"
     >
       {syncing ? (
-        <Loader2 className="size-3 animate-spin" />
+        <Loader2 className="size-3.5 sm:size-3 animate-spin" />
       ) : (
-        <RefreshCw className="size-3" />
+        <RefreshCw className="size-3.5 sm:size-3" />
       )}
-      {syncing ? "Syncing…" : "Sync Preferences"}
+      <span className="hidden sm:inline">
+        {syncing ? "Syncing…" : "Sync Preferences"}
+      </span>
     </button>
   );
 }

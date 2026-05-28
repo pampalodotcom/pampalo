@@ -176,6 +176,18 @@ stores it in their browser IndexedDB so they can spend the note
 later. Until decrypted, no observer — including the recipient if
 they haven't yet scanned — can link the note's leaf to any address.
 
+**Receive**:
+The wallet-side UX of funding the wallet from an external source. A
+"Receive" flow shows the user's EVM address (and a QR), the external
+sender does a plain on-chain transfer, and funds land in the user's
+**public** balance. A separate "shield-on-arrival" intent can attach
+to a Receive to surface a follow-up prompt once the inbound transfer
+is detected — but the receipt itself is always public, because
+external senders cannot generate a shield proof on the user's behalf.
+User-facing copy calls this **"Deposit"** (it's the verb users
+expect); internal components keep the `Receive` name to match the
+on-chain layer.
+
 **Shield**:
 Public ERC-20 → new private note. The depositor approves the
 Pampalo contract for the token, calls `shield(...)`, and the
