@@ -193,4 +193,17 @@ export class PoseidonMerkleTree {
 
     return tree;
   }
+
+  // Node-only persistence helpers. Dynamic-import fs/promises so the
+  // module loads in the browser too (the methods just error if called).
+  async saveToFile(filepath: string): Promise<void> {
+    const fs = await import("node:fs/promises");
+    await fs.writeFile(filepath, this.toJSON(), "utf8");
+  }
+
+  static async loadFromFile(filepath: string): Promise<PoseidonMerkleTree> {
+    const fs = await import("node:fs/promises");
+    const jsonString = await fs.readFile(filepath, "utf8");
+    return await PoseidonMerkleTree.fromJSON(jsonString);
+  }
 }

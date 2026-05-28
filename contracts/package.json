@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "@openzeppelin/contracts": "^5.1.0",
-    "@pampalo/shared": "workspace:*"
+    "@pampalo/shared": "workspace:*",
+    "@zkpassport/poseidon2": "^0.6.2",
+    "eciesjs": "^0.4.16"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^3.0.5",
