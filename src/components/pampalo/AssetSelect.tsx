@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import { usePrivateBalance, usePublicBalance, weiToNumber } from "@/lib/balances";
+import { useMediaQuery } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 import { AssetMark } from "./AssetMark";
 import {
@@ -359,6 +360,12 @@ export function TokenDropdown({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
+  // `(pointer: fine)` is true for mice / trackpads, false for touch.
+  // Use it to decide whether to autofocus the search input on open:
+  // desktop users get the keyboard-friendly flow; mobile users don't
+  // get the on-screen keyboard popping up unsolicited.
+  const hasFinePointer = useMediaQuery("(pointer: fine)");
+
   // Click-outside + Esc to close. The panel itself stops propagation so
   // inside clicks don't trip the outside handler.
   useEffect(() => {
@@ -382,9 +389,14 @@ export function TokenDropdown({
   }, [onClose]);
 
   // Auto-focus the search input on open for a keyboard-friendly flow.
+  // Skipped on touch devices so the on-screen keyboard doesn't pop up
+  // the instant the picker opens — the user is more likely to scan the
+  // visible token list than to type, and the keyboard would hide most
+  // of it. Tap the input directly to bring it up.
   useEffect(() => {
+    if (!hasFinePointer) return;
     searchRef.current?.focus();
-  }, []);
+  }, [hasFinePointer]);
 
   // Per-row balance lookups. Safe inside .map() because `pairs` is
   // stable across renders (memoised by the parent). The hooks reuse

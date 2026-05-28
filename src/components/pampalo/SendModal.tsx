@@ -22,6 +22,7 @@ import {
 import { appendTransaction } from "@/lib/idb-transactions";
 import { useRpcClient } from "@/lib/rpc";
 import { buildSendTx, isNativeToken, normalizeRecipient } from "@/lib/send-tx";
+import { useMediaQuery } from "@/lib/use-media-query";
 import {
   Dialog,
   DialogContent,
@@ -129,6 +130,10 @@ export function SendModal({
 }) {
   const tokensRaw = useQuery(api.catalog.tokens.list, {});
   const prices = useQuery(api.prices.feeds.listLatest, {});
+
+  // True on mouse/trackpad devices, false on touch. Drives the
+  // touch-aware auto-focus skip on the DialogContent below.
+  const hasFinePointer = useMediaQuery("(pointer: fine)");
 
   const pairs = useMemo<TokenPair[] | null>(() => {
     if (!tokensRaw) return null;
@@ -442,7 +447,18 @@ export function SendModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain">
+      <DialogContent
+        className="sm:max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain"
+        // Radix focuses the first focusable element on open. On touch
+        // devices that's the amount input — which pops the on-screen
+        // keyboard immediately and hides the rest of the modal. Prevent
+        // the default focus so users see the form first; tap the input
+        // to bring the keyboard up. Desktop / fine-pointer users keep
+        // the default behavior so they can start typing straight away.
+        onOpenAutoFocus={
+          hasFinePointer ? undefined : (e) => e.preventDefault()
+        }
+      >
         <DialogHeader>
           <DialogTitle className="text-base font-bold">
             {phase === "tracking"
