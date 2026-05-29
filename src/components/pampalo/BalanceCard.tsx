@@ -121,6 +121,7 @@ export function BalanceCard({
             </h1>
           )}
         </div>
+        <div className="flex flex-col items-end gap-1">
         <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
           {onSend && (
             <button
@@ -189,14 +190,37 @@ export function BalanceCard({
           )}
           {/* <SyncIndicator /> — disabled: see note at top of file. */}
         </div>
+        {syncShiny && (
+          // sm+ : nudge tucks inside the right-side column so it sits
+          // directly under the chip row. On mobile this column is only
+          // ~140px wide (the giant balance takes the rest), which
+          // wraps the phrase onto two lines — so we hide this copy
+          // below sm and render a full-width version as a sibling of
+          // the row instead.
+          <div className="hidden sm:flex items-center gap-1.5">
+            <Sparkles
+              className="size-3 text-[var(--pub-hi)] animate-twinkle"
+              aria-hidden
+            />
+            <TypingAnimation
+              words={STALE_NUDGE_PHRASES}
+              loop
+              typeSpeed={55}
+              deleteSpeed={28}
+              pauseDelay={1800}
+              cursorStyle="line"
+              className="text-[11.5px] font-medium text-[var(--pub)] leading-snug tracking-normal"
+            />
+          </div>
+        )}
+        </div>
       </div>
 
       {syncShiny && (
-        // Idle nudge — typed out, cycling through a few short phrases
-        // so the line keeps drawing the eye without being a static ad.
-        // Hidden during an active sync (the chip already conveys
-        // "something's happening").
-        <div className="-mt-1 flex items-center justify-end gap-1.5">
+        // Mobile-only nudge — full card width with justify-end so it
+        // still reads as "attached to the Sync button above" while
+        // having room for the longest phrase on a single line.
+        <div className="-mt-2 flex items-center justify-end gap-1.5 sm:hidden">
           <Sparkles
             className="size-3 text-[var(--pub-hi)] animate-twinkle"
             aria-hidden
@@ -208,7 +232,7 @@ export function BalanceCard({
             deleteSpeed={28}
             pauseDelay={1800}
             cursorStyle="line"
-            className="text-[11.5px] font-medium text-[var(--pub)] leading-snug tracking-normal"
+            className="text-[11.5px] font-medium text-[var(--pub)] leading-snug tracking-normal whitespace-nowrap"
           />
         </div>
       )}
