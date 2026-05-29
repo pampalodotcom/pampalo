@@ -3,6 +3,7 @@
 // take as input. No RPC, no Convex — keeps the modal logic testable.
 
 import { Interface } from "ethers";
+import { isNativeAsset } from "./eth";
 
 // `transfer(address,uint256)` selector + the ERC-20 ABI fragment ethers
 // needs to encode the call.
@@ -11,11 +12,8 @@ const ERC20_TRANSFER_ABI = [
 ];
 const erc20Iface = new Interface(ERC20_TRANSFER_ABI);
 
-// Matches the sentinel in convex/seed.ts / supportedTokens.address.
-const NATIVE_SENTINEL = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
-
 export function isNativeToken(tokenAddress: string): boolean {
-  return tokenAddress.toLowerCase() === NATIVE_SENTINEL;
+  return isNativeAsset(tokenAddress);
 }
 
 export type SendTxFields = {

@@ -69,13 +69,26 @@ async function reconcile(
     ) {
       // Forward-only — no retraction, no redundant write. Includes the
       // common case where IDB already mirrors Convex exactly.
-      // Still patch unlockTime if it improved from the optimistic
-      // approximation (now + shieldWaitSeconds) to the chain-timestamp
-      // based value the indexer wrote.
+      // Still patch identity fields if Convex has a more accurate
+      // value than the optimistic write captured. unlockTime: the
+      // optimistic write used (now + shieldWaitSeconds) as an
+      // approximation; the indexer wrote the actual chain-timestamp
+      // based value. queuedTxHash: optimistic writes will have it
+      // already, but cross-device hydration won't — patch when we see
+      // it for the first time so the wallet's block-explorer link
+      // works on every device.
+      const patch: Record<string, unknown> = {};
       if (existing.unlockTime !== row.unlockTime) {
-        await patchNoteByLeaf(row.leafCommitment, {
-          unlockTime: row.unlockTime,
-        });
+        patch.unlockTime = row.unlockTime;
+      }
+      if (
+        existing.queuedTxHash?.toLowerCase() !==
+        row.queuedTxHash.toLowerCase()
+      ) {
+        patch.queuedTxHash = row.queuedTxHash;
+      }
+      if (Object.keys(patch).length > 0) {
+        await patchNoteByLeaf(row.leafCommitment, patch);
       }
       continue;
     }
@@ -84,6 +97,7 @@ async function reconcile(
     await patchNoteByLeaf(row.leafCommitment, {
       state: targetIdbState,
       unlockTime: row.unlockTime,
+      queuedTxHash: row.queuedTxHash,
     });
   }
 }

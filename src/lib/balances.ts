@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
+import { ETH_SENTINEL } from "./eth";
 import { useRpcClient, type NativeBalance, type TokenBalance } from "./rpc";
 
-// Tokens addressed by (chainId, address) — `0xeee…eee` means native. The
-// hook decides which proxy call to make based on the sentinel.
-export const NATIVE_SENTINEL =
-  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+// Re-exported under the legacy name so the existing import sites in
+// this file (and any external consumers) keep compiling. New code
+// should prefer `ETH_SENTINEL` from `./eth`.
+export const NATIVE_SENTINEL = ETH_SENTINEL;
 
 export type AssetRef = {
   chainId: number;

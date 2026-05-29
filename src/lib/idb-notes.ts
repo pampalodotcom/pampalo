@@ -58,6 +58,10 @@ export type StoredNote = {
   // chain timestamp of unlock — needed for the client-derived
   // `executable` sub-state of `queued`. Unix seconds.
   unlockTime?: number;
+  // Tx that queued this leaf (the `shield` / `shieldNative` call).
+  // Populated at optimistic-write time from the broadcast receipt; also
+  // patched by the Convex sync writer when it sees the canonical row.
+  queuedTxHash?: string;
   // Populated when executeShield mines and the leaf lands in the tree:
   treeIndex?: number;
   leafIndex?: number;
@@ -199,6 +203,7 @@ function normalise(note: StoredNote): StoredNote {
     secret: note.secret.toLowerCase(),
     deploymentAddress: note.deploymentAddress.toLowerCase(),
     leafCommitment: note.leafCommitment.toLowerCase(),
+    queuedTxHash: note.queuedTxHash?.toLowerCase(),
     nullifier: note.nullifier?.toLowerCase(),
     spentTxHash: note.spentTxHash?.toLowerCase(),
   };

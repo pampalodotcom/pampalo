@@ -28,6 +28,11 @@ export type PendingNote = {
   leafCommitment: string;
   amount: bigint;
   unlockTime: number; // unix seconds
+  /** Chain this note lives on — drives block-explorer link resolution. */
+  chainId: number;
+  /** Tx that queued the leaf. Undefined until the optimistic write
+   *  or the Convex sync writer fills it in. */
+  queuedTxHash?: string;
 };
 
 export type AssetBucket = {
@@ -137,6 +142,8 @@ function aggregate(
       leafCommitment: n.leafCommitment,
       amount,
       unlockTime: n.unlockTime ?? 0,
+      chainId: n.networkChainId,
+      queuedTxHash: n.queuedTxHash,
     };
     if (isExecutable) {
       b.pendingExecutable += amount;

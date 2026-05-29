@@ -9,11 +9,8 @@
 
 import { Interface } from "ethers";
 import { POSEIDON_MAX } from "./derive-addresses";
+import { ETH_SENTINEL } from "./eth";
 
-// Sentinel address that the Pampalo contract uses to represent native
-// ETH inside its `supportedAssets` mapping. Matches
-// `Pampalo.ETH_ADDRESS` and the convex catalog convention.
-const ETH_SENTINEL = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 const ETH_ASSET_ID = BigInt(ETH_SENTINEL);
 
 const SHIELD_NATIVE_IFACE = new Interface([

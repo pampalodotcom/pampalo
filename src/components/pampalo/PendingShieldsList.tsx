@@ -1,7 +1,14 @@
 import { useState } from "react";
-import { ChevronDown, Clock3, Moon, Sparkles } from "lucide-react";
+import {
+  ChevronDown,
+  Clock3,
+  ExternalLink,
+  Moon,
+  Sparkles,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { weiToNumber } from "@/lib/balances";
+import { txUrl } from "@/lib/explorer";
 import type { PendingNote } from "@/lib/use-private-balances";
 
 // Collapsable per-asset list of pending shields shown beneath the
@@ -112,6 +119,7 @@ export function PendingShieldsList({
                 <span className="text-[11px] text-ink-mute">
                   ready to finalise
                 </span>
+                <ExplorerLink note={n} />
               </span>
               <button
                 type="button"
@@ -138,6 +146,7 @@ export function PendingShieldsList({
                 <span className="font-mono">
                   {fmtAmount(n.amount, decimals, dp)} {symbol}
                 </span>
+                <ExplorerLink note={n} />
               </span>
               <span className="font-mono text-[11px] text-ink-mute">
                 unlocks {countdownLabel(n.unlockTime)}
@@ -147,6 +156,29 @@ export function PendingShieldsList({
         </ul>
       )}
     </div>
+  );
+}
+
+function ExplorerLink({ note }: { note: PendingNote }) {
+  if (!note.queuedTxHash) return null;
+  const url = txUrl(note.chainId, note.queuedTxHash);
+  if (!url) return null;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="View shield tx on block explorer"
+      aria-label="View shield tx on block explorer"
+      onClick={(e) => e.stopPropagation()}
+      className={cn(
+        "inline-flex size-5 items-center justify-center rounded",
+        "text-ink-mute transition-colors hover:bg-paper-lo hover:text-ink",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-faint",
+      )}
+    >
+      <ExternalLink className="size-3" aria-hidden />
+    </a>
   );
 }
 

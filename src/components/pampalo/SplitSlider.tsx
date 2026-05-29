@@ -108,7 +108,19 @@ export function SplitSlider({
       if (disabled) return;
       const track = trackRef.current;
       if (!track) return;
-      track.setPointerCapture(e.pointerId);
+      // iOS Safari fires the pointerdown but, without preventDefault,
+      // can also process the touch as a vertical scroll for the
+      // enclosing page → drag jitters or doesn't start. Eating the
+      // default here + `touch-action: none` (CSS + inline) covers both
+      // the "scroll vs drag" coin-flip and any swipe-back gestures.
+      e.preventDefault();
+      try {
+        track.setPointerCapture(e.pointerId);
+      } catch {
+        // Some older Safari builds throw on touch-pointer capture; the
+        // drag still tracks via the document-level move/up below, so
+        // we swallow.
+      }
       setDragging(true);
       setFromClientX(e.clientX);
     },
@@ -118,6 +130,7 @@ export function SplitSlider({
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (!dragging) return;
+      e.preventDefault();
       setFromClientX(e.clientX);
     },
     [dragging, setFromClientX],
@@ -192,7 +205,13 @@ export function SplitSlider({
         dragging && "is-dragging",
         className,
       )}
-      style={{ height: HANDLE_PX + 24 /* +12px hit-pad each side */ }}
+      style={{
+        height: HANDLE_PX + 24 /* +12px hit-pad each side */,
+        // Belt-and-suspenders alongside the CSS rule: some webviews
+        // ignore stylesheet `touch-action` on dynamically rendered
+        // nodes but always honour the inline attribute.
+        touchAction: "none",
+      }}
     >
       <div
         className="split-slider-bar-wrap"

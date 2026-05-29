@@ -5,6 +5,7 @@ import { VisuallyHidden } from "radix-ui";
 import { toast } from "sonner";
 import { api } from "../../../../convex/_generated/api";
 import { signTransactionWithPasskey } from "@/lib/auth-flow";
+import { ETH_SENTINEL } from "@/lib/eth";
 import { appendNote } from "@/lib/idb-notes";
 import {
   prepareShieldNative,
@@ -39,9 +40,9 @@ import { AssetMark } from "../AssetMark";
 // only cost is the gas fee.
 const SHIELD_GAS_LIMIT = 7_000_000n;
 
-// Native-ETH sentinel — matches Pampalo.ETH_ADDRESS and the catalog
-// convention. Used as the `asset` field on shield-native notes.
-const ETH_ADDRESS = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+// Local alias for readability at the IDB-write call site below.
+// ETH_SENTINEL lives in src/lib/eth.ts as the single source of truth.
+const ETH_ADDRESS = ETH_SENTINEL;
 
 type Phase =
   | "idle"
@@ -197,6 +198,7 @@ export function ShieldConfirmSheet({
           state: "queued",
           unlockTime:
             Math.floor(Date.now() / 1000) + deployment.shieldWaitSeconds,
+          queuedTxHash: txHash,
         });
       } catch (idbErr) {
         // Don't fail the user-visible flow if IDB write hiccups —

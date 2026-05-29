@@ -412,12 +412,19 @@ body {
   inset: 0 auto 0 0;
   background: linear-gradient(to right, var(--pub-hi), var(--pub));
   border-radius: 999px;
+  /* Decorative fills must not absorb pointer events — touch starts on
+     the bar visual need to land on `.split-slider` (the listener
+     wrapper) so the drag can begin. iOS Safari's pointer-event
+     bubbling has historically been flaky when an absolute-positioned
+     child sits over a tap target, so we just opt the fills out. */
+  pointer-events: none;
 }
 .split-bar .priv-fill {
   position: absolute;
   inset: 0 0 0 auto;
   background: linear-gradient(to left, var(--priv-hi), var(--priv));
   border-radius: 999px;
+  pointer-events: none;
 }
 .split-bar .divider {
   position: absolute;
@@ -427,6 +434,7 @@ body {
   background: var(--color-paper);
   border-radius: 1px;
   transform: translateX(-1px);
+  pointer-events: none;
 }
 
 /* SplitSlider — wraps SplitBar with a draggable handle. Hit area is
@@ -457,6 +465,9 @@ body {
   position: relative;
   flex: 1;
   width: 100%;
+  /* Inherit none from the parent slider; some mobile webviews need
+     this to be explicit on every node in the touch path. */
+  touch-action: none;
 }
 .split-slider-baseline {
   position: absolute;
