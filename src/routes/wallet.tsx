@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useRpcClient } from "@/lib/rpc";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { Loader2, RefreshCcw } from "lucide-react";
@@ -18,6 +19,10 @@ import {
   ShieldConfirmSheet,
   type ShieldConfirmPayload,
 } from "@/components/pampalo/shield/ShieldConfirmSheet";
+import {
+  UnshieldConfirmSheet,
+  type UnshieldConfirmPayload,
+} from "@/components/pampalo/shield/UnshieldConfirmSheet";
 import { BalanceCard } from "@/components/pampalo/BalanceCard";
 import { DepositSheet } from "@/components/pampalo/deposit/DepositSheet";
 import { BeachScene } from "@/components/pampalo/BeachScene";
@@ -203,6 +208,83 @@ function Dashboard({
 
   const [shieldPayload, setShieldPayload] =
     useState<ShieldConfirmPayload | null>(null);
+  const [unshieldPayload, setUnshieldPayload] =
+    useState<UnshieldConfirmPayload | null>(null);
+
+  // Per-(chain, asset) "tx confirming on-chain" set. While a row is
+  // in here, AssetRow disables its slider + action buttons and shows
+  // a "Confirming…" banner. Cleared when receipt polling confirms the
+  // tx (or after a hard 90s safety timeout — Base Sepolia blocks land
+  // in seconds, so anything still pending past that is anomalous).
+  type PendingMoveKey = string; // `${chainId}:${assetAddressLower}`
+  type PendingMove = {
+    kind: "shield" | "unshield";
+    txHash: string;
+    startedAt: number;
+  };
+  const [pendingMoves, setPendingMoves] = useState<
+    ReadonlyMap<PendingMoveKey, PendingMove>
+  >(new Map());
+  const pendingMoveKey = (chainId: number, asset: string): PendingMoveKey =>
+    `${chainId}:${asset.toLowerCase()}`;
+  const registerPendingMove = (
+    kind: "shield" | "unshield",
+    chainId: number,
+    assetAddress: string,
+    txHash: string,
+  ) => {
+    setPendingMoves((prev) => {
+      const next = new Map(prev);
+      next.set(pendingMoveKey(chainId, assetAddress), {
+        kind,
+        txHash,
+        startedAt: Date.now(),
+      });
+      return next;
+    });
+  };
+
+  // Receipt polling for every pending move. Each entry gets one
+  // setInterval; we clear it either on confirmation or on the 90s
+  // safety timeout. The rpc client comes from the same provider the
+  // confirm sheets use, so the polls reuse Alchemy connection state.
+  const rpcClient = useRpcClient();
+  useEffect(() => {
+    if (pendingMoves.size === 0) return;
+    const intervals: number[] = [];
+    for (const [key, move] of pendingMoves) {
+      const [chainStr] = key.split(":");
+      const cId = Number(chainStr);
+      const tick = async () => {
+        if (Date.now() - move.startedAt > 90_000) {
+          setPendingMoves((prev) => {
+            const next = new Map(prev);
+            next.delete(key);
+            return next;
+          });
+          return;
+        }
+        try {
+          const res = await rpcClient.getTransactionStatus(cId, move.txHash);
+          if (res.status === true || res.status === false) {
+            setPendingMoves((prev) => {
+              const next = new Map(prev);
+              next.delete(key);
+              return next;
+            });
+          }
+        } catch {
+          // transient — keep polling
+        }
+      };
+      const handle = window.setInterval(() => void tick(), 3_000);
+      intervals.push(handle);
+      void tick();
+    }
+    return () => {
+      for (const h of intervals) window.clearInterval(h);
+    };
+  }, [pendingMoves, rpcClient]);
 
   // IDB-derived private balances + pending shields. The hook
   // re-subscribes via useSyncExternalStore so any optimistic write or
@@ -382,7 +464,9 @@ function Dashboard({
                     evmAddress={evmAddress}
                     shieldableKeys={shieldableKeys}
                     onShield={setShieldPayload}
+                    onUnshield={setUnshieldPayload}
                     privateBuckets={privateBalances.perAsset}
+                    pendingMoves={pendingMoves}
                   />
                 </li>
               );
@@ -398,6 +482,20 @@ function Dashboard({
         }}
         payload={shieldPayload}
         addresses={addresses}
+        onBroadcasted={(p) =>
+          registerPendingMove("shield", p.chainId, p.assetAddress, p.txHash)
+        }
+      />
+      <UnshieldConfirmSheet
+        open={unshieldPayload !== null}
+        onOpenChange={(next) => {
+          if (!next) setUnshieldPayload(null);
+        }}
+        payload={unshieldPayload}
+        addresses={addresses}
+        onBroadcasted={(p) =>
+          registerPendingMove("unshield", p.chainId, p.assetAddress, p.txHash)
+        }
       />
     </>
   );
@@ -632,7 +730,9 @@ function AssetGroupRow({
   evmAddress,
   shieldableKeys,
   onShield,
+  onUnshield,
   privateBuckets,
+  pendingMoves,
 }: {
   symbol: string;
   tokens: Token[];
@@ -640,7 +740,11 @@ function AssetGroupRow({
   evmAddress: string;
   shieldableKeys: Set<string>;
   onShield: (payload: ShieldConfirmPayload) => void;
+  onUnshield: (payload: UnshieldConfirmPayload) => void;
   privateBuckets: AssetBucket[];
+  /** Wallet-level "tx confirming on-chain" set, keyed by
+   *  `${chainId}:${assetAddress.toLowerCase()}`. */
+  pendingMoves: ReadonlyMap<string, { kind: "shield" | "unshield" }>;
 }) {
   // Same deterministic-render assumption as the BalanceCard: token list
   // is stable so hook order is stable.
@@ -763,11 +867,18 @@ function AssetGroupRow({
     minPub = Math.max(0, originalPub - maxShieldable);
   }
 
+  // For demo we lock the row on its active chain only — multi-chain
+  // assets only have one active chain at a time.
+  const confirmingMove = pendingMoves.get(
+    `${activeChainId}:${tokens[0]?.address.toLowerCase() ?? ""}`,
+  );
+
   return (
     <AssetRow
       asset={data}
       shieldable={shieldable}
       minPub={minPub}
+      confirmingKind={confirmingMove?.kind ?? null}
       queuedNotes={queuedNotes}
       executableNotes={executableNotes}
       onFinalise={(note) => {
@@ -781,9 +892,6 @@ function AssetGroupRow({
       }}
       onMove={(payload) => {
         if (payload.intent === "shield") {
-          // Slice-6: open the proof-gen + passkey-sign confirm sheet.
-          // Broadcast still deliberately skipped (we stop after signing
-          // and log the prepared tx) — that's the next slice.
           onShield({
             intent: "shield",
             amount: payload.amount,
@@ -793,8 +901,13 @@ function AssetGroupRow({
           });
           return;
         }
-        // Unshield path lands after the shield path is live + tested.
-        toast(`Unshield ${payload.symbol} — coming in the next slice`);
+        onUnshield({
+          intent: "unshield",
+          amount: payload.amount,
+          chainId: payload.chainId,
+          symbol: payload.symbol,
+          decimals: payload.decimals,
+        });
       }}
     />
   );

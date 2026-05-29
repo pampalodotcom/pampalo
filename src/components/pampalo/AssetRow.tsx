@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { parseUnits } from "ethers";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { weiToNumber } from "@/lib/balances";
 import { AssetMark } from "./AssetMark";
@@ -98,6 +99,10 @@ export function AssetRow({
    * would enforce anyway. Undefined → no constraint (slider can go to 0).
    */
   minPub,
+  /** When set, a shield/unshield broadcast for this asset is mining;
+   *  the slider locks and the action row swaps for a calm "Confirming
+   *  on-chain…" banner until the wallet-level receipt poll clears it. */
+  confirmingKind = null,
   /** Notes still counting down to unlock. Drives the collapsable list. */
   queuedNotes,
   /** Notes whose unlockTime has passed; user can finalise. */
@@ -110,6 +115,7 @@ export function AssetRow({
   onMove?: (payload: MovePayload) => void;
   shieldable?: boolean;
   minPub?: number;
+  confirmingKind?: "shield" | "unshield" | null;
   queuedNotes?: PendingNote[];
   executableNotes?: PendingNote[];
   onFinalise?: (note: PendingNote) => void;
@@ -261,24 +267,36 @@ export function AssetRow({
   const privVal =
     asset.priceUsd !== null ? originalPriv * asset.priceUsd : originalPriv;
 
-  const slider = shieldable ? (
-    <SplitSlider
-      pub={pub}
-      total={total}
-      originalPub={originalPub}
-      onChange={setPub}
-      decimals={dp}
-      ticker={asset.symbol}
-      minPub={minPub}
-    />
-  ) : (
-    <SplitBar publicValue={pubVal} privateValue={privVal} height={10} />
-  );
+  // Lock the slider while a tx is mining so the user can't drag a
+  // fresh move on top of a still-confirming one. We render the
+  // static SplitBar variant instead of the interactive slider in
+  // that window; it visually conveys the same balance split without
+  // the affordance to drag.
+  const slider =
+    shieldable && confirmingKind === null ? (
+      <SplitSlider
+        pub={pub}
+        total={total}
+        originalPub={originalPub}
+        onChange={setPub}
+        decimals={dp}
+        ticker={asset.symbol}
+        minPub={minPub}
+      />
+    ) : (
+      <SplitBar publicValue={pubVal} privateValue={privVal} height={10} />
+    );
 
   const handleCancel = () => setPub(originalPub);
   const handleConfirm = () => {
     if (!dirty || !onMove || asset.chainIds.length === 0) return;
-    const amount = parseUnits(moveAmt.toFixed(asset.decimals), asset.decimals);
+    // The slider drag yields a JS float — at 18 ETH-decimals that
+    // produces dust like 0.0051200345678901234 from a normal-looking
+    // drag. Cap at 10 dp (or the token's native decimals, whichever
+    // is smaller) before parseUnits so amounts stay legible across
+    // the chain. parseUnits zero-pads the rest.
+    const precision = Math.min(asset.decimals, 10);
+    const amount = parseUnits(moveAmt.toFixed(precision), asset.decimals);
     onMove({
       intent: direction,
       amount,
@@ -290,9 +308,28 @@ export function AssetRow({
 
   // Action row: idle hint when nothing has moved off baseline, swap to
   // Cancel + Confirm pair when the user has dragged. Omit entirely when
-  // the asset isn't shieldable on any of its chains.
+  // the asset isn't shieldable on any of its chains. While a tx is
+  // confirming on-chain (wallet-level pendingMoves set), every other
+  // state yields to a calm "Confirming…" pill.
   let actionRow: React.ReactNode = null;
-  if (!shieldable) {
+  if (confirmingKind !== null) {
+    actionRow = (
+      <div
+        className={cn(
+          "flex h-[42px] items-center justify-center gap-2 rounded-full",
+          "border border-line bg-paper-lo",
+          "text-[12.5px] font-semibold",
+          confirmingKind === "shield"
+            ? "text-[var(--priv)]"
+            : "text-[var(--pub)]",
+        )}
+        aria-live="polite"
+      >
+        <Loader2 className="size-3.5 animate-spin" aria-hidden />
+        {confirmingKind === "shield" ? "Shielding…" : "Unshielding…"} on-chain
+      </div>
+    );
+  } else if (!shieldable) {
     // no idle hint, no buttons
   } else if (total > 0 && !dirty) {
     actionRow = (
@@ -303,13 +340,17 @@ export function AssetRow({
       </div>
     );
   } else if (total > 0 && dirty) {
+    // Action row: stacks vertically by default so the Confirm button
+    // always has the full track width for the "Unshield 0.00512 ETH"
+    // label (was wrapping into 2 lines at sm/md widths). Flips to a
+    // horizontal Cancel + Confirm pair at lg+ where there's room.
     actionRow = (
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 lg:flex-row">
         <button
           type="button"
           onClick={handleCancel}
           className={cn(
-            "inline-flex h-[42px] w-[96px] shrink-0 items-center justify-center",
+            "inline-flex h-[42px] w-full lg:w-[96px] lg:shrink-0 items-center justify-center",
             "rounded-full border border-line bg-transparent",
             "text-[13.5px] font-semibold text-ink",
             "transition-colors hover:bg-paper-lo",
@@ -322,8 +363,9 @@ export function AssetRow({
           type="button"
           onClick={handleConfirm}
           className={cn(
-            "inline-flex h-[42px] flex-1 items-center justify-center gap-2",
+            "inline-flex h-[42px] w-full lg:flex-1 items-center justify-center gap-2",
             "rounded-full text-[14px] font-bold text-white shadow-sm",
+            "whitespace-nowrap px-3",
             "transition-colors focus-visible:outline-none focus-visible:ring-3",
             direction === "shield"
               ? [
@@ -341,8 +383,10 @@ export function AssetRow({
           ) : (
             <SunIcon size={14} />
           )}
-          {direction === "shield" ? "Shield" : "Unshield"} {fmtToken(moveAmt, dp)}{" "}
-          {asset.symbol}
+          <span className="truncate">
+            {direction === "shield" ? "Shield" : "Unshield"}{" "}
+            {fmtToken(moveAmt, dp)} {asset.symbol}
+          </span>
         </button>
       </div>
     );
