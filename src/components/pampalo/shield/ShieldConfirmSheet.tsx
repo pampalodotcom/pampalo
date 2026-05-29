@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, Moon, ShieldCheck } from "lucide-react";
 import { useQuery } from "convex/react";
 import { VisuallyHidden } from "radix-ui";
+import { toast } from "sonner";
 import { api } from "../../../../convex/_generated/api";
 import { signTransactionWithPasskey } from "@/lib/auth-flow";
+import { appendNote } from "@/lib/idb-notes";
 import {
   prepareShieldNative,
   type PreparedShieldNativeTx,
@@ -33,11 +35,16 @@ import { AssetMark } from "../AssetMark";
 // covers both with headroom; revisit after live observation.
 const SHIELD_GAS_LIMIT = 800_000n;
 
+// Native-ETH sentinel — matches Pampalo.ETH_ADDRESS and the catalog
+// convention. Used as the `asset` field on shield-native notes.
+const ETH_ADDRESS = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+
 type Phase =
   | "idle"
   | "preparing"
   | "signing"
-  | "signed"
+  | "broadcasting"
+  | "done"
   | "error";
 
 export type ShieldConfirmPayload = {
@@ -153,23 +160,57 @@ export function ShieldConfirmSheet({
         maxPriorityFeePerGas,
       });
       setSignedTx(signed);
-      setPhase("signed");
 
-      // Stopping point per the current build order — broadcast lands
-      // in a follow-up alongside the optimistic IDB write. Dump
-      // everything to the console so the user can inspect.
-      console.log("[shield] prepared", {
+      // (4) Broadcast. The Convex indexer picks up the resulting
+      // ShieldQueued within ~30s and the /sentry reactive query
+      // surfaces it; the optimistic IDB write (slice "Wire it" in
+      // SHIELD_FLOW.md §3.4) lands separately so this path stays
+      // small.
+      setPhase("broadcasting");
+      const { txHash } = await rpc.sendRawTransaction(
+        payload.chainId,
+        signed,
+      );
+
+      // Optimistic IDB write — same-device case. We have the full
+      // four-tuple locally from `prep`; no decryption needed. The
+      // Convex reactive sync will eventually reconcile (forward-only
+      // state machine ensures no regression). For unlockTime we use
+      // (now + shieldWaitSeconds) as an approximation; the Convex
+      // reactive update will patch in the exact block-timestamp-based
+      // value within ~30s. See SHIELD_FLOW.md §3.4.
+      try {
+        await appendNote({
+          asset: ETH_ADDRESS,
+          assetDecimals: payload.decimals,
+          amount: payload.amount.toString(),
+          owner: addresses.poseidon,
+          secret: "0x" + BigInt(prep.secret).toString(16).padStart(64, "0"),
+          networkChainId: payload.chainId,
+          deploymentAddress: deployment.pampaloAddress,
+          leafCommitment: prep.leafCommitment,
+          origin: "shield",
+          state: "queued",
+          unlockTime:
+            Math.floor(Date.now() / 1000) + deployment.shieldWaitSeconds,
+        });
+      } catch (idbErr) {
+        // Don't fail the user-visible flow if IDB write hiccups —
+        // Convex reactive sync will populate the row from the chain
+        // event within ~30s on its own.
+        console.warn("[shield] optimistic IDB write failed", idbErr);
+      }
+
+      setPhase("done");
+      toast.success(
+        `Shield broadcast · ${txHash.slice(0, 10)}…${txHash.slice(-6)}`,
+      );
+      console.log("[shield] broadcast", {
         chainId: payload.chainId,
-        to: prep.to,
-        value: prep.value,
+        txHash,
         leafCommitment: prep.leafCommitment,
-        secret: prep.secret,
-        encryptedPayload: prep.encryptedPayload,
-        publicInputs: prep.publicInputs,
-        proofBytes: prep.proofBytes,
-        signedTx: signed,
-        broadcastEndpoint: "(skipped — would call rpc.sendRawTransaction)",
       });
+      onOpenChange(false);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
@@ -177,13 +218,17 @@ export function ShieldConfirmSheet({
     }
   };
 
-  const closeable = phase !== "preparing" && phase !== "signing";
+  const closeable =
+    phase !== "preparing" &&
+    phase !== "signing" &&
+    phase !== "broadcasting";
   const confirmDisabled =
     !payload ||
     !deployment ||
     phase === "preparing" ||
     phase === "signing" ||
-    phase === "signed";
+    phase === "broadcasting" ||
+    phase === "done";
 
   const confirmLabel = (() => {
     switch (phase) {
@@ -191,8 +236,10 @@ export function ShieldConfirmSheet({
         return "Generating proof…";
       case "signing":
         return "Awaiting passkey…";
-      case "signed":
-        return "Signed — see console";
+      case "broadcasting":
+        return "Broadcasting…";
+      case "done":
+        return "Done";
       case "error":
         return "Try again";
       default:
@@ -266,7 +313,7 @@ export function ShieldConfirmSheet({
             long ETH amounts blew it out past the dialog width; the
             column layout sidesteps that and keeps Cancel visible. */}
         <div className="flex flex-col gap-2">
-          {phase !== "signed" && (
+          {phase !== "done" && (
             <button
               type="button"
               onClick={onConfirm}
@@ -279,7 +326,9 @@ export function ShieldConfirmSheet({
                 "disabled:cursor-not-allowed disabled:opacity-60",
               )}
             >
-              {(phase === "preparing" || phase === "signing") && (
+              {(phase === "preparing" ||
+                phase === "signing" ||
+                phase === "broadcasting") && (
                 <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
               )}
               <span className="truncate">{confirmLabel}</span>
@@ -297,11 +346,11 @@ export function ShieldConfirmSheet({
               "disabled:cursor-not-allowed disabled:opacity-50",
             )}
           >
-            {phase === "signed" ? "Close" : "Cancel"}
+            {phase === "done" ? "Close" : "Cancel"}
           </button>
         </div>
 
-        {phase === "signed" && prepared && signedTx && (
+        {phase === "done" && prepared && signedTx && (
           <details className="rounded-xl bg-paper-lo px-3.5 py-3 text-[11.5px] text-ink-soft">
             <summary className="cursor-pointer select-none font-semibold text-ink">
               Prepared TX details (signed, not broadcast)
@@ -390,7 +439,7 @@ function StatusLine({
       </div>
     );
   }
-  if (phase === "signed") {
+  if (phase === "done") {
     return (
       <div className="rounded-xl border border-[var(--priv-soft-2)] bg-[var(--priv-soft)] px-3.5 py-2.5 text-[12.5px] text-[var(--priv)]">
         Signed transaction is ready. Check the browser console for the

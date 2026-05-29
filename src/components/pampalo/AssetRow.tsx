@@ -8,9 +8,11 @@ import {
   networkSlugForChainId,
   type NetworkSlug,
 } from "./NetworkChip";
+import { PendingShieldsList } from "./PendingShieldsList";
 import { SplitBar } from "./SplitBar";
 import { SplitSlider } from "./SplitSlider";
 import { SunIcon, MoonIcon } from "./SunMoonIcons";
+import type { PendingNote } from "@/lib/use-private-balances";
 
 export type AssetRowData = {
   symbol: string;
@@ -96,12 +98,21 @@ export function AssetRow({
    * would enforce anyway. Undefined → no constraint (slider can go to 0).
    */
   minPub,
+  /** Notes still counting down to unlock. Drives the collapsable list. */
+  queuedNotes,
+  /** Notes whose unlockTime has passed; user can finalise. */
+  executableNotes,
+  /** Per-note finalise handler. */
+  onFinalise,
   className,
 }: {
   asset: AssetRowData;
   onMove?: (payload: MovePayload) => void;
   shieldable?: boolean;
   minPub?: number;
+  queuedNotes?: PendingNote[];
+  executableNotes?: PendingNote[];
+  onFinalise?: (note: PendingNote) => void;
   className?: string;
 }) {
   const dp = asset.roundTo ?? DEFAULT_ROUND_TO[asset.symbol] ?? 4;
@@ -359,6 +370,15 @@ export function AssetRow({
         </div>
 
         {actionRow}
+
+        <PendingShieldsList
+          symbol={asset.symbol}
+          decimals={asset.decimals}
+          queuedNotes={queuedNotes ?? []}
+          executableNotes={executableNotes ?? []}
+          onFinalise={onFinalise}
+          roundTo={asset.roundTo}
+        />
       </div>
 
       {/* ─── Desktop: horizontal row with action stack on the right ─── */}
@@ -390,6 +410,14 @@ export function AssetRow({
               entirely when the asset isn't shieldable, so the card
               doesn't carry empty whitespace. */}
           {actionRow !== null && <div className="mt-3">{actionRow}</div>}
+          <PendingShieldsList
+            symbol={asset.symbol}
+            decimals={asset.decimals}
+            queuedNotes={queuedNotes ?? []}
+            executableNotes={executableNotes ?? []}
+            onFinalise={onFinalise}
+            roundTo={asset.roundTo}
+          />
         </div>
       </div>
     </div>

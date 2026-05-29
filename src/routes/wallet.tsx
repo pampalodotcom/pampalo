@@ -7,6 +7,10 @@ import { api } from "../../convex/_generated/api";
 import { AccountAvatar } from "@/components/pampalo/AccountAvatar";
 import { AssetRow, type AssetRowData } from "@/components/pampalo/AssetRow";
 import { warmShield } from "@/lib/shield-prep";
+import {
+  usePrivateBalances,
+  type AssetBucket,
+} from "@/lib/use-private-balances";
 import { useShieldBudget } from "@/lib/use-shield-budget";
 import {
   ShieldConfirmSheet,
@@ -194,6 +198,12 @@ function Dashboard({
   const [shieldPayload, setShieldPayload] =
     useState<ShieldConfirmPayload | null>(null);
 
+  // IDB-derived private balances + pending shields. The hook
+  // re-subscribes via useSyncExternalStore so any optimistic write or
+  // Convex reconcile path that touches `idb-notes.ts` propagates here
+  // automatically.
+  const privateBalances = usePrivateBalances();
+
   // Pre-warm the bb.js + deposit circuit bundle on idle. First-shield
   // latency is dominated by WASM warmup; doing it speculatively after
   // the page is interactive moves that cost out of the user's tap path.
@@ -357,6 +367,7 @@ function Dashboard({
                     evmAddress={evmAddress}
                     shieldableKeys={shieldableKeys}
                     onShield={setShieldPayload}
+                    privateBuckets={privateBalances.perAsset}
                   />
                 </li>
               );
@@ -550,6 +561,7 @@ function AssetGroupRow({
   evmAddress,
   shieldableKeys,
   onShield,
+  privateBuckets,
 }: {
   symbol: string;
   tokens: Token[];
@@ -557,6 +569,7 @@ function AssetGroupRow({
   evmAddress: string;
   shieldableKeys: Set<string>;
   onShield: (payload: ShieldConfirmPayload) => void;
+  privateBuckets: AssetBucket[];
 }) {
   // Same deterministic-render assumption as the BalanceCard: token list
   // is stable so hook order is stable.
@@ -589,7 +602,6 @@ function AssetGroupRow({
   const first = tokens[0];
   const decimals = first.decimals;
   const allPubResolved = chainStates.every((c) => c.pub.data || c.pub.error);
-  const allPrivResolved = chainStates.every((c) => c.priv.data || c.priv.error);
 
   const sumWei = (kind: "pub" | "priv"): bigint | null => {
     let total = 0n;
@@ -608,6 +620,28 @@ function AssetGroupRow({
 
   const priceUsd = usdPriceFor(first, prices);
 
+  // Pull the queued + executable notes for this asset group from the
+  // shared usePrivateBalances result. We match by (chainId, token
+  // address) so a multi-chain group naturally aggregates across the
+  // chains it spans. spendable also flows up so the privateWei
+  // display can reflect IDB rather than the placeholder stub.
+  const tokenKeys = new Set(
+    tokens.map((t) => `${t.chainId}:${t.address.toLowerCase()}`),
+  );
+  const matchingBuckets = privateBuckets.filter((b) =>
+    tokenKeys.has(`${b.chainId}:${b.asset}`),
+  );
+  const queuedNotes = matchingBuckets.flatMap((b) => b.queuedNotes);
+  const executableNotes = matchingBuckets.flatMap((b) => b.executableNotes);
+  const spendableWei = matchingBuckets.reduce(
+    (sum, b) => sum + b.spendable,
+    0n,
+  );
+
+  // Reads of `usePrivateBalance` were a stub returning 0; the IDB
+  // facade is now the source of truth. We surface `spendable` only —
+  // pendingQueued + pendingExecutable get their own affordance below
+  // the slider (PendingShieldsList) so they don't double-count.
   const data: AssetRowData = {
     symbol: first.symbol,
     name: first.name,
@@ -615,7 +649,7 @@ function AssetGroupRow({
     roundTo: first.roundTo,
     priceUsd,
     publicWei: allPubResolved ? sumWei("pub") : null,
-    privateWei: allPrivResolved ? sumWei("priv") : null,
+    privateWei: spendableWei,
     chainIds: tokens.map((t) => t.chainId),
   };
 
@@ -663,6 +697,17 @@ function AssetGroupRow({
       asset={data}
       shieldable={shieldable}
       minPub={minPub}
+      queuedNotes={queuedNotes}
+      executableNotes={executableNotes}
+      onFinalise={(note) => {
+        // Finalise CTA wiring lands in a follow-up — for now we
+        // just point the user at /sentry where Sponsor finalise
+        // already works for any unlocked shield.
+        toast(
+          "Finalise on /sentry for now — wallet-side CTA lands next.",
+        );
+        console.log("[finalise]", note);
+      }}
       onMove={(payload) => {
         if (payload.intent === "shield") {
           // Slice-6: open the proof-gen + passkey-sign confirm sheet.

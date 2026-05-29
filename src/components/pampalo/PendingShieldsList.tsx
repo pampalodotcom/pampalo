@@ -1,0 +1,172 @@
+import { useState } from "react";
+import { ChevronDown, Clock3, Moon, Sparkles } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { weiToNumber } from "@/lib/balances";
+import type { PendingNote } from "@/lib/use-private-balances";
+
+// Collapsable per-asset list of pending shields shown beneath the
+// SplitSlider on each AssetRow. Surfaces both buckets:
+//
+//   queuedNotes      — countdown to unlock
+//   executableNotes  — "Finalise" CTA (actual wiring deferred —
+//                       passes the note up to the parent to handle)
+//
+// Hidden entirely when total is zero so a fresh-balance asset doesn't
+// carry empty whitespace.
+
+type Props = {
+  symbol: string;
+  decimals: number;
+  /** Notes still counting down to unlock. */
+  queuedNotes: PendingNote[];
+  /** Notes whose unlockTime has passed; user can finalise. */
+  executableNotes: PendingNote[];
+  /** Per-note finalise handler. Optional — when omitted the button is
+   *  a no-op placeholder; the cleaner UX path is to wire to a confirm
+   *  sheet at the wallet level. */
+  onFinalise?: (note: PendingNote) => void;
+  /** Roughly how many display digits to show for the amount column. */
+  roundTo?: number;
+};
+
+const DEFAULT_ROUND_TO: Partial<Record<string, number>> = {
+  ETH: 5,
+  USDC: 2,
+  AUDD: 2,
+};
+
+export function PendingShieldsList({
+  symbol,
+  decimals,
+  queuedNotes,
+  executableNotes,
+  onFinalise,
+  roundTo,
+}: Props) {
+  const [open, setOpen] = useState(false);
+  const total = queuedNotes.length + executableNotes.length;
+  if (total === 0) return null;
+
+  const dp = roundTo ?? DEFAULT_ROUND_TO[symbol] ?? 4;
+  const readyCount = executableNotes.length;
+
+  return (
+    <div className="mt-3 rounded-2xl border border-line bg-paper-lo">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          "flex w-full items-center justify-between gap-2 px-3.5 py-2.5",
+          "text-left text-[12.5px] text-ink-soft",
+          "transition-colors hover:bg-paper-lo/60",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-faint",
+          "rounded-2xl",
+        )}
+        aria-expanded={open}
+      >
+        <span className="inline-flex items-center gap-2">
+          <Moon className="size-3.5 text-[var(--priv)]" aria-hidden />
+          <span className="font-semibold text-ink">
+            {total} pending shield{total === 1 ? "" : "s"}
+          </span>
+          {readyCount > 0 && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2 py-0.5",
+                "bg-[var(--priv-soft)] text-[var(--priv)]",
+                "text-[10.5px] font-semibold uppercase tracking-[0.08em]",
+              )}
+            >
+              <Sparkles className="size-3" aria-hidden />
+              {readyCount} ready
+            </span>
+          )}
+        </span>
+        <ChevronDown
+          className={cn(
+            "size-4 text-ink-mute transition-transform",
+            open && "rotate-180",
+          )}
+          aria-hidden
+        />
+      </button>
+
+      {open && (
+        <ul className="flex flex-col gap-1 border-t border-line px-2 py-2">
+          {executableNotes.map((n) => (
+            <li
+              key={`exec-${n.leafCommitment}`}
+              className={cn(
+                "flex items-center justify-between gap-2 rounded-xl px-2 py-1.5",
+                "bg-[var(--priv-soft)]/40",
+              )}
+            >
+              <span className="inline-flex items-center gap-2 text-[12px] text-ink">
+                <Sparkles
+                  className="size-3.5 text-[var(--priv)]"
+                  aria-hidden
+                />
+                <span className="font-mono font-semibold">
+                  {fmtAmount(n.amount, decimals, dp)} {symbol}
+                </span>
+                <span className="text-[11px] text-ink-mute">
+                  ready to finalise
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => onFinalise?.(n)}
+                disabled={!onFinalise}
+                className={cn(
+                  "inline-flex h-7 items-center gap-1 rounded-full px-3",
+                  "bg-[var(--priv)] text-white text-[11.5px] font-semibold",
+                  "transition-opacity hover:opacity-90",
+                  "disabled:cursor-not-allowed disabled:opacity-50",
+                )}
+              >
+                Finalise
+              </button>
+            </li>
+          ))}
+          {queuedNotes.map((n) => (
+            <li
+              key={`queued-${n.leafCommitment}`}
+              className="flex items-center justify-between gap-2 px-2 py-1.5"
+            >
+              <span className="inline-flex items-center gap-2 text-[12px] text-ink">
+                <Clock3 className="size-3.5 text-ink-mute" aria-hidden />
+                <span className="font-mono">
+                  {fmtAmount(n.amount, decimals, dp)} {symbol}
+                </span>
+              </span>
+              <span className="font-mono text-[11px] text-ink-mute">
+                unlocks {countdownLabel(n.unlockTime)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function fmtAmount(wei: bigint, decimals: number, dp: number): string {
+  const n = weiToNumber(wei, decimals);
+  return n.toLocaleString("en-US", {
+    minimumFractionDigits: dp,
+    maximumFractionDigits: dp,
+  });
+}
+
+function countdownLabel(unlockTimeSec: number): string {
+  const delta = unlockTimeSec * 1000 - Date.now();
+  if (delta <= 0) return "now";
+  const seconds = Math.round(delta / 1000);
+  if (seconds < 60) return `in ${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `in ${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `in ${hours}h`;
+  const days = Math.round(hours / 24);
+  return `in ${days}d`;
+}
