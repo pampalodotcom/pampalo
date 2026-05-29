@@ -278,6 +278,62 @@ export default defineSchema({
     // SHIELD_FLOW.md §10.3.
     .index("by_state", ["state"]),
 
+  // Mirror of `PoseidonMerkleTree.LeafInserted` events. One row per
+  // executed shield / transfer / unshield output, captured by the
+  // shield-queue indexer (the inheriting Pampalo contract is the
+  // emitter). Lets the wallet rebuild the off-chain merkle tree to
+  // generate transfer / unshield proofs without scanning chain logs
+  // itself. See TRANSFERS.md §9.5.
+  //
+  // (epoch, leafIndex) is the natural compound PK; both are indexed
+  // event topics. We expose two queries: ordered-walk to populate the
+  // local PoseidonMerkleTree mirror, and a by-commitment lookup to
+  // resolve "what leaf index does this note's leafCommitment occupy?"
+  // for clients that already track the commitment in IDB.
+  //
+  // `epoch` (called `treeIndex` in CONTEXT.md / IDB schemas) advances
+  // whenever the on-chain tree fills (2^11 = 2048 leaves per epoch).
+  // For v1 Base Sepolia traffic we expect epoch=0 indefinitely.
+  pampaloLeaves: defineTable({
+    deploymentId: v.id("pampaloDeployments"),
+    epoch: v.number(),
+    leafIndex: v.number(),
+    leafCommitment: v.string(),   // 0x + 64 hex (lowercased)
+    insertedTxHash: v.string(),
+    insertedAt: v.number(),       // ms — first-seen via indexer
+  })
+    .index("by_deployment_and_position", ["deploymentId", "epoch", "leafIndex"])
+    .index("by_deployment_and_commitment", ["deploymentId", "leafCommitment"])
+    .index("by_deployment", ["deploymentId"]),
+
+  // Mirror of `Pampalo.NotePayload(bytes ciphertext)` events. Every
+  // output note (shield, transfer, unshield) emits one. The receiver
+  // walks this table on Sync, trial-decrypting each ciphertext with
+  // their envelope private key — successful decrypts identify notes
+  // owned by the user (TRANSFERS.md §9.5).
+  //
+  // Shield emissions ARE included here even though they're also in
+  // shieldQueueEntries.encryptedPayload (shieldQueueEntries.byShielder
+  // is the optimization path for known-self shields). The receiver
+  // path is the only one that finds cross-recipient transfer notes,
+  // so duplicating the shield case is the price of one table
+  // covering all NotePayload sources.
+  transferNotes: defineTable({
+    deploymentId: v.id("pampaloDeployments"),
+    encryptedPayload: v.bytes(),  // raw ECIES blob from the event
+    txHash: v.string(),
+    blockNumber: v.number(),
+    logIndex: v.number(),         // tx-internal ordering
+    emittedAt: v.number(),        // ms — first-seen via indexer
+  })
+    .index("by_deployment_and_block", [
+      "deploymentId",
+      "blockNumber",
+      "logIndex",
+    ])
+    .index("by_deployment_and_tx", ["deploymentId", "txHash"])
+    .index("by_deployment", ["deploymentId"]),
+
   // Cached Uniswap pool addresses. Pool addresses are deterministic
   // (CREATE2 from factory + tokens [+ fee for v3]) and can always be
   // recomputed on-chain via factory.getPair / factory.getPool, but

@@ -10,19 +10,32 @@
 
 import { get, set } from "idb-keyval";
 
-const KEY = "pampalo:sync-cursor:v1";
+// Keyed per-wallet so a multi-passkey browser profile keeps each
+// wallet's sync watermarks separate. See idb-notes.ts for the wider
+// "per-wallet IDB scoping" rationale.
+const KEY_PREFIX = "pampalo:sync-cursor:v2:";
+
+function cursorKey(walletAddress: string): string {
+  return KEY_PREFIX + walletAddress.toLowerCase();
+}
 
 export type SyncCursor = {
   /** Highest `queuedAt` (ms) we've already iterated for the shield queue. */
   shieldQueueLastQueuedAt?: number;
 };
 
-export async function readSyncCursor(): Promise<SyncCursor> {
-  const rec = await get<SyncCursor>(KEY);
+export async function readSyncCursor(
+  walletAddress: string,
+): Promise<SyncCursor> {
+  const rec = await get<SyncCursor>(cursorKey(walletAddress));
   return rec ?? {};
 }
 
-export async function writeSyncCursor(patch: SyncCursor): Promise<void> {
-  const current = (await get<SyncCursor>(KEY)) ?? {};
-  await set(KEY, { ...current, ...patch });
+export async function writeSyncCursor(
+  walletAddress: string,
+  patch: SyncCursor,
+): Promise<void> {
+  const key = cursorKey(walletAddress);
+  const current = (await get<SyncCursor>(key)) ?? {};
+  await set(key, { ...current, ...patch });
 }

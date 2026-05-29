@@ -71,7 +71,27 @@ export function BalanceCard({
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <p className="eyebrow">Total Balance</p>
+        {/* Left column holds the eyebrow + balance so they stay pinned to
+            the top of the row. The action buttons stack into a tall column
+            on the right; keeping the balance in its own column (rather than
+            a sibling row below) prevents that column's height from pushing
+            the balance down and leaving a gap under the eyebrow. */}
+        <div className="flex min-w-0 flex-col gap-3.5">
+          <p className="eyebrow">Total Balance</p>
+          {isLoading ? (
+            <span
+              className="skel"
+              style={{ width: "60%", height: 48, borderRadius: 12 }}
+            />
+          ) : (
+            <h1
+              className="font-serif font-bold leading-[0.95] tracking-[-0.02em] text-[44px] sm:text-[52px] text-ink"
+              style={{ margin: 0 }}
+            >
+              {formatUsd(total)}
+            </h1>
+          )}
+        </div>
         <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
           {onSend && (
             <button
@@ -135,20 +155,6 @@ export function BalanceCard({
           <SyncIndicator />
         </div>
       </div>
-
-      {isLoading ? (
-        <span
-          className="skel"
-          style={{ width: "60%", height: 48, borderRadius: 12 }}
-        />
-      ) : (
-        <h1
-          className="font-serif font-bold leading-[0.95] tracking-[-0.02em] text-[44px] sm:text-[52px] text-ink"
-          style={{ margin: 0 }}
-        >
-          {formatUsd(total)}
-        </h1>
-      )}
 
       <div className="flex flex-wrap items-center gap-2.5">
         <span className="bal-chip pub">

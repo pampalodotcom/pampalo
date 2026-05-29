@@ -284,6 +284,36 @@ roles, helper class names, cap accounting). Verifier contract filenames
 and `circuits/{deposit,transfer,transfer_external,withdraw}/` stay
 upstream-named because they're bytecode-bound.
 
+**Gas sponsor / Relayer account**:
+One of the EOAs the Pampalo backend uses to broadcast a user's
+**Transfer** without revealing their EVM address. Five accounts per
+**sponsoring chain**, derived from a single backend `RELAYER_MNEMONIC`
+at BIP44 path `m/44'/60'/0'/0/{0..4}`. The accounts are interchangeable
+and selected LRU among the idle, funded subset; concurrent transfers
+on the same chain never collide on the same account because the
+acquire/release flow is gated by an atomic Convex mutation. Pampalo's
+contract is permissionless on `transfer(...)`, so the relayer holds
+no on-chain role — its only privilege is "has ETH to spend on gas."
+See `TRANSFERS.md` and ADR 0010.
+
+**Sponsoring chain**:
+A `pampaloDeployments` row with `sponsoringTxs = true`. Means the
+backend operates a relayer pool for that chain and the user-side
+transfer UI defaults to private (gas-paid-by-relayer) broadcasting.
+Defaults to `false` everywhere except Base Sepolia at seed time;
+flipping the flag on a new chain is a manual operator decision.
+
+**Self-broadcast fallback**:
+The user-side path where the wallet pays gas and signs the
+`Pampalo.transfer(...)` call directly via the existing
+`signTransactionWithPasskey` flow. Reached either at chain-pick time
+(the chain isn't a sponsoring chain) or at submit time (the relayer
+pool is busy / exhausted). The transfer still works but the user's
+EVM address is publicly linked to the on-chain transfer event —
+breaking the EOA-anonymity property the relayer otherwise provides.
+The UX always surfaces this with an explicit confirm dialog before
+proceeding; never silent.
+
 ## Relationships
 
 - A **mnemonic** deterministically produces one **EVM address**, one

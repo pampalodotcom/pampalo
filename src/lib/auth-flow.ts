@@ -460,6 +460,87 @@ export async function exportMnemonic(): Promise<string> {
   return mnemonic
 }
 
+// ─── Export wallet private key (one-shot) ────────────────────────────────
+// Mirrors `exportMnemonic` but returns the m/44'/60'/0'/0/0 private key
+// (0x + 64 hex) instead of the 12-word phrase. Used by transfer-prep so
+// it can populate `owner_secret` on input notes for proof generation.
+// Caller drops the key as soon as the proof is built; we don't keep a
+// module-scoped copy.
+
+export async function getWalletPrivateKeyOnce(): Promise<string> {
+  const mnemonic = await exportMnemonic()
+  try {
+    const wallet = Wallet.fromPhrase(mnemonic)
+    return wallet.privateKey
+  } finally {
+    // exportMnemonic returns a string we can't zero in-place; the best
+    // we can do is drop the reference and let GC collect.
+  }
+}
+
+// ─── One-PRF wallet access for compound flows ───────────────────────────
+// Some flows need BOTH the wallet's private key (e.g. transfer-prep
+// populating `owner_secret` on input notes) AND `wallet.signTransaction`
+// for the broadcast. Doing those separately via getWalletPrivateKeyOnce
+// + signTransactionWithPasskey costs two passkey prompts back-to-back.
+// `withUnlockedWallet` runs one PRF ceremony and yields the unlocked
+// `Wallet` to a callback for the full compound operation.
+//
+// Lifecycle:
+//   1. PRF + unwrap DEK + decrypt mnemonic (single ceremony)
+//   2. wallet = Wallet.fromPhrase(mnemonic)
+//   3. await fn(wallet) — caller does whatever needs the unlocked wallet
+//   4. Opportunistic preferences sync via the dek + sessionToken (matches
+//      signTransactionWithPasskey's "trigger (b)")
+//   5. Zero dekBytes + mnemonicBuf in finally
+
+export async function withUnlockedWallet<T>(
+  fn: (wallet: HDNodeWallet) => Promise<T>,
+): Promise<T> {
+  let blob = getBlob()
+  if (!blob) {
+    const boot = await bootstrapFromCookie()
+    if (!boot) throw new Error('Session expired — please sign in again.')
+    blob = boot.blob
+  }
+  const cred = blob.credentials[0]
+
+  const localChallenge = bufferToBase64Url(
+    crypto.getRandomValues(new Uint8Array(32)),
+  )
+  const { prfOutput } = await runGetForPrf({
+    challenge: localChallenge,
+    rpId: getRpId() ?? rpIdHint(),
+    allowCredentialId: bufferToBase64Url(cred.credentialId),
+    allowCredentialTransports: cred.transports,
+  })
+  if (!prfOutput) throw new PrfNotSupportedError()
+
+  const kek = await deriveKekFromPrfOutput(prfOutput)
+  const dekBytes = await aesGcmDecrypt(kek, cred.wrappedDek, cred.wrappedDekIv)
+  const dekKey = await importDekBytes(new Uint8Array(dekBytes), false)
+  const mnemonicBuf = await aesGcmDecrypt(
+    dekKey,
+    blob.mnemonicCiphertext,
+    blob.mnemonicIv,
+  )
+  const mnemonic = bufferToUtf8(mnemonicBuf)
+
+  try {
+    const wallet = Wallet.fromPhrase(mnemonic)
+    const result = await fn(wallet)
+    // Prefs sync piggyback — same trigger (b) as signTransactionWithPasskey.
+    const sessionToken = getSessionToken()
+    if (sessionToken) {
+      await syncOnTxSign(dekKey, sessionToken)
+    }
+    return result
+  } finally {
+    new Uint8Array(dekBytes).fill(0)
+    new Uint8Array(mnemonicBuf).fill(0)
+  }
+}
+
 // ─── Sign Transaction ────────────────────────────────────────────────────
 // Mirrors `exportMnemonic` but signs a raw transaction request instead of
 // returning the mnemonic. The plaintext mnemonic never leaves this

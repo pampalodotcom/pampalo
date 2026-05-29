@@ -28,8 +28,19 @@
 
 import { del, get, set } from "idb-keyval";
 
-const KEY = "pampalo:notes:v1";
+// IDB is keyed per-wallet so two passkeys registered on the same
+// browser profile (e.g. ben@hooper.link + a test account) never see
+// each other's notes. The key embeds the wallet's lowercased EVM
+// address; reads return EMPTY until `setActiveWallet` is called on
+// sign-in. See AUTH.md threat model + the per-wallet scoping notes.
+const KEY_PREFIX = "pampalo:notes:v2:";
 const CHANNEL_NAME = "pampalo:notes";
+
+let activeWallet: string | null = null;
+
+function activeKey(): string | null {
+  return activeWallet ? KEY_PREFIX + activeWallet : null;
+}
 
 /** The four-tuple plus spend state — see CONTEXT.md "Note". */
 export type NoteState =
@@ -102,13 +113,21 @@ function notify(): void {
 }
 
 async function readFromIdb(): Promise<Record> {
-  const rec = await get<Record>(KEY);
+  const key = activeKey();
+  if (!key) return { notes: [] };
+  const rec = await get<Record>(key);
   if (!rec) return { notes: [] };
   return rec;
 }
 
 async function writeToIdb(rec: Record): Promise<void> {
-  await set(KEY, rec);
+  const key = activeKey();
+  if (!key) {
+    throw new Error(
+      "idb-notes: cannot write before setActiveWallet — caller should gate on auth state",
+    );
+  }
+  await set(key, rec);
 }
 
 async function refresh(): Promise<void> {
@@ -118,9 +137,42 @@ async function refresh(): Promise<void> {
 }
 
 function ensureHydrated(): Promise<void> {
+  // No active wallet → hydrate as empty so React subscribers don't
+  // hang on an unresolved promise. They re-hydrate when setActiveWallet
+  // fires.
+  if (!activeWallet) {
+    if (cache === null) cache = EMPTY;
+    return Promise.resolve();
+  }
   if (cache !== null) return Promise.resolve();
   if (!hydratePromise) hydratePromise = refresh();
   return hydratePromise;
+}
+
+/**
+ * Bind the notes facade to a wallet. Call from auth-flow whenever
+ * sign-in / re-auth / bootstrap resolves with an address; call with
+ * `null` on sign-out. Switching from one wallet to another nukes the
+ * in-memory cache and triggers a fresh hydrate from that wallet's
+ * bucket, so React subscribers transition cleanly.
+ */
+export function setActiveWallet(address: string | null): void {
+  const next = address ? address.toLowerCase() : null;
+  if (next === activeWallet) return;
+  activeWallet = next;
+  cache = null;
+  hydratePromise = null;
+  notify();
+  if (next) {
+    // Kick off the hydrate — subscribers' next snapshot read finds the
+    // new wallet's data.
+    void ensureHydrated();
+  }
+}
+
+/** Read-only view, for debugging / observability. */
+export function getActiveWallet(): string | null {
+  return activeWallet;
 }
 
 function broadcast(): void {
@@ -257,11 +309,18 @@ export async function patchNoteByLeaf(
 /**
  * Nuke-everything path. Called by `/clear` alongside the existing
  * `wipePrefsCompletely()` and `clearTransactions()`. Not used in
- * normal flows.
+ * normal flows. Scoped to the active wallet's bucket — other wallets'
+ * notes on this device are untouched.
  */
 export async function clearNotes(): Promise<void> {
-  await del(KEY);
-  cache = [];
+  const key = activeKey();
+  if (!key) {
+    cache = EMPTY;
+    notify();
+    return;
+  }
+  await del(key);
+  cache = EMPTY;
   notify();
   broadcast();
 }

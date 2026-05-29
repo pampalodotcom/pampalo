@@ -106,10 +106,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
           return;
         }
+        const cachedAddresses = getAddresses();
+        // The bootstrap path reads addresses from localStorage without
+        // going through setAddresses, so the per-wallet IDB scoping
+        // (idb-notes, idb-sync-cursor) hasn't been bound yet. Bind
+        // it here so the wallet UI doesn't transiently render data
+        // from a different passkey's bucket. Dynamic import keeps the
+        // notes module out of the bootstrap critical path.
+        if (cachedAddresses?.evm) {
+          void import("./idb-notes").then((m) =>
+            m.setActiveWallet(cachedAddresses.evm),
+          );
+        }
         setState({
           status: "authenticated",
           sessionToken: boot.sessionToken,
-          addresses: getAddresses(),
+          addresses: cachedAddresses,
         });
       } catch {
         if (ac.signal.aborted) return;

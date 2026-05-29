@@ -26,6 +26,48 @@ import { postJson } from '@/lib/http'
 
 export const Route = createFileRoute('/')({ component: Landing })
 
+// The landing hero is the tallest BeachScene in the app (other routes use
+// 220–280). A flat 420px suits the iPhone-16 mockup the layout targets
+// (402×874), but on a short viewport — e.g. a Samsung S21 with Chrome's
+// address bar showing, ~640px visible — 420px eats most of the screen and
+// only -mt-10 (40px) of the card overlaps it, so the hero reads as a huge
+// gap above the card. Clamp to ~46% of the viewport height, capped at 420
+// so tall screens are unchanged.
+const HERO_MAX_HEIGHT = 420
+const heroHeightFor = (viewportHeight: number) =>
+  Math.min(HERO_MAX_HEIGHT, Math.round(viewportHeight * 0.4))
+
+function useHeroHeight(): number {
+  // Start at the cap so SSR and the first client paint agree (no hydration
+  // mismatch); the effect clamps to the real viewport right after mount.
+  const [height, setHeight] = useState(HERO_MAX_HEIGHT)
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const recompute = () => {
+      const next = heroHeightFor(window.innerHeight)
+      // Sub-threshold jitter (the address bar nudging innerHeight on scroll)
+      // shouldn't tear down + rebuild the three.js scene, which keys on
+      // height. Only commit changes worth a rebuild.
+      setHeight((prev) => (Math.abs(prev - next) > 24 ? next : prev))
+    }
+    const onResize = () => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(recompute, 200)
+    }
+    recompute()
+    window.addEventListener('resize', onResize)
+    window.addEventListener('orientationchange', onResize)
+    return () => {
+      if (timer) clearTimeout(timer)
+      window.removeEventListener('resize', onResize)
+      window.removeEventListener('orientationchange', onResize)
+    }
+  }, [])
+
+  return height
+}
+
 type HelpKind = 'prf-not-supported' | 'unknown-credential'
 
 type LocalUiState =
@@ -44,6 +86,7 @@ function Landing() {
   const navigate = useNavigate()
   const auth = useAuth()
   const { theme } = useTheme()
+  const heroHeight = useHeroHeight()
   const [ui, setUi] = useState<LocalUiState>({ kind: 'idle' })
   const conditionalAbortRef = useRef<AbortController | null>(null)
 
@@ -173,7 +216,7 @@ function Landing() {
     <main className="phone-shell flex flex-1 flex-col">
       {/* Full-width beach band; brand floats over it inside the centered column */}
       <div className="relative shrink-0 w-full">
-        <BeachScene height={420} theme={theme} />
+        <BeachScene height={heroHeight} theme={theme} />
         <div className="absolute inset-x-0 top-12 z-10 pointer-events-none">
           <div className="mx-auto flex w-full max-w-7xl items-center justify-end px-6">
             <div className="pointer-events-auto">

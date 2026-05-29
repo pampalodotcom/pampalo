@@ -28,6 +28,7 @@
 // permanently-undecryptable row doesn't pin us forever.
 
 import { ethers, Wallet } from "ethers";
+import { poseidon2Hash } from "@zkpassport/poseidon2";
 import { api } from "../../convex/_generated/api";
 import { NoteDecryption } from "../../shared/classes/Note";
 import {
@@ -41,6 +42,8 @@ import { ETH_SENTINEL } from "./eth";
 import {
   appendNote,
   findNote,
+  listNotes,
+  patchNoteByLeaf,
   type NoteState,
   type StoredNote,
 } from "./idb-notes";
@@ -89,7 +92,7 @@ export async function syncShieldNotesWithPrivKey(
     convex.query(api.shieldQueue.store.byShielder, { shielder: evmAddress }),
     convex.query(api.shieldQueue.store.enabledDeployments, {}),
     convex.query(api.catalog.tokens.list, {}),
-    readSyncCursor(),
+    readSyncCursor(evmAddress),
   ]);
 
   // Index helpers.
@@ -179,9 +182,169 @@ export async function syncShieldNotesWithPrivKey(
   }
 
   if (newMax > previousMax) {
-    await writeSyncCursor({ shieldQueueLastQueuedAt: newMax });
+    await writeSyncCursor(evmAddress, { shieldQueueLastQueuedAt: newMax });
   }
+
+  // ─── Receiver-side trial-decrypt (TRANSFERS.md §9.5) ────────────────
+  // The byShielder path above covers self-shields. Cross-recipient
+  // transfers don't carry the receiver's identity on-chain — the only
+  // way to find them is to attempt ECIES decrypt on every NotePayload
+  // emitted on each sponsoring chain and keep the ones that decrypt
+  // with the user's envelope private key.
+  for (const dep of deployments) {
+    try {
+      await scanTransferInNotesForChain(
+        envelopePrivKey,
+        dep.chainId,
+        dep.pampaloAddress.toLowerCase(),
+        tokens,
+        result,
+      );
+    } catch (e) {
+      console.warn(
+        "[sync-shield-notes] transfer-in scan failed on chain",
+        dep.chainId,
+        e,
+      );
+    }
+  }
+
   return result;
+}
+
+type TokenForDecimals = {
+  chainId: number;
+  address: string;
+  decimals: number;
+};
+
+async function scanTransferInNotesForChain(
+  envelopePrivKey: string,
+  chainId: number,
+  pampaloAddress: string,
+  tokens: ReadonlyArray<TokenForDecimals>,
+  result: SyncShieldNotesResult,
+): Promise<void> {
+  const convex = getConvexClient();
+  if (!convex) return;
+
+  const [payloads, leaves] = await Promise.all([
+    convex.query(api.shieldQueue.store.notePayloadsForChain, { chainId }),
+    convex.query(api.shieldQueue.store.leavesForChain, { chainId }),
+  ]);
+
+  // (commitment → position) lookup so each successful decrypt resolves
+  // to a leafIndex without an extra per-row query.
+  const leafByCommitment = new Map<
+    string,
+    { epoch: number; leafIndex: number; insertedTxHash: string }
+  >();
+  for (const l of leaves) {
+    leafByCommitment.set(l.leafCommitment.toLowerCase(), {
+      epoch: l.epoch,
+      leafIndex: l.leafIndex,
+      insertedTxHash: l.insertedTxHash,
+    });
+  }
+
+  // Backfill leafIndex / treeIndex on existing IDB notes that are
+  // spendable but missing position info. The shield-side IDB writer
+  // (useShieldQueueSync) only patches state + unlockTime + txHash —
+  // the leaf position lives in the new pampaloLeaves table. Without
+  // this backfill, notes shielded before the LeafInserted indexer
+  // landed (or whose useShieldQueueSync ran before the leaf was
+  // indexed) can't be spent in a transfer because transfer-prep
+  // demands leafIndex. Cheap: a single Map lookup per note.
+  const allNotes = await listNotes();
+  for (const note of allNotes) {
+    if (note.networkChainId !== chainId) continue;
+    if (note.state !== "spendable") continue;
+    if (note.leafIndex !== undefined) continue;
+    const pos = leafByCommitment.get(note.leafCommitment.toLowerCase());
+    if (!pos) continue;
+    await patchNoteByLeaf(note.leafCommitment, {
+      leafIndex: pos.leafIndex,
+      treeIndex: pos.epoch,
+    });
+  }
+
+  const decimalsByAsset = new Map<string, number>();
+  for (const t of tokens) {
+    if (t.chainId !== chainId) continue;
+    decimalsByAsset.set(t.address.toLowerCase(), t.decimals);
+  }
+
+  for (const row of payloads) {
+    let plain:
+      | { secret: string; owner: string; asset_id: string; asset_amount: string }
+      | null = null;
+    try {
+      const ciphertext = ciphertextToHex(row.encryptedPayload);
+      plain = await NoteDecryption.decryptNoteData(
+        ciphertext,
+        envelopePrivKey,
+      );
+    } catch {
+      // Decrypt failed → payload is for someone else. Quiet: this is
+      // the common case in the trial-decrypt model.
+      continue;
+    }
+    if (!plain) continue;
+
+    // Recompute the leaf commitment: poseidon2([asset_id, amount,
+    // owner, secret]). Same layout as the circuits + shield-prep.
+    const leafBig = poseidon2Hash([
+      BigInt(plain.asset_id),
+      BigInt(plain.asset_amount),
+      BigInt(plain.owner),
+      BigInt(plain.secret),
+    ]);
+    const leafCommitment = "0x" + leafBig.toString(16).padStart(64, "0");
+
+    // Already in IDB? Skip — handles the shield-to-self case where
+    // byShielder already populated, and replay idempotency in general.
+    const existing = await findNote(leafCommitment);
+    if (existing) {
+      result.skippedAlreadyPresent += 1;
+      continue;
+    }
+
+    const position = leafByCommitment.get(leafCommitment);
+    if (!position) {
+      // Decrypted, but the corresponding LeafInserted hasn't been
+      // indexed yet. Wait for the next Sync — the leaf event lands
+      // before / alongside NotePayload on chain, so this is usually
+      // a same-tick cold-start race.
+      continue;
+    }
+
+    const assetBig = BigInt(plain.asset_id);
+    const asset = "0x" + assetBig.toString(16).padStart(40, "0");
+    const assetLower = asset.toLowerCase();
+    const decimals =
+      decimalsByAsset.get(assetLower) ??
+      (assetLower === ETH_SENTINEL ? 18 : 0);
+
+    await appendNote({
+      asset: assetLower,
+      assetDecimals: decimals,
+      amount: plain.asset_amount,
+      owner: "0x" + BigInt(plain.owner).toString(16).padStart(64, "0"),
+      secret: "0x" + BigInt(plain.secret).toString(16).padStart(64, "0"),
+      networkChainId: chainId,
+      deploymentAddress: pampaloAddress,
+      leafCommitment,
+      treeIndex: position.epoch,
+      leafIndex: position.leafIndex,
+      origin: "transferIn",
+      // Transfer outputs are spendable the moment they land in the
+      // tree — no queue wait like shield. The corresponding
+      // LeafInserted event has already fired (we just looked it up).
+      state: "spendable",
+      queuedTxHash: position.insertedTxHash,
+    });
+    result.added += 1;
+  }
 }
 
 function ciphertextToHex(value: ArrayBuffer | string): string {
