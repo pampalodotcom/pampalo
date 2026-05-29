@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState } from 'react'
 import {
   AlertTriangle,
   Check,
@@ -6,13 +6,13 @@ import {
   ChevronLeft,
   Copy,
   Share2,
-} from "lucide-react";
-import { toast } from "sonner";
-import { useClipboard } from "@/lib/use-clipboard";
-import { cn } from "@/lib/utils";
-import { NetworkLogo } from "../deposit/NetworkLogo";
-import { QRCanvas } from "../deposit/QRCanvas";
-import type { NetworkChoice } from "../deposit/NetworkCard";
+} from 'lucide-react'
+import { toast } from 'sonner'
+import { useClipboard } from '@/lib/use-clipboard'
+import { cn } from '@/lib/utils'
+import { NetworkLogo } from '../deposit/NetworkLogo'
+import { QRCanvas } from '../deposit/QRCanvas'
+import type { NetworkChoice } from '../deposit/NetworkCard'
 
 // Step 2 of Receive — single QR carrying all three identifiers
 // (evm + envelope + poseidon + chainId) plus the same trio rendered
@@ -21,8 +21,8 @@ import type { NetworkChoice } from "../deposit/NetworkCard";
 // recipient with everything a private *or* public sender would need.
 
 function truncate(addr: string): string {
-  if (addr.length <= 12) return addr;
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+  if (addr.length <= 12) return addr
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`
 }
 
 export function ReceiveQRStep({
@@ -32,56 +32,56 @@ export function ReceiveQRStep({
   poseidon,
   onBack,
 }: {
-  network: NetworkChoice;
-  evm: string;
-  envelope: string;
-  poseidon: string;
-  onBack: () => void;
+  network: NetworkChoice
+  evm: string
+  envelope: string
+  poseidon: string
+  onBack: () => void
 }) {
-  const [showFull, setShowFull] = useState(false);
-  const { copied: urlCopied, copy: copyUrl } = useClipboard();
+  const [showFull, setShowFull] = useState(false)
+  const { copied: urlCopied, copy: copyUrl } = useClipboard()
 
   const buildShareUrl = (): string | null => {
-    if (typeof window === "undefined") return null;
-    const params = new URLSearchParams();
+    if (typeof window === 'undefined') return null
+    const params = new URLSearchParams()
     // Short keys — the envelope public key alone is 132 hex chars, so
     // verbose param names push the QR up several version steps. See
     // /share validateSearch for the e/k/o/c mapping.
-    params.set("e", evm);
-    params.set("k", envelope);
-    params.set("o", poseidon);
-    params.set("c", String(network.chainId));
-    return `${window.location.origin}/share?${params.toString()}`;
-  };
-  const shareUrl = buildShareUrl();
+    params.set('e', evm)
+    params.set('k', envelope)
+    params.set('o', poseidon)
+    params.set('c', String(network.chainId))
+    return `${window.location.origin}/share?${params.toString()}`
+  }
+  const shareUrl = buildShareUrl()
 
   const onCopyUrl = async () => {
-    if (!shareUrl) return;
-    await copyUrl(shareUrl);
-  };
+    if (!shareUrl) return
+    await copyUrl(shareUrl)
+  }
 
   const onShareLink = async () => {
-    if (!shareUrl) return;
+    if (!shareUrl) return
     const payload: ShareData = {
       title: `Pampalo · Receive on ${network.name}`,
       text: `Send to my Pampalo wallet on ${network.name}`,
       url: shareUrl,
-    };
-    if (typeof navigator.share === "function") {
+    }
+    if (typeof navigator.share === 'function') {
       try {
-        await navigator.share(payload);
-        return;
+        await navigator.share(payload)
+        return
       } catch (e) {
-        if (e instanceof Error && e.name === "AbortError") return;
+        if (e instanceof Error && e.name === 'AbortError') return
       }
     }
     try {
-      await navigator.clipboard.writeText(shareUrl);
-      toast("Share link copied to clipboard.");
+      await navigator.clipboard.writeText(shareUrl)
+      toast('Share link copied to clipboard.')
     } catch {
-      toast.error("Couldn't share — copy an address manually.");
+      toast.error("Couldn't share — copy an address manually.")
     }
-  };
+  }
 
   return (
     <div className="flex flex-col gap-5 px-5 pt-2 pb-5 sm:px-6 sm:pt-3 sm:pb-6">
@@ -95,12 +95,12 @@ export function ReceiveQRStep({
 
       <div className="flex flex-col items-center gap-1.5 text-center">
         <h2 className="font-serif text-[22px] font-bold tracking-[-0.01em] text-ink">
-          Your receive code
+          Your share code
         </h2>
         <p className="text-[13px] text-ink-mute">
-          Scan to send to your wallet on{" "}
-          <span className="font-semibold text-ink">{network.name}</span> —
-          covers public and shielded transfers.
+          This is a link that contains all of your address details easily
+          copyable for Private Money on Pampalo{' '}
+          <span className="font-semibold text-ink">({network.name})</span>.
         </p>
       </div>
 
@@ -128,10 +128,10 @@ export function ReceiveQRStep({
           onClick={onCopyUrl}
           aria-label="Copy share URL"
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-full",
-            "border border-line bg-card px-3 h-8 text-[12px] font-semibold",
-            "transition-colors hover:bg-paper-lo",
-            urlCopied && "border-[var(--priv)] text-[var(--priv)]",
+            'inline-flex items-center gap-1.5 rounded-full',
+            'border border-line bg-card px-3 h-8 text-[12px] font-semibold',
+            'transition-colors hover:bg-paper-lo',
+            urlCopied && 'border-[var(--priv)] text-[var(--priv)]',
           )}
         >
           {urlCopied ? (
@@ -169,10 +169,10 @@ export function ReceiveQRStep({
         type="button"
         onClick={onShareLink}
         className={cn(
-          "inline-flex items-center justify-center gap-2 h-11 rounded-full",
-          "border border-line bg-card text-[13px] font-semibold text-ink",
-          "transition-colors hover:bg-paper-lo",
-          "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ink/15",
+          'inline-flex items-center justify-center gap-2 h-11 rounded-full',
+          'border border-line bg-card text-[13px] font-semibold text-ink',
+          'transition-colors hover:bg-paper-lo',
+          'focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ink/15',
         )}
       >
         <Share2 className="size-4" />
@@ -186,13 +186,13 @@ export function ReceiveQRStep({
       <div className="flex items-start gap-2.5 rounded-2xl bg-[color-mix(in_oklab,var(--priv-soft)_60%,transparent)] px-4 py-3">
         <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--priv)]" />
         <p className="text-[12.5px] leading-relaxed text-ink">
-          This code includes your public + shielded addresses together.
-          Anyone you share it with can link your EVM identity to your
-          shielded identifiers.
+          This code includes your public + shielded addresses together. Anyone
+          you share it with can link your EVM identity to your shielded
+          identifiers.
         </p>
       </div>
     </div>
-  );
+  )
 }
 
 function AddressRow({
@@ -201,13 +201,13 @@ function AddressRow({
   showFull,
   onToggleFull,
 }: {
-  label: string;
-  value: string;
-  showFull?: boolean;
-  onToggleFull?: () => void;
+  label: string
+  value: string
+  showFull?: boolean
+  onToggleFull?: () => void
 }) {
-  const { copied, copy } = useClipboard();
-  const display = showFull === false ? truncate(value) : value;
+  const { copied, copy } = useClipboard()
+  const display = showFull === false ? truncate(value) : value
   return (
     <div className="flex items-center gap-3 border-t border-line px-3 py-2.5">
       <div className="min-w-0 flex-1">
@@ -216,8 +216,8 @@ function AddressRow({
         </p>
         <p
           className={cn(
-            "mt-0.5 font-mono text-[12px] leading-snug text-ink select-all",
-            showFull === false ? "truncate" : "break-all",
+            'mt-0.5 font-mono text-[12px] leading-snug text-ink select-all',
+            showFull === false ? 'truncate' : 'break-all',
           )}
           title={value}
         >
@@ -229,15 +229,15 @@ function AddressRow({
           <button
             type="button"
             onClick={onToggleFull}
-            aria-label={showFull ? "Hide full address" : "Show full address"}
+            aria-label={showFull ? 'Hide full address' : 'Show full address'}
             aria-expanded={showFull}
-            title={showFull ? "Hide full address" : "Show full address"}
+            title={showFull ? 'Hide full address' : 'Show full address'}
             className="inline-flex size-8 items-center justify-center rounded-full border border-line transition-colors hover:bg-paper"
           >
             <ChevronDown
               className={cn(
-                "size-3.5 transition-transform duration-150",
-                showFull && "rotate-180",
+                'size-3.5 transition-transform duration-150',
+                showFull && 'rotate-180',
               )}
             />
           </button>
@@ -247,9 +247,9 @@ function AddressRow({
           onClick={() => copy(value)}
           aria-label={`Copy ${label} address`}
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 h-8 text-[11.5px] font-semibold",
-            "transition-colors hover:bg-paper",
-            copied && "border-[var(--priv)] text-[var(--priv)]",
+            'inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 h-8 text-[11.5px] font-semibold',
+            'transition-colors hover:bg-paper',
+            copied && 'border-[var(--priv)] text-[var(--priv)]',
           )}
         >
           {copied ? (
@@ -264,5 +264,5 @@ function AddressRow({
         </button>
       </div>
     </div>
-  );
+  )
 }
