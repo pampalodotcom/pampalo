@@ -620,9 +620,6 @@ function BalanceCardConnected({
       <ReceiveSheet
         open={receiveOpen}
         onOpenChange={setReceiveOpen}
-        evm={evmAddress}
-        envelope={envelope}
-        poseidon={poseidon}
       />
     </>
   );

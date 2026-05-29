@@ -202,7 +202,12 @@ export default defineSchema({
   // `Pampalo.shieldBudget(user)` fresh from chain.
   pampaloDeployments: defineTable({
     networkId: v.id("supportedNetworks"),
-    pampalo: v.string(), // lowercased 0x… Pampalo contract address
+    // Lowercased 0x… Pampalo contract address. Empty string is the
+    // "addresses-only" placeholder marker: the row exists so the
+    // Receive picker can show the network (and carry per-network flags
+    // like `separateDerivationKey`), but no Pampalo contract is live
+    // there yet. Shield/transfer callers must filter `pampalo !== ""`.
+    pampalo: v.string(),
     poseidon2Huff: v.string(),
     verifiers: v.object({
       deposit: v.string(),
@@ -217,6 +222,15 @@ export default defineSchema({
     // Per-deployment indexer cursor. Highest block we've consumed.
     lastIndexedBlock: v.number(),
     enabled: v.boolean(),
+    // Per-chain isolation flag for the ECIES envelope key. When true,
+    // the client derives the envelope public key from the Pampalo
+    // "isolated envelope" path (m/44'/60'/0'/0/420) instead of BIP44
+    // path 0. Keeps the hot-Sync envelope key on testnet (Base Sepolia,
+    // where this flag is false) from being able to decrypt notes on
+    // mainnet deployments after a future hot-Sync compromise. Optional
+    // for schema migration — undefined treated as true (the new
+    // default) by the client. See derive-addresses.ts.
+    separateDerivationKey: v.optional(v.boolean()),
   }).index("by_networkId", ["networkId"]),
 
   // Join table mirroring on-chain `Pampalo.supportedAssets(addr)`. Rows

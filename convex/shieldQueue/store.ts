@@ -555,6 +555,11 @@ export const enabledDeployments = query({
     }> = [];
     for (const d of deployments) {
       if (!d.enabled) continue;
+      // Skip "addresses-only" placeholder rows (forward-declared
+      // mainnet deployments that don't have a live Pampalo contract
+      // yet). Live-contract callers — shield/transfer flows — must
+      // never see these.
+      if (!d.pampalo) continue;
       const net = await ctx.db.get(d.networkId);
       if (!net) continue;
       out.push({
@@ -564,6 +569,140 @@ export const enabledDeployments = query({
         pampaloAddress: d.pampalo,
         shieldWaitSeconds: d.shieldWaitSeconds,
         defaultMonthlyCapUsdCents: d.defaultMonthlyCapUsdCents,
+      });
+    }
+    return out;
+  },
+});
+
+/**
+ * One-shot seed: ensures every Pampalo deployment row has
+ * `separateDerivationKey` populated, flips Base Sepolia to false, and
+ * inserts addresses-only placeholder rows for Ethereum + Base mainnet.
+ *
+ * Idempotent — safe to run multiple times. Run from the Convex
+ * dashboard once after this commit lands.
+ */
+export const seedSeparateDerivationKeys = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const result: {
+      patched: number;
+      placeholdersCreated: number;
+      placeholdersSkipped: number;
+      missingNetworks: number[];
+    } = {
+      patched: 0,
+      placeholdersCreated: 0,
+      placeholdersSkipped: 0,
+      missingNetworks: [],
+    };
+
+    // Step 1: backfill the flag on every existing deployment. Base
+    // Sepolia (84532) → false (preserves today's path-0 envelope so
+    // existing notes still decrypt). Everything else → true.
+    const existing = await ctx.db.query("pampaloDeployments").collect();
+    for (const d of existing) {
+      const net = await ctx.db.get(d.networkId);
+      const desired = net?.chainId === 84532 ? false : true;
+      if (d.separateDerivationKey === desired) continue;
+      await ctx.db.patch(d._id, { separateDerivationKey: desired });
+      result.patched += 1;
+    }
+
+    // Step 2: seed Ethereum + Base mainnet placeholder rows so the
+    // Receive picker can show them ahead of a real Pampalo deployment.
+    // `pampalo: ""` is the placeholder sentinel — enabledDeployments
+    // (used by shield/transfer flows) filters these out.
+    const mainnetChainIds = [1, 8453];
+    const existingByChainId = new Map<number, true>();
+    for (const d of existing) {
+      const net = await ctx.db.get(d.networkId);
+      if (net) existingByChainId.set(net.chainId, true);
+    }
+    for (const chainId of mainnetChainIds) {
+      if (existingByChainId.has(chainId)) {
+        result.placeholdersSkipped += 1;
+        continue;
+      }
+      const net = await ctx.db
+        .query("supportedNetworks")
+        .withIndex("by_chainId", (q) => q.eq("chainId", chainId))
+        .first();
+      if (!net) {
+        result.missingNetworks.push(chainId);
+        continue;
+      }
+      await ctx.db.insert("pampaloDeployments", {
+        networkId: net._id,
+        pampalo: "",
+        poseidon2Huff: "",
+        verifiers: {
+          deposit: "",
+          transfer: "",
+          withdraw: "",
+          transferExternal: "",
+        },
+        shieldWaitSeconds: 0,
+        defaultMonthlyCapUsdCents: 0,
+        confirmationDepth: 1,
+        lastIndexedBlock: 0,
+        enabled: true,
+        separateDerivationKey: true,
+      });
+      result.placeholdersCreated += 1;
+    }
+
+    return result;
+  },
+});
+
+/**
+ * Like `enabledDeployments`, but ALSO returns "addresses-only"
+ * placeholder rows where `pampalo` is empty. Surfaces the
+ * `separateDerivationKey` flag so the Receive picker can pick the
+ * right envelope key (path-0 shared vs slot-420 isolated) per network.
+ *
+ * Forward-declared mainnet rows live here so a user can share their
+ * Pampalo identity on Ethereum / Base mainnet before the contract
+ * ships there — addresses are stable from the moment the row exists.
+ *
+ * Public; addresses and flags are public material.
+ */
+export const receivableDeployments = query({
+  args: {},
+  handler: async (
+    ctx,
+  ): Promise<
+    Array<{
+      _id: Id<"pampaloDeployments">;
+      chainId: number;
+      networkName: string;
+      /** Empty string when the deployment is a placeholder (no live
+       *  Pampalo contract yet). Receive UI surfaces this distinction. */
+      pampaloAddress: string;
+      separateDerivationKey: boolean;
+    }>
+  > => {
+    const deployments = await ctx.db.query("pampaloDeployments").collect();
+    const out: Array<{
+      _id: Id<"pampaloDeployments">;
+      chainId: number;
+      networkName: string;
+      pampaloAddress: string;
+      separateDerivationKey: boolean;
+    }> = [];
+    for (const d of deployments) {
+      if (!d.enabled) continue;
+      const net = await ctx.db.get(d.networkId);
+      if (!net) continue;
+      out.push({
+        _id: d._id,
+        chainId: net.chainId,
+        networkName: net.name,
+        pampaloAddress: d.pampalo,
+        // Undefined treated as true (the new default) — see schema.
+        separateDerivationKey: d.separateDerivationKey ?? true,
       });
     }
     return out;

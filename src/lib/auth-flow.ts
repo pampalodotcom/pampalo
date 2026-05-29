@@ -19,7 +19,7 @@ import {
   importDekBytes,
   zeroBytes,
 } from './crypto'
-import { deriveAddresses } from './derive-addresses'
+import { deriveAllAddresses } from './derive-addresses'
 import type { DerivedAddresses } from './derive-addresses'
 import {
   base64UrlToBuffer,
@@ -137,7 +137,10 @@ async function registerWalletInternal(
       : Wallet.createRandom()
   const mnemonic = wallet.mnemonic?.phrase
   if (!mnemonic) throw new Error('ethers did not return a mnemonic')
-  const addresses = deriveAddresses(wallet)
+  // Account creation: derive the full set (path-0 triple + the isolated
+  // slot-420 envelope) so the cached addresses cover both Base Sepolia
+  // and mainnet-style deployments without a follow-up PRF.
+  const addresses = deriveAllAddresses(mnemonic)
   const passkeyDisplayName =
     opts.source === 'recovered' ? 'Pampalo (Recovered)' : 'Pampalo'
 
@@ -373,8 +376,11 @@ export async function reAuthenticate(): Promise<ReAuthOutcome> {
   try {
     wallet = Wallet.fromPhrase(mnemonic)
     console.log('ethers.Wallet.fromPhrase()')
-    const addresses = deriveAddresses(wallet)
-    console.log('deriveAddresses (EVM + envelope + poseidon)')
+    // Full set (path-0 triple + slot-420 isolated envelope) so the
+    // cached addresses cover both Base Sepolia (shared envelope) and
+    // mainnet-style deployments (isolated envelope).
+    const addresses = deriveAllAddresses(mnemonic)
+    console.log('deriveAllAddresses (EVM + envelope + envelopeIsolated + poseidon)')
     setAddresses(addresses)
     console.log('keystore + localStorage updated')
     // Trigger (a): sync encrypted preferences while DEK is briefly alive.
@@ -528,6 +534,11 @@ export async function withUnlockedWallet<T>(
 
   try {
     const wallet = Wallet.fromPhrase(mnemonic)
+    // Refresh the cached addresses opportunistically — the path-0 triple
+    // doesn't change, but this populates `envelopeIsolated` (slot 420)
+    // for existing users who signed in before that field landed. Cheap
+    // (one HD derivation) and the side effect is idempotent.
+    setAddresses(deriveAllAddresses(mnemonic))
     const result = await fn(wallet)
     // Prefs sync piggyback — same trigger (b) as signTransactionWithPasskey.
     const sessionToken = getSessionToken()
@@ -606,6 +617,9 @@ export async function signTransactionWithPasskey(
   let wallet: HDNodeWallet | null = null
   try {
     wallet = Wallet.fromPhrase(mnemonic)
+    // Refresh cached addresses (populates `envelopeIsolated` for existing
+    // users — see withUnlockedWallet for the same idempotent refresh).
+    setAddresses(deriveAllAddresses(mnemonic))
     // ethers TransactionRequest accepts bigint OR decimal strings; passing
     // through directly means callers don't have to care about the diff.
     // 1559 vs legacy is mutually exclusive: if the caller supplied 1559
@@ -738,8 +752,11 @@ async function unlockAfterAssertion(
   try {
     wallet = Wallet.fromPhrase(mnemonic)
     console.log('ethers.Wallet.fromPhrase()')
-    const addresses = deriveAddresses(wallet)
-    console.log('deriveAddresses (EVM + envelope + poseidon)')
+    // Full set (path-0 triple + slot-420 isolated envelope) so the
+    // cached addresses cover both Base Sepolia (shared envelope) and
+    // mainnet-style deployments (isolated envelope).
+    const addresses = deriveAllAddresses(mnemonic)
+    console.log('deriveAllAddresses (EVM + envelope + envelopeIsolated + poseidon)')
     setAddresses(addresses)
     console.log('keystore + localStorage updated')
     // Trigger (a): sync encrypted preferences while DEK is briefly alive.

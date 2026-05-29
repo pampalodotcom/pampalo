@@ -7,9 +7,12 @@ import { NetworkCard, type NetworkChoice } from "../deposit/NetworkCard";
 import { taglineForChainId } from "../deposit/network-meta";
 
 // Step 1 of the Receive flow — single network picker. No public/private
-// mode toggle: Receive is the "share my full identity bundle" flow,
-// and only Pampalo-deployed chains can take the shielded half of that
-// bundle anyway, so the network list is the deployments list.
+// mode toggle: Receive is the "share my full identity bundle" flow.
+// Sources from `receivableDeployments` (not `enabledDeployments`) so
+// forward-declared mainnet rows — Ethereum + Base, where Pampalo
+// hasn't shipped yet — appear alongside live testnet deployments. The
+// per-row `separateDerivationKey` flag rides through `NetworkChoice`
+// so the QR step can pick the matching envelope key.
 
 export function ReceivePickStep({
   selectedNetworkId,
@@ -21,7 +24,10 @@ export function ReceivePickStep({
   onContinue: () => void;
 }) {
   const [testnetsEnabled] = useTestnetsEnabled();
-  const deployments = useQuery(api.shieldQueue.store.enabledDeployments, {});
+  const deployments = useQuery(
+    api.shieldQueue.store.receivableDeployments,
+    {},
+  );
 
   const choices: NetworkChoice[] = (deployments ?? [])
     .filter((d) => testnetsEnabled || !isTestnetChainId(d.chainId))
@@ -30,6 +36,7 @@ export function ReceivePickStep({
       chainId: d.chainId,
       name: d.networkName,
       tagline: taglineForChainId(d.chainId),
+      separateDerivationKey: d.separateDerivationKey,
     }));
 
   const loading = deployments === undefined;

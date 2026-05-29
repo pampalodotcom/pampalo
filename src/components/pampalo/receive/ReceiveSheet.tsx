@@ -22,18 +22,13 @@ type Step = "pick" | "qr";
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  evm: string;
-  envelope: string;
-  poseidon: string;
 };
 
-export function ReceiveSheet({
-  open,
-  onOpenChange,
-  evm,
-  envelope,
-  poseidon,
-}: Props) {
+// All address material (evm / envelope / envelopeIsolated / poseidon) is
+// sourced inside ReceiveQRStep via useAuth, so this sheet stays a thin
+// wrapper. The parent only needs to tell us when to open/close.
+
+export function ReceiveSheet({ open, onOpenChange }: Props) {
   const isDesktop = useIsDesktop();
 
   const [step, setStep] = useState<Step>("pick");
@@ -73,9 +68,6 @@ export function ReceiveSheet({
       ) : network ? (
         <ReceiveQRStep
           network={network}
-          evm={evm}
-          envelope={envelope}
-          poseidon={poseidon}
           onBack={() => setStep("pick")}
         />
       ) : null}

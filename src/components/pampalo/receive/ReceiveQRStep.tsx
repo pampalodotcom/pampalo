@@ -5,9 +5,12 @@ import {
   ChevronDown,
   ChevronLeft,
   Copy,
+  KeyRound,
+  Loader2,
   Share2,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useAuth } from '@/lib/auth'
 import { useClipboard } from '@/lib/use-clipboard'
 import { cn } from '@/lib/utils'
 import { NetworkLogo } from '../deposit/NetworkLogo'
@@ -27,22 +30,46 @@ function truncate(addr: string): string {
 
 export function ReceiveQRStep({
   network,
-  evm,
-  envelope,
-  poseidon,
   onBack,
 }: {
   network: NetworkChoice
-  evm: string
-  envelope: string
-  poseidon: string
   onBack: () => void
 }) {
   const [showFull, setShowFull] = useState(false)
+  const [deriving, setDeriving] = useState(false)
   const { copied: urlCopied, copy: copyUrl } = useClipboard()
+  const auth = useAuth()
+  const addresses =
+    auth.state.status === 'authenticated' ? auth.state.addresses : null
+  const evm = addresses?.evm ?? ''
+  const poseidon = addresses?.poseidon ?? ''
+  // Pick the matching envelope for this network. `separateDerivationKey:
+  // true` means the slot-420 isolated envelope; everything else (Base
+  // Sepolia today) uses the path-0 envelope = same as EVM's privkey.
+  // Undefined `separateDerivationKey` is treated as true (the schema
+  // default), matching the Convex query.
+  const needsIsolated = network.separateDerivationKey !== false
+  const envelope = needsIsolated
+    ? (addresses?.envelopeIsolated ?? '')
+    : (addresses?.envelope ?? '')
+  const missingIsolated = needsIsolated && !addresses?.envelopeIsolated
+
+  const onDeriveIsolated = async () => {
+    if (deriving) return
+    setDeriving(true)
+    try {
+      await auth.reAuth()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      toast.error(`Couldn't derive — ${msg}`)
+    } finally {
+      setDeriving(false)
+    }
+  }
 
   const buildShareUrl = (): string | null => {
     if (typeof window === 'undefined') return null
+    if (!evm || !envelope || !poseidon) return null
     const params = new URLSearchParams()
     // Short keys — the envelope public key alone is 132 hex chars, so
     // verbose param names push the QR up several version steps. See
@@ -104,6 +131,53 @@ export function ReceiveQRStep({
         </p>
       </div>
 
+      {missingIsolated ? (
+        // Existing user signed in before envelopeIsolated landed (or this
+        // is the first Receive open after the schema change). One PRF
+        // unlock derives the slot-420 envelope into the keystore + auth
+        // state; the QR renders on the next render.
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-line bg-paper-lo px-5 py-8 text-center">
+          <span
+            className="inline-flex size-12 items-center justify-center rounded-full bg-[var(--priv-soft)] text-[var(--priv)]"
+            aria-hidden
+          >
+            <KeyRound className="size-5" />
+          </span>
+          <div className="flex flex-col gap-1">
+            <p className="text-[14px] font-semibold text-ink">
+              Derive your {network.name} envelope
+            </p>
+            <p className="max-w-[320px] text-[12.5px] leading-relaxed text-ink-mute">
+              {network.name} uses an isolated envelope key (slot 420) so a
+              future hot-Sync compromise can&apos;t reach it. Unlock once
+              to derive and cache it locally.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onDeriveIsolated}
+            disabled={deriving}
+            className={cn(
+              'mt-1 inline-flex items-center justify-center gap-2 h-11 rounded-full px-5',
+              'bg-[var(--priv)] text-[var(--paper)] text-[13.5px] font-semibold shadow-sm',
+              'transition-opacity disabled:cursor-not-allowed disabled:opacity-60',
+            )}
+          >
+            {deriving ? (
+              <>
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+                Awaiting passkey…
+              </>
+            ) : (
+              <>
+                <KeyRound className="size-4" aria-hidden />
+                Unlock to derive
+              </>
+            )}
+          </button>
+        </div>
+      ) : (
+      <>
       <div className="flex flex-col items-center gap-2.5">
         <div className="relative rounded-2xl bg-white p-3 shadow-sm">
           {shareUrl && <QRCanvas value={shareUrl} size={196} />}
@@ -191,6 +265,8 @@ export function ReceiveQRStep({
           identifiers.
         </p>
       </div>
+      </>
+      )}
     </div>
   )
 }
