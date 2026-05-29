@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAction, usePaginatedQuery, useQuery } from "convex/react";
-import { Clock3, Loader2, RefreshCcw, ShieldAlert, Zap } from "lucide-react";
+import {
+  Clock3,
+  Eye,
+  Loader2,
+  RefreshCcw,
+  ShieldAlert,
+  Wrench,
+  Zap,
+} from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
@@ -241,6 +249,14 @@ function Sentry() {
           </div>
         )}
 
+        {/* ─── Role chips ─────────────────────────────────────────── */}
+        {auth.state.status === "authenticated" && (
+          <MyRolesRow
+            deployments={deployments ?? []}
+            rolesByChainId={rolesByChainId}
+          />
+        )}
+
         {/* ─── Queue body ─────────────────────────────────────────── */}
         <QueueBody
           isDesktop={isDesktop}
@@ -367,6 +383,77 @@ function RoleProbe({
     cb.current(roles);
   }, [roles]);
   return null;
+}
+
+// ─── Role chips ─────────────────────────────────────────────────────────
+// Discreet inline row under the page header showing which Pampalo
+// roles the signed-in user holds, aggregated across all enabled
+// deployments. Rendered nothing when the user has no roles on any
+// chain — the absence is the answer.
+
+function MyRolesRow({
+  deployments,
+  rolesByChainId,
+}: {
+  deployments: Array<{ chainId: number; networkName: string }>;
+  rolesByChainId: Map<number, DeploymentRoles>;
+}) {
+  const vigilantChains: string[] = [];
+  const boothChains: string[] = [];
+  for (const d of deployments) {
+    const r = rolesByChainId.get(d.chainId);
+    if (!r) continue;
+    if (r.vigilantCitizen) vigilantChains.push(d.networkName);
+    if (r.boothOperator) boothChains.push(d.networkName);
+  }
+  if (vigilantChains.length === 0 && boothChains.length === 0) return null;
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2 text-[11px] text-ink-mute">
+      <span className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
+        Your roles
+      </span>
+      {vigilantChains.length > 0 && (
+        <RoleChip
+          icon={<Eye className="size-3" />}
+          label="Vigilant Citizen"
+          chains={vigilantChains}
+        />
+      )}
+      {boothChains.length > 0 && (
+        <RoleChip
+          icon={<Wrench className="size-3" />}
+          label="Booth Operator"
+          chains={boothChains}
+        />
+      )}
+    </div>
+  );
+}
+
+function RoleChip({
+  icon,
+  label,
+  chains,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  chains: string[];
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full",
+        "border border-line bg-paper-lo/60 px-2 py-[3px]",
+        "text-[11px] text-ink-soft",
+      )}
+      title={`${label} · ${chains.join(", ")}`}
+    >
+      <span className="text-ink-mute">{icon}</span>
+      <span className="font-medium text-ink">{label}</span>
+      <span className="text-ink-faint">· {chains.join(", ")}</span>
+    </span>
+  );
 }
 
 // ─── Body switcher: skeleton / empty / data ─────────────────────────────
