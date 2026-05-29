@@ -89,11 +89,19 @@ export function AssetRow({
    * Cancel/Confirm row) so we don't promise an action we can't honour.
    */
   shieldable = false,
+  /**
+   * Lower bound on the slider's `pub` value, in display units. The
+   * parent computes this from the user's remaining monthly shield cap
+   * so the slider can't be dragged past the budget that the contract
+   * would enforce anyway. Undefined → no constraint (slider can go to 0).
+   */
+  minPub,
   className,
 }: {
   asset: AssetRowData;
   onMove?: (payload: MovePayload) => void;
   shieldable?: boolean;
+  minPub?: number;
   className?: string;
 }) {
   const dp = asset.roundTo ?? DEFAULT_ROUND_TO[asset.symbol] ?? 4;
@@ -250,6 +258,7 @@ export function AssetRow({
       onChange={setPub}
       decimals={dp}
       ticker={asset.symbol}
+      minPub={minPub}
     />
   ) : (
     <SplitBar publicValue={pubVal} privateValue={privVal} height={10} />

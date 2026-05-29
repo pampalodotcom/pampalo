@@ -27,6 +27,7 @@ import type * as prices_refresh from "../prices/refresh.js";
 import type * as send_proxy from "../send/proxy.js";
 import type * as send_types from "../send/types.js";
 import type * as shieldQueue_events from "../shieldQueue/events.js";
+import type * as shieldQueue_proxy from "../shieldQueue/proxy.js";
 import type * as shieldQueue_refresh from "../shieldQueue/refresh.js";
 import type * as shieldQueue_seed from "../shieldQueue/seed.js";
 import type * as shieldQueue_store from "../shieldQueue/store.js";
@@ -60,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   "send/proxy": typeof send_proxy;
   "send/types": typeof send_types;
   "shieldQueue/events": typeof shieldQueue_events;
+  "shieldQueue/proxy": typeof shieldQueue_proxy;
   "shieldQueue/refresh": typeof shieldQueue_refresh;
   "shieldQueue/seed": typeof shieldQueue_seed;
   "shieldQueue/store": typeof shieldQueue_store;

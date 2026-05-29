@@ -204,6 +204,19 @@ export function SplitSlider({
           height={height}
           hideDivider
         />
+        {/* Cap-blocked region: shows the portion of the bar the user
+            *can't* reach because the monthly shield cap would refuse
+            it. Only rendered when the clamp is meaningfully tight —
+            i.e. the user has enough public balance for the cap to bite.
+            Caller passes `minPub === 0` (or undefined) when the cap is
+            slack and we don't want a visual stop. */}
+        {!disabled && minPub !== undefined && minPub > 0 && total > 0 && (
+          <div
+            className="split-slider-cap-blocked"
+            style={{ width: `${(minPub / total) * 100}%`, height }}
+            aria-hidden="true"
+          />
+        )}
         {dirty && total > 0 && (
           <div
             className="split-slider-baseline"

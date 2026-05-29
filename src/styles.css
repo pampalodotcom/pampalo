@@ -467,6 +467,28 @@ body {
   transform: translateX(-0.5px);
   pointer-events: none;
 }
+
+/* Cap-blocked overlay: a diagonal-stripe pattern over the portion of
+   the bar the user can't reach because the monthly shield cap would
+   refuse the transfer. Sits *above* the pub-fill but below the handle
+   so the user can still see the public-side colour through the
+   pattern. Right edge is a solid 2px ink-faint mark so the boundary
+   reads as an actual stop. */
+.split-slider-cap-blocked {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 999px 0 0 999px;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(12, 34, 54, 0.16) 0px,
+    rgba(12, 34, 54, 0.16) 2px,
+    transparent 2px,
+    transparent 6px
+  );
+  border-right: 2px solid var(--color-ink-faint);
+  pointer-events: none;
+}
 .split-slider-handle {
   position: absolute;
   top: 50%;

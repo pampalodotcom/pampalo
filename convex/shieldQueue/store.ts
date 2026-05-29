@@ -17,6 +17,32 @@ import { lowerAddress } from "../lib/normalize";
 
 // ─── Indexer-side reads ──────────────────────────────────────────────────
 
+/** Looks up Pampalo router + chain RPC subdomain for a chainId. Used by
+ *  the shieldBudget eth_call proxy and any other per-chain Pampalo
+ *  read paths so they don't have to re-walk the schema themselves. */
+export const _deploymentForChain = internalQuery({
+  args: { chainId: v.number() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ pampalo: string; alchemySubdomain: string } | null> => {
+    const net = await ctx.db
+      .query("supportedNetworks")
+      .withIndex("by_chainId", (q) => q.eq("chainId", args.chainId))
+      .unique();
+    if (!net) return null;
+    const dep = await ctx.db
+      .query("pampaloDeployments")
+      .withIndex("by_networkId", (q) => q.eq("networkId", net._id))
+      .unique();
+    if (!dep || !dep.enabled) return null;
+    return {
+      pampalo: dep.pampalo,
+      alchemySubdomain: net.alchemySubdomain,
+    };
+  },
+});
+
 export type IndexerDeployment = {
   _id: Id<"pampaloDeployments">;
   pampalo: string;
@@ -266,6 +292,48 @@ export const byShielder = query({
       .withIndex("by_shielder", (q) => q.eq("shielder", addr))
       .order("desc")
       .take(500);
+  },
+});
+
+/**
+ * Per-chain Pampalo deployment metadata for any enabled deployment.
+ * Consumed by the wallet's shield-confirm sheet so it can resolve
+ * (chainId → pampalo router address + cached wait-time + default cap)
+ * without a second round-trip when the user taps Confirm.
+ *
+ * Public; addresses + wait + cap are all on-chain public material.
+ */
+export const enabledDeployments = query({
+  args: {},
+  handler: async (
+    ctx,
+  ): Promise<
+    Array<{
+      chainId: number;
+      pampaloAddress: string;
+      shieldWaitSeconds: number;
+      defaultMonthlyCapUsdCents: number;
+    }>
+  > => {
+    const deployments = await ctx.db.query("pampaloDeployments").collect();
+    const out: Array<{
+      chainId: number;
+      pampaloAddress: string;
+      shieldWaitSeconds: number;
+      defaultMonthlyCapUsdCents: number;
+    }> = [];
+    for (const d of deployments) {
+      if (!d.enabled) continue;
+      const net = await ctx.db.get(d.networkId);
+      if (!net) continue;
+      out.push({
+        chainId: net.chainId,
+        pampaloAddress: d.pampalo,
+        shieldWaitSeconds: d.shieldWaitSeconds,
+        defaultMonthlyCapUsdCents: d.defaultMonthlyCapUsdCents,
+      });
+    }
+    return out;
   },
 });
 

@@ -6,6 +6,12 @@ import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 import { AccountAvatar } from "@/components/pampalo/AccountAvatar";
 import { AssetRow, type AssetRowData } from "@/components/pampalo/AssetRow";
+import { warmShield } from "@/lib/shield-prep";
+import { useShieldBudget } from "@/lib/use-shield-budget";
+import {
+  ShieldConfirmSheet,
+  type ShieldConfirmPayload,
+} from "@/components/pampalo/shield/ShieldConfirmSheet";
 import { BalanceCard } from "@/components/pampalo/BalanceCard";
 import { DepositSheet } from "@/components/pampalo/deposit/DepositSheet";
 import { BeachScene } from "@/components/pampalo/BeachScene";
@@ -101,7 +107,7 @@ function Wallet() {
           the beach's bottom edge, matching the landing's hero card. */}
       <div className="relative z-10 -mt-10 mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-[8vw] pb-12 sm:px-4 lg:max-w-4xl">
         {addresses ? (
-          <Dashboard evmAddress={addresses.evm} />
+          <Dashboard addresses={addresses} />
         ) : (
           <section className="rise-in rounded-3xl card-cream px-5 py-5">
             <NoAddressNotice
@@ -154,7 +160,12 @@ function usdPriceFor(token: Token, prices: PriceRow[] | undefined): number | nul
   return Number(feed.answer) / 10 ** feed.feedDecimals;
 }
 
-function Dashboard({ evmAddress }: { evmAddress: string }) {
+function Dashboard({
+  addresses,
+}: {
+  addresses: { evm: string; envelope: string; poseidon: string };
+}) {
+  const evmAddress = addresses.evm;
   const tokensRaw = useQuery(api.catalog.tokens.list, {});
   const prices = useQuery(api.prices.feeds.listLatest, {});
   const networksRaw = useQuery(api.catalog.networks.list, {});
@@ -179,6 +190,41 @@ function Dashboard({ evmAddress }: { evmAddress: string }) {
     }
     return s;
   }, [shieldablePairsRaw, filter]);
+
+  const [shieldPayload, setShieldPayload] =
+    useState<ShieldConfirmPayload | null>(null);
+
+  // Pre-warm the bb.js + deposit circuit bundle on idle. First-shield
+  // latency is dominated by WASM warmup; doing it speculatively after
+  // the page is interactive moves that cost out of the user's tap path.
+  // No-op on subsequent mounts because the warm cache is module-scoped.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const w = window as Window & {
+      requestIdleCallback?: (
+        cb: () => void,
+        opts?: { timeout: number },
+      ) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    const fire = () => {
+      void warmShield().catch(() => {
+        // Swallow — the user-initiated path retries through the same
+        // cached promise and surfaces real errors there.
+      });
+    };
+    const rIC = w.requestIdleCallback;
+    const cIC = w.cancelIdleCallback;
+    if (typeof rIC === "function" && typeof cIC === "function") {
+      const handle = rIC(fire, { timeout: 4000 });
+      return () => {
+        cIC(handle);
+      };
+    }
+    // Safari fallback (no rIC). Defer until after first paint.
+    const t = setTimeout(fire, 1500);
+    return () => clearTimeout(t);
+  }, []);
 
   // Hide testnet chains + tokens unless the user opted in via the
   // session-scoped preference in the account modal.
@@ -310,6 +356,7 @@ function Dashboard({ evmAddress }: { evmAddress: string }) {
                     prices={prices ?? undefined}
                     evmAddress={evmAddress}
                     shieldableKeys={shieldableKeys}
+                    onShield={setShieldPayload}
                   />
                 </li>
               );
@@ -317,6 +364,15 @@ function Dashboard({ evmAddress }: { evmAddress: string }) {
           </ul>
         )}
       </section>
+
+      <ShieldConfirmSheet
+        open={shieldPayload !== null}
+        onOpenChange={(next) => {
+          if (!next) setShieldPayload(null);
+        }}
+        payload={shieldPayload}
+        addresses={addresses}
+      />
     </>
   );
 }
@@ -493,12 +549,14 @@ function AssetGroupRow({
   prices,
   evmAddress,
   shieldableKeys,
+  onShield,
 }: {
   symbol: string;
   tokens: Token[];
   prices: PriceRow[] | undefined;
   evmAddress: string;
   shieldableKeys: Set<string>;
+  onShield: (payload: ShieldConfirmPayload) => void;
 }) {
   // Same deterministic-render assumption as the BalanceCard: token list
   // is stable so hook order is stable.
@@ -569,24 +627,58 @@ function AssetGroupRow({
     shieldableKeys.has(`${t.chainId}:${t.address.toLowerCase()}`),
   );
 
+  // Per-user shield cap for the active chain. Drives the slider's
+  // minPub clamp so the user can't drag past the cap that the on-chain
+  // `_chargeShield` would revert on anyway. We use the first chain in
+  // the group as the active chain (matches the AssetRow shield emit
+  // logic) until the per-row network-select pill lands.
+  const activeChainId = tokens[0]?.chainId ?? null;
+  const budget = useShieldBudget(activeChainId, evmAddress, shieldable);
+
+  // Convert (cap remaining in USD cents) + (price USD per whole token)
+  // into a min-pub for the slider:
+  //
+  //   maxShieldableTokens = (remaining_cents / 100) / priceUsd * 0.99
+  //                        (1% buffer absorbs Chainlink drift between
+  //                         our cached price and the on-chain read at
+  //                         tx time — see SHIELD_FLOW.md §9.2)
+  //   minPub              = max(0, originalPub - maxShieldableTokens)
+  //
+  // priceUsd of 0 / unknown / null disables the clamp; the contract
+  // still enforces the cap and the user will see a revert if they
+  // exceed it on a non-priced asset.
+  let minPub: number | undefined;
+  if (budget && priceUsd && priceUsd > 0 && allPubResolved) {
+    const remainingUsd = Number(budget.remainingUsdCents) / 100;
+    const maxShieldable = (remainingUsd / priceUsd) * 0.99;
+    const originalPub =
+      sumWei("pub") !== null
+        ? Number(sumWei("pub")!) / 10 ** decimals
+        : 0;
+    minPub = Math.max(0, originalPub - maxShieldable);
+  }
+
   return (
     <AssetRow
       asset={data}
       shieldable={shieldable}
+      minPub={minPub}
       onMove={(payload) => {
-        // Slice-5 stub: the slider + dirty-row UI is wired and
-        // produces a typed payload, but proof gen / passkey sign /
-        // optimistic IDB write all land in slice 6. Log + toast for
-        // now so the round-trip is visible during integration.
-        console.log("[asset move]", {
-          ...payload,
-          amount: payload.amount.toString(),
-        });
-        toast(
-          `${payload.intent === "shield" ? "Shield" : "Unshield"} ${
-            payload.symbol
-          } — proof gen lands next`,
-        );
+        if (payload.intent === "shield") {
+          // Slice-6: open the proof-gen + passkey-sign confirm sheet.
+          // Broadcast still deliberately skipped (we stop after signing
+          // and log the prepared tx) — that's the next slice.
+          onShield({
+            intent: "shield",
+            amount: payload.amount,
+            chainId: payload.chainId,
+            symbol: payload.symbol,
+            decimals: payload.decimals,
+          });
+          return;
+        }
+        // Unshield path lands after the shield path is live + tested.
+        toast(`Unshield ${payload.symbol} — coming in the next slice`);
       }}
     />
   );
