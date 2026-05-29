@@ -1,7 +1,7 @@
 import { UltraHonkBackend } from "@aztec/bb.js";
 import { Noir, type CompiledCircuit } from "@noir-lang/noir_js";
 
-import withdrawCircuit from "../../circuits/withdraw/target/withdraw.json" with { type: "json" };
+import withdrawCircuit from "../circuits/withdraw.json" with { type: "json" };
 import { getBbApi } from "./bb-api.js";
 
 export class Unshield {

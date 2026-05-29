@@ -1,7 +1,7 @@
 import { UltraHonkBackend } from "@aztec/bb.js";
 import { Noir, type CompiledCircuit } from "@noir-lang/noir_js";
 
-import transferCircuit from "../../circuits/transfer/target/transfer.json" with { type: "json" };
+import transferCircuit from "../circuits/transfer.json" with { type: "json" };
 import { getBbApi } from "./bb-api.js";
 
 export class Transfer {
