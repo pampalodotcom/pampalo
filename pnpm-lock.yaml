@@ -23,6 +23,9 @@ importers:
       '@fontsource-variable/geist':
         specifier: ^5.2.8
         version: 5.2.8
+      '@pampalo/shared':
+        specifier: workspace:*
+        version: link:shared
       '@simplewebauthn/browser':
         specifier: ^13.3.0
         version: 13.3.0

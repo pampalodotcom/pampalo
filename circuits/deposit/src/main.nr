@@ -7,6 +7,14 @@ fn main(
     owner: Field,
     secret: Field,
 ) {
+    // Bound the shielded amount to 128 bits at the protocol boundary.
+    // This is the only path that injects new leaves into the tree, so
+    // bounding here lets every downstream circuit (transfer,
+    // transfer_external, withdraw) assume every spendable note has a
+    // 128-bit amount -- closes the field-overflow mint vector at the
+    // ingress. See circuits/transfer/src/main.nr for the threat model.
+    asset_amount.assert_max_bit_size::<128>();
+
     let reconstructed_leaf = pum_lib::calculate_leaf(asset_id, asset_amount, owner, secret);
 
     assert(reconstructed_leaf == hash);

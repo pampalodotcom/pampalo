@@ -23,6 +23,15 @@ fn main(
     exit_addresses: pub [Field; NOTE_COUNT],
     exit_address_hashes: pub [Field; NOTE_COUNT],
 ) {
+    // Bound every input note's asset_amount to 128 bits. Belt-and-
+    // braces -- the deposit circuit already bounds amounts at ingress,
+    // but enforcing the invariant here too means any future code path
+    // that constructs an InputNote (test fixtures, alternate provers)
+    // can't bypass the check. See circuits/transfer/src/main.nr.
+    for i in 0..NOTE_COUNT {
+        input_notes[i].asset_amount.assert_max_bit_size::<128>();
+    }
+
     for i in 0..NOTE_COUNT - 1 {
         if input_notes[i].asset_amount != 0 {
             let owner_pub_key = poseidon2::Poseidon2::hash([input_notes[i].owner_secret], 1);

@@ -194,6 +194,90 @@ export default defineSchema({
     t: v.number(),
   }).index("by_n_t", ["n", "t"]),
 
+  // ─── Pampalo deployments (per-chain shield/transfer/unshield surface) ──
+  // One row per chain on which the Pampalo contract suite is live. Overlays
+  // `supportedNetworks` via FK — no duplication of chain metadata. See
+  // SHIELD_FLOW.md §2.1. `shieldWaitSeconds` + `defaultMonthlyCapUsdCents`
+  // are display caches; the slider's cap math always re-reads
+  // `Pampalo.shieldBudget(user)` fresh from chain.
+  pampaloDeployments: defineTable({
+    networkId: v.id("supportedNetworks"),
+    pampalo: v.string(), // lowercased 0x… Pampalo contract address
+    poseidon2Huff: v.string(),
+    verifiers: v.object({
+      deposit: v.string(),
+      transfer: v.string(),
+      withdraw: v.string(),
+      transferExternal: v.string(),
+    }),
+    shieldWaitSeconds: v.number(),
+    defaultMonthlyCapUsdCents: v.number(),
+    // Per-deployment indexer trail. Base Sepolia ≈ 5, Eth Sepolia ≈ 12.
+    confirmationDepth: v.number(),
+    // Per-deployment indexer cursor. Highest block we've consumed.
+    lastIndexedBlock: v.number(),
+    enabled: v.boolean(),
+  }).index("by_networkId", ["networkId"]),
+
+  // Join table mirroring on-chain `Pampalo.supportedAssets(addr)`. Rows
+  // are write-once + state flip; never deleted, so the Sentry audit view
+  // can show "asset was disabled at …". See SHIELD_FLOW.md §2.2.
+  //
+  // `tokenId` is optional because some shieldable assets (e.g. fresh
+  // Base Sepolia USDC mock that respins on every redeploy) aren't yet
+  // in the stable `supportedTokens` catalogue — `tokenAddress` is
+  // always present and is the canonical lookup key.
+  pampaloAssets: defineTable({
+    deploymentId: v.id("pampaloDeployments"),
+    tokenId: v.optional(v.id("supportedTokens")),
+    tokenAddress: v.string(), // lowercased; canonical lookup key
+    oracle: v.string(),       // lowercased ChainlinkOracle adapter address
+    assetDecimals: v.number(),
+    enabled: v.boolean(),
+    lastSyncedAt: v.number(), // ms — last on-chain reconciliation
+  })
+    .index("by_deployment", ["deploymentId"])
+    .index("by_deployment_and_token", ["deploymentId", "tokenAddress"])
+    .index("by_token", ["tokenId"]),
+
+  // Mirror of on-chain ShieldQueued/Executed/Cancelled/Contested events.
+  // One row per (deployment, pendingId). Drives the public `/sentry` view
+  // and the cross-device propagation channel for the user's own shields.
+  // The `encryptedPayload` is the raw ECIES ciphertext emitted on
+  // `ShieldQueued` — public on-chain anyway. See SHIELD_FLOW.md §2.3.
+  shieldQueueEntries: defineTable({
+    deploymentId: v.id("pampaloDeployments"),
+    pendingId: v.string(),       // decimal string of uint256 — JS Number unsafe
+    shielder: v.string(),        // lowercased
+    asset: v.string(),           // lowercased
+    amount: v.string(),          // base units, decimal string
+    leafCommitment: v.string(),  // hex
+    unlockTime: v.number(),      // unix seconds
+    usdCentsCharged: v.number(),
+    encryptedPayload: v.bytes(),
+    queuedTxHash: v.string(),
+    queuedAt: v.number(),        // ms — first-seen via indexer
+
+    state: v.union(
+      v.literal("queued"),
+      v.literal("executed"),
+      v.literal("cancelled"),
+      v.literal("contested"),
+    ),
+    // Populated on resolution. resolvedAt anchors the 72h ack window.
+    resolvedTxHash: v.optional(v.string()),
+    resolvedBy: v.optional(v.string()),   // lowercased msg.sender of the resolving tx
+    resolvedAt: v.optional(v.number()),   // unix seconds — tx block timestamp
+    contestReason: v.optional(v.string()), // only when state == contested
+  })
+    .index("by_deployment_and_state", ["deploymentId", "state"])
+    .index("by_shielder", ["shielder"])
+    .index("by_deployment_and_pendingId", ["deploymentId", "pendingId"])
+    // Global all-deployments view by state — drives the /sentry default
+    // "all networks · queued" query without scan-and-filter. See
+    // SHIELD_FLOW.md §10.3.
+    .index("by_state", ["state"]),
+
   // Cached Uniswap pool addresses. Pool addresses are deterministic
   // (CREATE2 from factory + tokens [+ fee for v3]) and can always be
   // recomputed on-chain via factory.getPair / factory.getPool, but

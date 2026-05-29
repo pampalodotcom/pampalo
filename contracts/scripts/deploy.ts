@@ -1,4 +1,4 @@
-import { ContractFactory } from "ethers";
+import { ContractFactory, type Provider } from "ethers";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import hre from "hardhat";
@@ -10,17 +10,17 @@ import Poseidon2HuffJson from "../contracts/utils/Poseidon2Huff.json" with { typ
 // Full deployment for a fresh Pampalo install on a public network.
 //
 // Steps (each idempotent — re-running on the same chain is safe):
-//   1. Token mocks (USDC, FourDEC) via Ignition
+//   1. USDC mock via Ignition
 //   2. Pampalo + the four verifiers via Ignition
 //   3. Poseidon2 huff hasher (raw bytecode, ContractFactory)
 //   4. pampalo.setPoseidon(...) — only if not already set
-//   5. MockOracle x2 — one for USDC ($1/USDC), one for ETH ($3000/ETH)
-//   6. pampalo.addSupportedAsset(...) for USDC, ETH, FourDEC
+//   5. ChainlinkOracle adapters — one per Chainlink feed on this chain
+//   6. pampalo.addSupportedAsset(...) for USDC and ETH
 //   7. Write deployments/<chainId>.json with all addresses
 //
-// Pricing note: MockOracle is used for both testnets so stress-test
-// runs have predictable USD math. Swap to ChainlinkOracle (already
-// implemented) before mainnet — see CONTRACTS_PLAN.md §4.3.
+// Oracle note: Eth Sepolia and Base Sepolia both have live Chainlink
+// AggregatorV3 feeds for ETH/USD and USDC/USD, so the deploy registers
+// ChainlinkOracle adapters that read from those directly.
 //
 // Usage:
 //   hardhat run scripts/deploy.ts --network sepolia
@@ -28,10 +28,78 @@ import Poseidon2HuffJson from "../contracts/utils/Poseidon2Huff.json" with { typ
 
 const ETH_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 
-const USDC_PRICE_CENTS_PER_UNIT = 100n; // 1 USDC = $1.00 = 100 cents
-const ETH_PRICE_CENTS_PER_UNIT = 300_000n; // 1 ETH = $3000.00 = 300_000 cents
-// (priceUsdCents formula divides by 10^assetDecimals so the "per unit"
-// price is the natural USD-cents-per-1-of-asset value.)
+// Pause between major steps. On Base Sepolia we've seen Ignition's
+// journal get out of sync with the on-chain nonce when txs are
+// submitted back-to-back through Alchemy — a brief sleep gives the
+// RPC node time to settle and reduces the chance of a dropped tx
+// poisoning the next deploy. Not a real fix (a future pass should add
+// tx-replacement on timeout), just padding.
+const STEP_SLEEP_MS = 3000;
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+// Wait until the chain reports the deployer's nonce has advanced to
+// `expected` (or higher). Used after `connection.ignition.deploy(...)`
+// because Alchemy's `getTransactionCount` lags the just-mined tx by a
+// few seconds, and the next Ignition module call would otherwise
+// HHE10404 with "should be N, but is N-1".
+const waitForNonce = async (
+  provider: Provider,
+  address: string,
+  expected: number,
+  timeoutMs = 120_000,
+): Promise<void> => {
+  const start = Date.now();
+  let last = -1;
+  while (Date.now() - start < timeoutMs) {
+    const actual = await provider.getTransactionCount(address, "latest");
+    if (actual >= expected) return;
+    last = actual;
+    await sleep(2000);
+  }
+  throw new Error(
+    `waitForNonce timeout for ${address}: expected ${expected}, last seen ${last}`,
+  );
+};
+
+// Chainlink AggregatorV3 feed addresses + staleness windows, keyed by
+// chainId. `maxAge` is ~2× the documented Chainlink heartbeat so
+// testnet lag doesn't bounce reads off the `stale price` revert.
+// Tighten before mainnet.
+//   Sepolia      ETH/USD   heartbeat 3600s
+//   Sepolia      USDC/USD  heartbeat 86400s
+//   Base Sepolia ETH/USD   (heartbeat not published; cap conservatively)
+//   Base Sepolia USDC/USD  (heartbeat not published; cap conservatively)
+const CHAINLINK_FEEDS: Record<
+  number,
+  {
+    eth: { feed: string; maxAge: number };
+    usdc: { feed: string; maxAge: number };
+  }
+> = {
+  // Ethereum Sepolia
+  11155111: {
+    eth: {
+      feed: "0x694AA1769357215DE4FAC081bf1f309aDC325306",
+      maxAge: 7200,
+    },
+    usdc: {
+      feed: "0xA2F78ab2355fe2f984D808B5CeE7FD0A93D5270E",
+      maxAge: 172800,
+    },
+  },
+  // Base Sepolia
+  84532: {
+    eth: {
+      feed: "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1",
+      maxAge: 7200,
+    },
+    usdc: {
+      feed: "0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165",
+      maxAge: 172800,
+    },
+  },
+};
 
 async function main() {
   const connection = await hre.network.connect();
@@ -48,23 +116,38 @@ async function main() {
   const net = await provider.getNetwork();
   const chainId = Number(net.chainId);
 
+  const feeds = CHAINLINK_FEEDS[chainId];
+  if (!feeds) {
+    throw new Error(
+      `No Chainlink feed config for chainId ${chainId}. Add an entry to CHAINLINK_FEEDS in scripts/deploy.ts.`,
+    );
+  }
+
   console.log(`▸ Network        : ${net.name || "unknown"} (chainId ${chainId})`);
   console.log(`▸ Deployer       : ${deployer.address}`);
   console.log(`▸ Deployer ETH   : ${(await provider.getBalance(deployer.address)).toString()}`);
   console.log("");
 
   // ── 1. Token mocks ──────────────────────────────────────────────────
-  console.log("[1/7] Deploying token mocks (USDC, FourDEC) via Ignition...");
-  const { usdcDeployment, fourDecDeployment } = await connection.ignition.deploy(
-    TokensModule,
+  console.log("[1/7] Deploying USDC mock via Ignition...");
+  const nonceBeforeTokens = await provider.getTransactionCount(
+    deployer.address,
+    "latest",
   );
+  const { usdcDeployment } = await connection.ignition.deploy(TokensModule);
   const usdcAddress = await usdcDeployment.getAddress();
-  const fourDecAddress = await fourDecDeployment.getAddress();
-  console.log(`  USDC mock    : ${usdcAddress}`);
-  console.log(`  FourDEC mock : ${fourDecAddress}`);
+  console.log(`  USDC mock : ${usdcAddress}`);
+  // Wait for Alchemy's getTransactionCount to reflect at least one of
+  // the just-mined Ignition txs before kicking off the next module.
+  await waitForNonce(provider, deployer.address, nonceBeforeTokens + 1);
+  await sleep(STEP_SLEEP_MS);
 
   // ── 2. Pampalo + verifiers ──────────────────────────────────────────
   console.log("\n[2/7] Deploying Pampalo + the four verifiers via Ignition...");
+  const nonceBeforePampalo = await provider.getTransactionCount(
+    deployer.address,
+    "latest",
+  );
   const {
     pampalo,
     depositVerifier,
@@ -78,6 +161,8 @@ async function main() {
   console.log(`  TransferVerifier         : ${await transferVerifier.getAddress()}`);
   console.log(`  WithdrawVerifier         : ${await withdrawVerifier.getAddress()}`);
   console.log(`  TransferExternalVerifier : ${await transferExternalVerifier.getAddress()}`);
+  await waitForNonce(provider, deployer.address, nonceBeforePampalo + 1);
+  await sleep(STEP_SLEEP_MS);
 
   // ── 3-4. Poseidon2 huff + setPoseidon ───────────────────────────────
   console.log("\n[3/7] Checking Poseidon2 hasher state...");
@@ -98,38 +183,46 @@ async function main() {
     await poseidon2Huff.waitForDeployment();
     poseidon2HuffAddress = await poseidon2Huff.getAddress();
     console.log(`  Deployed: ${poseidon2HuffAddress}`);
+    await sleep(STEP_SLEEP_MS);
 
     console.log("\n[4/7] Calling pampalo.setPoseidon(...)");
     await (await pampalo.setPoseidon(poseidon2HuffAddress)).wait();
     console.log("  setPoseidon confirmed.");
+    await sleep(STEP_SLEEP_MS);
   }
 
   // ── 5. Oracles ──────────────────────────────────────────────────────
-  console.log("\n[5/7] Deploying MockOracle instances...");
-  const MockOracleFactory =
-    await connection.ethers.getContractFactory("MockOracle");
+  console.log("\n[5/7] Deploying ChainlinkOracle adapters...");
+  const ChainlinkOracleFactory =
+    await connection.ethers.getContractFactory("ChainlinkOracle");
 
-  const usdcOracle = await MockOracleFactory.deploy(USDC_PRICE_CENTS_PER_UNIT);
+  const usdcOracle = await ChainlinkOracleFactory.deploy(
+    feeds.usdc.feed,
+    feeds.usdc.maxAge,
+  );
   await usdcOracle.waitForDeployment();
   const usdcOracleAddress = await usdcOracle.getAddress();
-  console.log(`  USDC oracle (\$1.00/USDC)  : ${usdcOracleAddress}`);
+  console.log(
+    `  USDC adapter (feed ${feeds.usdc.feed}, maxAge ${feeds.usdc.maxAge}s) : ${usdcOracleAddress}`,
+  );
+  await sleep(STEP_SLEEP_MS);
 
-  const ethOracle = await MockOracleFactory.deploy(ETH_PRICE_CENTS_PER_UNIT);
+  const ethOracle = await ChainlinkOracleFactory.deploy(
+    feeds.eth.feed,
+    feeds.eth.maxAge,
+  );
   await ethOracle.waitForDeployment();
   const ethOracleAddress = await ethOracle.getAddress();
-  console.log(`  ETH oracle (\$3000.00/ETH) : ${ethOracleAddress}`);
+  console.log(
+    `  ETH  adapter (feed ${feeds.eth.feed}, maxAge ${feeds.eth.maxAge}s) : ${ethOracleAddress}`,
+  );
+  await sleep(STEP_SLEEP_MS);
 
   // ── 6. Register supported assets ────────────────────────────────────
   console.log("\n[6/7] Registering supported assets...");
   const launchSet = [
     { name: "USDC", address: usdcAddress, oracle: usdcOracleAddress, decimals: 6 },
     { name: "ETH", address: ETH_ADDRESS, oracle: ethOracleAddress, decimals: 18 },
-    {
-      name: "FourDEC",
-      address: fourDecAddress,
-      oracle: usdcOracleAddress,
-      decimals: 4,
-    },
   ];
 
   for (const a of launchSet) {
@@ -142,6 +235,7 @@ async function main() {
       await pampalo.addSupportedAsset(a.address, a.oracle, a.decimals)
     ).wait();
     console.log(`  ${a.name.padEnd(8)} registered (decimals=${a.decimals})`);
+    await sleep(STEP_SLEEP_MS);
   }
 
   // ── 7. Write deployments JSON ───────────────────────────────────────
@@ -159,7 +253,6 @@ async function main() {
     },
     tokens: {
       usdc: usdcAddress,
-      fourDec: fourDecAddress,
     },
     oracles: {
       usdc: usdcOracleAddress,

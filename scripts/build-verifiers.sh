@@ -13,6 +13,13 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CIRCUITS_DIR="$REPO_ROOT/circuits"
 VERIFIERS_DIR="$REPO_ROOT/contracts/contracts/verifiers"
+# Checked-in copy of each compiled circuit JSON. The wallet bundle
+# imports from here (shared/classes/{Shield,Transfer,Unshield,
+# UnshieldBundled}.ts) so Vercel + any other downstream build doesn't
+# need `nargo` on PATH — it just sees the JSON in git. The Noir
+# `target/` dir stays gitignored; this script keeps the two in sync
+# as part of the verifier build.
+SHARED_CIRCUITS_DIR="$REPO_ROOT/shared/circuits"
 
 # Sanity: required tools.
 for tool in nargo bb; do
@@ -23,6 +30,7 @@ for tool in nargo bb; do
 done
 
 mkdir -p "$VERIFIERS_DIR"
+mkdir -p "$SHARED_CIRCUITS_DIR"
 
 # (circuit_dir, ContractName) pairs. The circuit dir name doubles as
 # the bin name in the circuit's Nargo.toml — so target/<name>.json is
@@ -61,7 +69,13 @@ build_one() {
   sed -i.bak "s/contract HonkVerifier/contract ${contract_name}/g" "$out_path"
   rm -f "${out_path}.bak"
 
+  # Sync the compiled circuit JSON into the checked-in shared/circuits
+  # location the wallet bundle imports from.
+  cp "$circuit_dir/target/${circuit_name}.json" \
+     "$SHARED_CIRCUITS_DIR/${circuit_name}.json"
+
   echo "  -> ${out_path#$REPO_ROOT/}"
+  echo "  -> ${SHARED_CIRCUITS_DIR#$REPO_ROOT/}/${circuit_name}.json"
 }
 
 total=${#CIRCUITS[@]}

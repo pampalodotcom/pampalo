@@ -1,4 +1,5 @@
-import { Shield } from "lucide-react";
+import { useEffect, useState } from "react";
+import { parseUnits } from "ethers";
 import { cn } from "@/lib/utils";
 import { weiToNumber } from "@/lib/balances";
 import { AssetMark } from "./AssetMark";
@@ -7,8 +8,11 @@ import {
   networkSlugForChainId,
   type NetworkSlug,
 } from "./NetworkChip";
+import { PendingShieldsList } from "./PendingShieldsList";
 import { SplitBar } from "./SplitBar";
+import { SplitSlider } from "./SplitSlider";
 import { SunIcon, MoonIcon } from "./SunMoonIcons";
+import type { PendingNote } from "@/lib/use-private-balances";
 
 export type AssetRowData = {
   symbol: string;
@@ -26,10 +30,18 @@ export type AssetRowData = {
   chainIds: number[];
 };
 
-/**
- * "shield" → move public → private. "unshield" → private → public.
- */
+/** "shield" → move public → private. "unshield" → private → public. */
 export type MoveIntent = "shield" | "unshield";
+
+export type MovePayload = {
+  intent: MoveIntent;
+  /** Token base units (wei for ETH, 6-decimal units for USDC, etc.). */
+  amount: bigint;
+  /** Which chain the user wants to move on. v1 = first supported chain. */
+  chainId: number;
+  symbol: string;
+  decimals: number;
+};
 
 function fmtToken(n: number, dp: number): string {
   return n.toLocaleString("en-US", {
@@ -72,34 +84,76 @@ const SKEL_TOKEN_SMALL: React.CSSProperties = {
 export function AssetRow({
   asset,
   onMove,
+  /**
+   * True when the asset has a corresponding `pampaloAssets` entry on at
+   * least one of its chains — i.e. the user can actually queue a shield
+   * here. When false the row renders a static SplitBar (no handle, no
+   * Cancel/Confirm row) so we don't promise an action we can't honour.
+   */
+  shieldable = false,
+  /**
+   * Lower bound on the slider's `pub` value, in display units. The
+   * parent computes this from the user's remaining monthly shield cap
+   * so the slider can't be dragged past the budget that the contract
+   * would enforce anyway. Undefined → no constraint (slider can go to 0).
+   */
+  minPub,
+  /** Notes still counting down to unlock. Drives the collapsable list. */
+  queuedNotes,
+  /** Notes whose unlockTime has passed; user can finalise. */
+  executableNotes,
+  /** Per-note finalise handler. */
+  onFinalise,
   className,
 }: {
   asset: AssetRowData;
-  onMove?: (intent: MoveIntent) => void;
+  onMove?: (payload: MovePayload) => void;
+  shieldable?: boolean;
+  minPub?: number;
+  queuedNotes?: PendingNote[];
+  executableNotes?: PendingNote[];
+  onFinalise?: (note: PendingNote) => void;
   className?: string;
 }) {
   const dp = asset.roundTo ?? DEFAULT_ROUND_TO[asset.symbol] ?? 4;
 
   const pubKnown = asset.publicWei !== null;
   const privKnown = asset.privateWei !== null;
-  const pubAmt = pubKnown ? weiToNumber(asset.publicWei!, asset.decimals) : 0;
-  const privAmt = privKnown
+  const originalPub = pubKnown
+    ? weiToNumber(asset.publicWei!, asset.decimals)
+    : 0;
+  const originalPriv = privKnown
     ? weiToNumber(asset.privateWei!, asset.decimals)
     : 0;
-  const totalAmt = pubAmt + privAmt;
-  const totalUsd = asset.priceUsd !== null ? totalAmt * asset.priceUsd : null;
-  // Bar geometry is USD-weighted when we have a price, token-weighted
-  // otherwise.
-  const pubVal = asset.priceUsd !== null ? pubAmt * asset.priceUsd : pubAmt;
-  const privVal = asset.priceUsd !== null ? privAmt * asset.priceUsd : privAmt;
+  const total = originalPub + originalPriv;
+
+  // Local drag state. The parent owns the chain truth (`asset.*Wei`);
+  // we track what the user has dragged to and feed it to onMove on
+  // confirm. Reset when the asset identity changes so the same row
+  // component reused across symbols doesn't carry stale drag.
+  const [pub, setPub] = useState(originalPub);
+  useEffect(() => {
+    setPub(originalPub);
+  }, [asset.symbol, originalPub]);
+
+  const priv = Math.max(0, total - pub);
+  const delta = pub - originalPub; // negative = shielding; positive = unshielding
+  const moveAmt = Math.abs(delta);
+  const dirty = moveAmt > 1e-9;
+  const direction: MoveIntent = delta < 0 ? "shield" : "unshield";
+
+  // Live USD display reflects the dragged split, not the on-chain one,
+  // so the user can see the dollar impact of their proposed move.
+  const totalUsd = asset.priceUsd !== null ? total * asset.priceUsd : null;
 
   const chipSlugs = asset.chainIds
     .map(networkSlugForChainId)
     .filter((s): s is NetworkSlug => s !== null);
 
-  // Shared sub-bits keep mobile + desktop in lockstep.
-  // Stack symbol over name so long names (e.g. "Australian Digital Dollar")
-  // wrap cleanly under the symbol rather than next to it.
+  // v1 multi-network select isn't built yet (SHIELD_FLOW.md §9.1). The
+  // active chain is just the first chip until that lands.
+  const activeChainId = asset.chainIds[0];
+
   const ticker = (
     <div className="flex flex-col items-start gap-0.5 min-w-0">
       <span className="font-bold text-[15px] text-ink leading-tight">
@@ -128,7 +182,7 @@ export function AssetRow({
       )}
       {pubKnown && privKnown ? (
         <div className="mt-0.5 font-mono text-[11px] text-ink-mute">
-          {fmtToken(totalAmt, dp)} {asset.symbol}
+          {fmtToken(total, dp)} {asset.symbol}
         </div>
       ) : (
         <span className="skel mt-0.5" style={SKEL_TOKEN_SMALL} />
@@ -140,6 +194,7 @@ export function AssetRow({
       <div
         className={cn(
           "inline-flex items-center gap-1.5 text-[var(--pub)]",
+          dirty && direction === "shield" && "opacity-55",
         )}
       >
         <SunIcon size={11} />
@@ -147,9 +202,14 @@ export function AssetRow({
           Public
         </span>
       </div>
-      <div className="mt-0.5 font-mono text-[13.5px] font-semibold text-ink">
+      <div
+        className={cn(
+          "mt-0.5 font-mono text-[13.5px] font-semibold text-ink",
+          dirty && direction === "shield" && "opacity-55",
+        )}
+      >
         {pubKnown ? (
-          fmtToken(pubAmt, dp)
+          fmtToken(pub, dp)
         ) : (
           <span className="skel" style={SKEL_TOKEN} />
         )}
@@ -158,7 +218,12 @@ export function AssetRow({
   );
   const privateColumn = (alignRight = false) => (
     <div className={alignRight ? "text-right" : undefined}>
-      <div className="inline-flex items-center gap-1.5 text-[var(--priv)]">
+      <div
+        className={cn(
+          "inline-flex items-center gap-1.5 text-[var(--priv)]",
+          dirty && direction === "unshield" && "opacity-55",
+        )}
+      >
         {alignRight ? (
           <>
             <span className="text-[10px] font-bold uppercase tracking-[0.14em]">
@@ -175,9 +240,14 @@ export function AssetRow({
           </>
         )}
       </div>
-      <div className="mt-0.5 font-mono text-[13.5px] font-semibold text-ink">
+      <div
+        className={cn(
+          "mt-0.5 font-mono text-[13.5px] font-semibold text-ink",
+          dirty && direction === "unshield" && "opacity-55",
+        )}
+      >
         {privKnown ? (
-          fmtToken(privAmt, dp)
+          fmtToken(priv, dp)
         ) : (
           <span className="skel" style={SKEL_TOKEN} />
         )}
@@ -185,9 +255,102 @@ export function AssetRow({
     </div>
   );
 
+  // USD-weighted values for the static bar (same maths as the original
+  // pre-slider AssetRow used). Only consulted when !shieldable.
+  const pubVal = asset.priceUsd !== null ? originalPub * asset.priceUsd : originalPub;
+  const privVal =
+    asset.priceUsd !== null ? originalPriv * asset.priceUsd : originalPriv;
+
+  const slider = shieldable ? (
+    <SplitSlider
+      pub={pub}
+      total={total}
+      originalPub={originalPub}
+      onChange={setPub}
+      decimals={dp}
+      ticker={asset.symbol}
+      minPub={minPub}
+    />
+  ) : (
+    <SplitBar publicValue={pubVal} privateValue={privVal} height={10} />
+  );
+
+  const handleCancel = () => setPub(originalPub);
+  const handleConfirm = () => {
+    if (!dirty || !onMove || asset.chainIds.length === 0) return;
+    const amount = parseUnits(moveAmt.toFixed(asset.decimals), asset.decimals);
+    onMove({
+      intent: direction,
+      amount,
+      chainId: activeChainId,
+      symbol: asset.symbol,
+      decimals: asset.decimals,
+    });
+  };
+
+  // Action row: idle hint when nothing has moved off baseline, swap to
+  // Cancel + Confirm pair when the user has dragged. Omit entirely when
+  // the asset isn't shieldable on any of its chains.
+  let actionRow: React.ReactNode = null;
+  if (!shieldable) {
+    // no idle hint, no buttons
+  } else if (total > 0 && !dirty) {
+    actionRow = (
+      <div className="flex h-[38px] items-center justify-center gap-2 text-[12.5px] text-ink-mute">
+        <span aria-hidden="true">🛡</span>
+        <span>Drag the handle to shield or unshield</span>
+        <span aria-hidden="true">☀</span>
+      </div>
+    );
+  } else if (total > 0 && dirty) {
+    actionRow = (
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={handleCancel}
+          className={cn(
+            "inline-flex h-[42px] w-[96px] shrink-0 items-center justify-center",
+            "rounded-full border border-line bg-transparent",
+            "text-[13.5px] font-semibold text-ink",
+            "transition-colors hover:bg-paper-lo",
+            "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ink-faint",
+          )}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleConfirm}
+          className={cn(
+            "inline-flex h-[42px] flex-1 items-center justify-center gap-2",
+            "rounded-full text-[14px] font-bold text-white shadow-sm",
+            "transition-colors focus-visible:outline-none focus-visible:ring-3",
+            direction === "shield"
+              ? [
+                  "bg-gradient-to-b from-[var(--priv-hi)] to-[var(--priv)]",
+                  "focus-visible:ring-[var(--priv-soft-2)]",
+                ]
+              : [
+                  "bg-gradient-to-b from-[var(--pub-hi)] to-[var(--pub)]",
+                  "focus-visible:ring-[var(--pub-soft-2)]",
+                ],
+          )}
+        >
+          {direction === "shield" ? (
+            <MoonIcon size={14} />
+          ) : (
+            <SunIcon size={14} />
+          )}
+          {direction === "shield" ? "Shield" : "Unshield"} {fmtToken(moveAmt, dp)}{" "}
+          {asset.symbol}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className={cn("rounded-3xl card-cream p-4 sm:p-[18px]", className)}>
-      {/* ─── Mobile: vertical card with Shield + Unshield buttons ─── */}
+      {/* ─── Mobile: vertical card ─── */}
       <div className="flex flex-col gap-3.5 sm:hidden">
         <div className="flex items-center gap-3">
           <AssetMark symbol={asset.symbol} size={36} />
@@ -203,30 +366,22 @@ export function AssetRow({
             {publicColumn(false)}
             {privateColumn(true)}
           </div>
-          <SplitBar publicValue={pubVal} privateValue={privVal} height={10} />
+          {slider}
         </div>
 
-        {onMove && (
-          <div className="flex gap-2">
-            <GhostButton
-              tone="priv"
-              icon={<Shield className="size-3.5" />}
-              onClick={() => onMove("shield")}
-            >
-              Shield
-            </GhostButton>
-            <GhostButton
-              tone="pub"
-              icon={<SunIcon size={13} />}
-              onClick={() => onMove("unshield")}
-            >
-              Unshield
-            </GhostButton>
-          </div>
-        )}
+        {actionRow}
+
+        <PendingShieldsList
+          symbol={asset.symbol}
+          decimals={asset.decimals}
+          queuedNotes={queuedNotes ?? []}
+          executableNotes={executableNotes ?? []}
+          onFinalise={onFinalise}
+          roundTo={asset.roundTo}
+        />
       </div>
 
-      {/* ─── Desktop: horizontal row ─── */}
+      {/* ─── Desktop: horizontal row with action stack on the right ─── */}
       <div className="hidden sm:flex sm:items-center sm:gap-5">
         <AssetMark symbol={asset.symbol} size={42} />
 
@@ -239,59 +394,32 @@ export function AssetRow({
         <div className="w-[100px] shrink-0">{privateColumn(false)}</div>
 
         <div className="flex-1 min-w-[80px]">
-          <SplitBar publicValue={pubVal} privateValue={privVal} height={10} />
+          {slider}
           <div className="mt-2 text-right font-mono text-[11px] text-ink-mute">
             {pubKnown && privKnown ? (
               <>
                 {totalUsd !== null ? `${fmtUsd(totalUsd, 2)} · ` : ""}
-                {fmtToken(totalAmt, dp)} total
+                {fmtToken(total, dp)} total
               </>
             ) : (
               <span className="skel" style={{ width: 100, height: 11 }} />
             )}
           </div>
+          {/* Action row sits under the desktop slider so the layout
+              doesn't reflow when the user starts dragging. Omitted
+              entirely when the asset isn't shieldable, so the card
+              doesn't carry empty whitespace. */}
+          {actionRow !== null && <div className="mt-3">{actionRow}</div>}
+          <PendingShieldsList
+            symbol={asset.symbol}
+            decimals={asset.decimals}
+            queuedNotes={queuedNotes ?? []}
+            executableNotes={executableNotes ?? []}
+            onFinalise={onFinalise}
+            roundTo={asset.roundTo}
+          />
         </div>
       </div>
     </div>
-  );
-}
-
-// Pill button matching `.btn-ghost-pub` / `.btn-ghost-priv` from the
-// design handoff: filled with the soft tone, hover bumps to soft-2.
-function GhostButton({
-  tone,
-  icon,
-  onClick,
-  children,
-}: {
-  tone: "pub" | "priv";
-  icon: React.ReactNode;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex-1 inline-flex h-[38px] items-center justify-center gap-1.5",
-        "rounded-full text-[13px] font-semibold transition-colors",
-        "focus-visible:outline-none focus-visible:ring-3",
-        tone === "priv"
-          ? [
-              "bg-[var(--priv-soft)] text-[var(--priv)]",
-              "hover:bg-[var(--priv-soft-2)]",
-              "focus-visible:ring-[var(--priv-soft-2)]",
-            ]
-          : [
-              "bg-[var(--pub-soft)] text-[var(--pub)]",
-              "hover:bg-[var(--pub-soft-2)]",
-              "focus-visible:ring-[var(--pub-soft-2)]",
-            ],
-      )}
-    >
-      {icon}
-      {children}
-    </button>
   );
 }

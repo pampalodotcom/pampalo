@@ -1,7 +1,7 @@
 import { UltraHonkBackend } from "@aztec/bb.js";
 import { Noir, type CompiledCircuit } from "@noir-lang/noir_js";
 
-import transferExternalCircuit from "../../circuits/transfer_external/target/transfer_external.json" with { type: "json" };
+import transferExternalCircuit from "../circuits/transfer_external.json" with { type: "json" };
 import { getBbApi } from "./bb-api.js";
 
 export class UnshieldBundled {

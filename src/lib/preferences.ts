@@ -27,6 +27,7 @@ const DEFAULT_PREFS: Prefs = {
 const TESTNET_CHAIN_IDS = new Set<number>([
   11155111, // Sepolia
   421614, // Arbitrum Sepolia
+  84532, // Base Sepolia
 ]);
 
 export function isTestnetChainId(chainId: number): boolean {

@@ -412,12 +412,19 @@ body {
   inset: 0 auto 0 0;
   background: linear-gradient(to right, var(--pub-hi), var(--pub));
   border-radius: 999px;
+  /* Decorative fills must not absorb pointer events — touch starts on
+     the bar visual need to land on `.split-slider` (the listener
+     wrapper) so the drag can begin. iOS Safari's pointer-event
+     bubbling has historically been flaky when an absolute-positioned
+     child sits over a tap target, so we just opt the fills out. */
+  pointer-events: none;
 }
 .split-bar .priv-fill {
   position: absolute;
   inset: 0 0 0 auto;
   background: linear-gradient(to left, var(--priv-hi), var(--priv));
   border-radius: 999px;
+  pointer-events: none;
 }
 .split-bar .divider {
   position: absolute;
@@ -427,6 +434,104 @@ body {
   background: var(--color-paper);
   border-radius: 1px;
   transform: translateX(-1px);
+  pointer-events: none;
+}
+
+/* SplitSlider — wraps SplitBar with a draggable handle. Hit area is
+   padded vertically so the grab target is ~36px tall without growing
+   the visible 12px bar. */
+.split-slider {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  touch-action: none;
+  cursor: grab;
+  outline: none;
+  user-select: none;
+}
+.split-slider.is-disabled {
+  cursor: default;
+}
+.split-slider.is-dragging {
+  cursor: grabbing;
+}
+.split-slider:focus-visible {
+  outline: 2px solid var(--color-ink-faint);
+  outline-offset: 4px;
+  border-radius: 999px;
+}
+.split-slider-bar-wrap {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  /* Inherit none from the parent slider; some mobile webviews need
+     this to be explicit on every node in the touch path. */
+  touch-action: none;
+}
+.split-slider-baseline {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  width: 0;
+  border-left: 1px dashed var(--color-ink-faint);
+  transform: translateX(-0.5px);
+  pointer-events: none;
+}
+
+/* Cap-blocked overlay: a diagonal-stripe pattern over the portion of
+   the bar the user can't reach because the monthly shield cap would
+   refuse the transfer. Sits *above* the pub-fill but below the handle
+   so the user can still see the public-side colour through the
+   pattern. Right edge is a solid 2px ink-faint mark so the boundary
+   reads as an actual stop. */
+.split-slider-cap-blocked {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 999px 0 0 999px;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(12, 34, 54, 0.16) 0px,
+    rgba(12, 34, 54, 0.16) 2px,
+    transparent 2px,
+    transparent 6px
+  );
+  border-right: 2px solid var(--color-ink-faint);
+  pointer-events: none;
+}
+.split-slider-handle {
+  position: absolute;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  margin-left: -11px;
+  margin-top: -11px;
+  background: var(--color-paper);
+  border: 2px solid var(--color-ink);
+  border-radius: 999px;
+  box-shadow: 0 3px 10px rgba(12, 34, 54, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  pointer-events: none;
+  transition:
+    transform 80ms ease,
+    box-shadow 120ms ease;
+}
+.split-slider.is-dragging .split-slider-handle {
+  transform: scale(1.08);
+  box-shadow:
+    0 6px 18px rgba(12, 34, 54, 0.28),
+    0 0 0 6px rgba(12, 34, 54, 0.08);
+}
+.split-slider-handle .grip {
+  width: 2px;
+  height: 8px;
+  background: var(--color-ink);
+  border-radius: 1px;
+  opacity: 0.55;
 }
 
 /* Per-network pill, e.g. "Ethereum" / "Base". Coloured dot on the left

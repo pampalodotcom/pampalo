@@ -191,6 +191,16 @@ const NETWORKS: SeedNetwork[] = [
     isNative: true,
     lzEndpointId: 40231,
   },
+  {
+    chainId: 84532,
+    name: "Base Sepolia",
+    alchemySubdomain: "base-sepolia",
+    nativeSymbol: "ETH",
+    nativeDecimals: 18,
+    isNative: true,
+    // LayerZero endpoint id for Base Sepolia; harmless if unused.
+    lzEndpointId: 40245,
+  },
 ];
 
 // AUDD has no direct Chainlink feed; the AUD/USD aggregator is used to
@@ -275,6 +285,27 @@ const TOKENS: SeedToken[] = [
     isNative: true,
     roundTo: 5,
     priceFeedShortId: "eth/usd",
+  },
+  // ── Base Sepolia (Pampalo v1 target — token addresses respin with
+  //    every contract redeploy; update alongside contracts/deployments/
+  //    84532.json) ──
+  {
+    chainId: 84532,
+    address: ETH_ADDRESS,
+    name: "Ethereum",
+    symbol: "ETH",
+    decimals: 18,
+    isNative: true,
+    roundTo: 5,
+    priceFeedShortId: "eth/usd",
+  },
+  {
+    chainId: 84532,
+    address: "0x4Fc9cc04f2A8d6Ff360352C61A4bb36Ab262Ae01",
+    name: "USD Coin",
+    symbol: "USDC",
+    decimals: 6,
+    roundTo: 2,
   },
   // ── Arbitrum Sepolia ──
   {

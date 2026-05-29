@@ -1,7 +1,7 @@
 import { UltraHonkBackend } from "@aztec/bb.js";
 import { Noir, type CompiledCircuit } from "@noir-lang/noir_js";
 
-import depositCircuit from "../../circuits/deposit/target/deposit.json" with { type: "json" };
+import depositCircuit from "../circuits/deposit.json" with { type: "json" };
 import { getBbApi } from "./bb-api.js";
 
 export class Shield {

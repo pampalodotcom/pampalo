@@ -33,8 +33,10 @@ export const UNISWAP_CLIENT_ADDRESSES: Partial<Record<number, ChainAddresses>> =
   },
 };
 
-// Matches the sentinel used in convex/seed.ts and supportedTokens.
-export const ETH_SENTINEL = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+// Re-exported under the historical name to avoid churning the uniswap
+// test fixtures. New code should `import { ETH_SENTINEL } from "./eth"`.
+import { ETH_SENTINEL } from "./eth";
+export { ETH_SENTINEL };
 
 // SwapRouter02 uses constants for the "send to router" recipient so
 // the next call in a multicall can sweep / unwrap. The router

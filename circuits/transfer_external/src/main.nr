@@ -55,6 +55,17 @@ fn main(
     exit_addresses: pub [Field; NOTE_COUNT],
     exit_address_hashes: pub [Field; NOTE_COUNT],
 ) {
+    // Pass 0: bound every asset_amount to 128 bits -- see the matching
+    // note in circuits/transfer/src/main.nr. Same field-overflow attack
+    // applies here because assert_balanced uses the same Field-sum
+    // pattern. Bounding inputs + internal outputs is sufficient
+    // (exit_amounts get equated to output_notes[i].asset_amount on
+    // the withdrawal branch below).
+    for i in 0..NOTE_COUNT {
+        input_notes[i].asset_amount.assert_max_bit_size::<128>();
+        output_notes[i].asset_amount.assert_max_bit_size::<128>();
+    }
+
     // Pass 1: per-note verification.
     for i in 0..NOTE_COUNT {
         if input_notes[i].asset_amount != 0 {

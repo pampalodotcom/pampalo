@@ -147,6 +147,26 @@ _Distinct from_: "recovery integrations" in AUTH.md (the future
 umbrella for MPC / Shamir / social recovery). Recover account is the
 v1 mnemonic-on-paper variant of that family.
 
+### Multi-chain deployment catalog
+
+**Pampalo deployment**:
+The full set of contracts that constitute a Pampalo install on one EVM
+chain — the `Pampalo` contract, its four verifiers, the Poseidon2 huff
+hasher, and any per-asset `IPriceOracle` adapters. Mirrored server-side
+in the Convex `pampaloDeployments` table, one row per chain, FK'd to
+`supportedNetworks`. Source of truth for "which contract address is
+the Pampalo router on chain X?". Not to be confused with **Network**
+(the generic catalog entry that also serves balance lookups for chains
+where Pampalo isn't deployed).
+
+**Shieldable asset**:
+A `(deployment, ERC-20 address)` pair currently registered in the
+deployment's on-chain `Pampalo.supportedAssets` mapping with
+`enabled = true`. Mirrored in the Convex `pampaloAssets` join table
+with its cached oracle adapter address. Rows are write-once + flip
+`enabled`, never deleted, so the audit / Sentry view can show "this
+asset was disabled at …".
+
 ### On-chain protocol (the smart-contract layer)
 
 **Note**:
@@ -227,11 +247,30 @@ the shielder, asset, amount, and leaf commitment are all stored on-chain
 during the wait. Once executed the storage is freed and the leaf is
 inserted.
 
+**Shield queue**:
+The set of all currently-queued shields across every active
+**Pampalo deployment** — the page-level concept rendered by the
+public `/sentry` route. Mirrored in the Convex `shieldQueueEntries`
+table (one row per pending id per deployment). The page itself is
+public read; row-level actions (`Contest`, `Fast-track`) are
+role-gated by the contract, and the UI hides or reveals them based on
+`hasRole(...)` reads for the connected wallet.
+
 **Contest**:
 A `VIGILANT_CITIZEN_ROLE` action that cancels a pending shield, refunding
 the shielder's escrow. Used for compliance review (e.g. OFAC-listed
 source addresses). Distinct from `cancelShield` which is the shielder's
 own opt-out during the wait.
+
+_Refund is on-chain, push-style, at contest time_: `contestShield`
+calls `_refundEscrow(p.shielder, p.asset, p.amount)` inline, which
+transfers the asset back to the shielder's public balance in the same
+TX. The cap is refunded the same way (subject to the same-month
+caveat in `_refundShieldCap`). There is no "claim refund" function
+and no user action required to recover funds — the shielder's
+public wallet is whole again the moment `ShieldContested` is emitted.
+The wallet UI surfaces this as a past-tense status ("Contested · 0.5
+ETH refunded to your wallet"), never as a call to action.
 
 _Vocabulary note_: `encrypt` / `decrypt` are reserved for the
 mnemonic-vault layer (see Encryption above). Do not use them for

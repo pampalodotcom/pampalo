@@ -209,6 +209,51 @@ contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
   }
 
   // ──────────────────────────────────────────────────────────────────────
+  // Public read — cap state for the slider
+  // ──────────────────────────────────────────────────────────────────────
+
+  /// @notice One-shot read of the per-address shield cap state. Mirrors
+  ///         the math `_bumpUsage` runs at `shield` / `shieldNative` time,
+  ///         so the client slider's draggable max and the on-chain
+  ///         enforcement agree. Saves a round-trip vs reading the raw
+  ///         mappings + recomputing the month key client-side.
+  /// @param user      Address to inspect (typically `msg.sender` from the
+  ///                  client's POV).
+  /// @return effectiveCapUsdCents  Per-address override if set, else the
+  ///                               default. May be zero — that's a valid
+  ///                               "no shielding allowed" state, not a
+  ///                               sentinel.
+  /// @return usdCentsUsedThisMonth Zero if the stored bucket belongs to a
+  ///                               prior UTC month — same behaviour as
+  ///                               `_bumpUsage`'s on-the-fly reset.
+  /// @return remainingUsdCents     Saturating `cap - used`. Zero if used
+  ///                               has already met or exceeded cap (e.g.
+  ///                               after a finance-manager cap reduction).
+  function shieldBudget(address user)
+    external
+    view
+    returns (
+      uint256 effectiveCapUsdCents,
+      uint256 usdCentsUsedThisMonth,
+      uint256 remainingUsdCents
+    )
+  {
+    uint256 cap = addressMonthlyCapUsdCents[user];
+    if (cap == 0) cap = defaultMonthlyCapUsdCents;
+    effectiveCapUsdCents = cap;
+
+    uint64 mk = DateMath.monthKey(block.timestamp);
+    MonthlyVolume storage vol = shieldUsage[user];
+    usdCentsUsedThisMonth = vol.monthKey == mk
+      ? uint256(vol.usdCentsUsed)
+      : 0;
+
+    remainingUsdCents = usdCentsUsedThisMonth >= cap
+      ? 0
+      : cap - usdCentsUsedThisMonth;
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
   // Admin — wait time + kill switch
   // ──────────────────────────────────────────────────────────────────────
 

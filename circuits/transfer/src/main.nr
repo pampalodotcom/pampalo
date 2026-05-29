@@ -1,5 +1,5 @@
 use poseidon::poseidon2;
-use pum_lib::{compute_merkle_root, compute_nullifier, reconstruct_leaf, HEIGHT};
+use pum_lib::{compute_merkle_root, compute_nullifier, HEIGHT, reconstruct_leaf};
 
 // Internal-transfer circuit. Hash helpers (leaf reconstruction,
 // merkle root, nullifier) and the tree height live in `pum_lib` so
@@ -51,14 +51,32 @@ fn main(
     nullifiers: pub [Field; NOTE_COUNT],
     output_hashes: pub [Field; NOTE_COUNT],
 ) {
+    // Pass 0: bound every asset_amount to 128 bits.
+    //
+    // assert_balanced sums asset_amount values as Field elements (BN254
+    // scalar field, modulus p ~ 2^254). Without a range bound an
+    // attacker can pick two output amounts (N, p - N) that sum to 0
+    // mod p and balance against an all-empty input set, minting notes
+    // from nothing. With every amount bounded to 128 bits, the per-
+    // asset sum maxes at NOTE_COUNT . 2^128 < 2^130 -- well under p --
+    // and the overflow trick is no longer constructible.
+    //
+    // 128 bits is comfortably above any realistic on-chain asset
+    // supply (USDC total in 6-dec units ~ 2^54; even 18-decimal
+    // max-supply tokens fit under 2^96), but well under p so the
+    // headroom for the sum is enormous.
+    for i in 0..NOTE_COUNT {
+        input_notes[i].asset_amount.assert_max_bit_size::<128>();
+        output_notes[i].asset_amount.assert_max_bit_size::<128>();
+    }
+
     // Pass 1: per-note verification.
     // Inputs: owner derivation + nullifier + merkle membership.
     // Outputs: commitment matches the public output_hashes slot.
     // Empty notes (asset_amount == 0) are skipped on both sides.
     for i in 0..NOTE_COUNT {
         if input_notes[i].asset_amount != 0 {
-            let owner_pub_key =
-                poseidon2::Poseidon2::hash([input_notes[i].owner_secret], 1);
+            let owner_pub_key = poseidon2::Poseidon2::hash([input_notes[i].owner_secret], 1);
             assert(owner_pub_key == input_notes[i].owner);
 
             let reconstructed_nullifier = compute_nullifier(
@@ -115,10 +133,7 @@ fn main(
 // Cost at NOTE_COUNT = 3: up to 6 outer iterations x 3 inner = 18
 // mask-multiply ops per side, well under 100 constraints. Dominated
 // many-fold by the merkle proofs in main().
-fn assert_balanced(
-    input_notes: [InputNote; NOTE_COUNT],
-    output_notes: [OutputNote; NOTE_COUNT],
-) {
+fn assert_balanced(input_notes: [InputNote; NOTE_COUNT], output_notes: [OutputNote; NOTE_COUNT]) {
     // Pass A: anchor on each non-empty input asset_id.
     for i in 0..NOTE_COUNT {
         if input_notes[i].asset_amount != 0 {
@@ -240,4 +255,64 @@ fn test_main() {
     let output_hashes = [alice_output_hash, bob_output_hash, 0];
 
     main(root, input_notes, output_notes, nullifiers, output_hashes);
+}
+
+// Regression test for the BN254 field-overflow mint vector (Tom Pollard,
+// PR #26 review). Without the 128-bit range check in main(), a prover
+// could construct two output notes (N, p - N) summing to 0 mod p and
+// balance them against an all-empty input set, minting a note worth N
+// out of nothing. After the fix, the range check rejects p - N because
+// it occupies ~254 bits, so this test MUST fail to produce a satisfying
+// witness. `should_fail` keeps the security-critical assertion wired up
+// -- if a future refactor removes the bit-size check, this test flips
+// from failing to passing and CI catches it.
+#[test(should_fail)]
+fn test_field_overflow_exploit_rejected() {
+    let asset_id: Field = 1096978651789611665652906124278561787240579697095;
+    let stolen_amount: Field = 5_000_000_000; // 5,000 USDC
+    let owner_attacker: Field =
+        10812186542955647827474372651967207045861174805371180171801345448553285386806;
+    let secret_attacker: Field =
+        2389312107716289199307843900794656424062350252250388738019021107824217896920;
+
+    // sink_amount = 0 - stolen_amount, which in Field arithmetic equals
+    // p - stolen_amount. The pre-fix circuit summed (stolen + sink) and
+    // got 0 via field wrap; the fix's assert_max_bit_size::<128>() on
+    // every output amount catches sink_amount here.
+    let sink_amount: Field = 0 - stolen_amount;
+
+    let real_leaf = reconstruct_leaf(asset_id, stolen_amount, owner_attacker, secret_attacker);
+    let sink_leaf = reconstruct_leaf(asset_id, sink_amount, owner_attacker, secret_attacker);
+
+    let empty_in: InputNote = InputNote {
+        asset_id: 0,
+        asset_amount: 0,
+        owner: 0,
+        owner_secret: 0,
+        secret: 0,
+        leaf_index: 0,
+        path: [0; HEIGHT - 1],
+        path_indices: [0; HEIGHT - 1],
+    };
+    let real_out: OutputNote = OutputNote {
+        owner: owner_attacker,
+        secret: secret_attacker,
+        asset_id,
+        asset_amount: stolen_amount,
+    };
+    let sink_out: OutputNote = OutputNote {
+        owner: owner_attacker,
+        secret: secret_attacker,
+        asset_id,
+        asset_amount: sink_amount,
+    };
+    let empty_out: OutputNote = OutputNote { owner: 0, secret: 0, asset_id: 0, asset_amount: 0 };
+
+    main(
+        /*root*/ 0,
+        [empty_in, empty_in, empty_in],
+        [real_out, sink_out, empty_out],
+        /*nullifiers*/ [0, 0, 0],
+        /*output_hashes*/ [real_leaf, sink_leaf, 0],
+    );
 }
