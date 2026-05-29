@@ -3,7 +3,10 @@ import { cn } from "@/lib/utils";
 import { DepositButton } from "./deposit/DepositButton";
 import { SplitBar } from "./SplitBar";
 import { SunIcon, MoonIcon } from "./SunMoonIcons";
-import { SyncIndicator } from "./SyncIndicator";
+// SyncIndicator (the "Sync Preferences" chip) is intentionally hidden
+// for now — the underlying preferences-sync module has known bugs
+// that need a rework before it should be user-visible. The hook +
+// component still exist so it can be reintroduced cleanly later.
 
 type Props = {
   /** Total USD (public + private). null while loading. */
@@ -152,7 +155,7 @@ export function BalanceCard({
               {syncing ? "Syncing…" : "Sync"}
             </button>
           )}
-          <SyncIndicator />
+          {/* <SyncIndicator /> — disabled: see note at top of file. */}
         </div>
       </div>
 

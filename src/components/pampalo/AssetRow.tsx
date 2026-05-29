@@ -290,13 +290,23 @@ export function AssetRow({
   const handleCancel = () => setPub(originalPub);
   const handleConfirm = () => {
     if (!dirty || !onMove || asset.chainIds.length === 0) return;
-    // The slider drag yields a JS float — at 18 ETH-decimals that
-    // produces dust like 0.0051200345678901234 from a normal-looking
-    // drag. Cap at 10 dp (or the token's native decimals, whichever
-    // is smaller) before parseUnits so amounts stay legible across
-    // the chain. parseUnits zero-pads the rest.
-    const precision = Math.min(asset.decimals, 10);
-    const amount = parseUnits(moveAmt.toFixed(precision), asset.decimals);
+    // Snap to the row's display precision (`dp`) so the broadcast
+    // amount matches what the user sees on the button label — no more
+    // 5.000466 USDC from a drag that *looks* like 5.00. Endpoint cases
+    // (shield-all or unshield-all) use the exact wei from the source
+    // balance so the user can fully empty a side without trailing dust
+    // in the other direction.
+    let amount: bigint;
+    const atShieldAll = direction === "shield" && pub <= 1e-9;
+    const atUnshieldAll = direction === "unshield" && priv <= 1e-9;
+    if (atShieldAll && asset.publicWei !== null) {
+      amount = asset.publicWei;
+    } else if (atUnshieldAll && asset.privateWei !== null) {
+      amount = asset.privateWei;
+    } else {
+      const precision = Math.min(asset.decimals, dp);
+      amount = parseUnits(moveAmt.toFixed(precision), asset.decimals);
+    }
     onMove({
       intent: direction,
       amount,
@@ -340,25 +350,13 @@ export function AssetRow({
       </div>
     );
   } else if (total > 0 && dirty) {
-    // Action row: stacks vertically by default so the Confirm button
-    // always has the full track width for the "Unshield 0.00512 ETH"
-    // label (was wrapping into 2 lines at sm/md widths). Flips to a
-    // horizontal Cancel + Confirm pair at lg+ where there's room.
+    // Action row: stacks vertically by default with the primary
+    // Confirm button on TOP (matches the user's reach-target
+    // expectation — primary action is closest to thumb / cursor).
+    // `lg:flex-row-reverse` swaps to the familiar horizontal layout at
+    // lg+ where there's room: Cancel on the left, Confirm on the right.
     actionRow = (
-      <div className="flex flex-col gap-2 lg:flex-row">
-        <button
-          type="button"
-          onClick={handleCancel}
-          className={cn(
-            "inline-flex h-[42px] w-full lg:w-[96px] lg:shrink-0 items-center justify-center",
-            "rounded-full border border-line bg-transparent",
-            "text-[13.5px] font-semibold text-ink",
-            "transition-colors hover:bg-paper-lo",
-            "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ink-faint",
-          )}
-        >
-          Cancel
-        </button>
+      <div className="flex flex-col gap-2 lg:flex-row-reverse">
         <button
           type="button"
           onClick={handleConfirm}
@@ -387,6 +385,19 @@ export function AssetRow({
             {direction === "shield" ? "Shield" : "Unshield"}{" "}
             {fmtToken(moveAmt, dp)} {asset.symbol}
           </span>
+        </button>
+        <button
+          type="button"
+          onClick={handleCancel}
+          className={cn(
+            "inline-flex h-[42px] w-full lg:w-[96px] lg:shrink-0 items-center justify-center",
+            "rounded-full border border-line bg-transparent",
+            "text-[13.5px] font-semibold text-ink",
+            "transition-colors hover:bg-paper-lo",
+            "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ink-faint",
+          )}
+        >
+          Cancel
         </button>
       </div>
     );

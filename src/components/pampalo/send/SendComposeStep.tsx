@@ -1,6 +1,6 @@
-import { useMemo, useSyncExternalStore } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { useQuery } from "convex/react";
-import { formatEther } from "ethers";
+import { formatUnits } from "ethers";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,11 @@ import {
   subscribeNotes,
 } from "@/lib/idb-notes";
 import { AssetMark } from "@/components/pampalo/AssetMark";
+import {
+  TokenSelectButton,
+  TokenDropdown,
+  type TokenPair,
+} from "@/components/pampalo/AssetSelect";
 import { NetworkLogo } from "@/components/pampalo/deposit/NetworkLogo";
 import { SunIcon, MoonIcon } from "@/components/pampalo/SunMoonIcons";
 import type { SendInputUnit, SendMode, SendRecipient } from "./SendSheet";
@@ -41,6 +46,8 @@ export function SendComposeStep({
   onInputUnitChange,
   recipient,
   onRecipientChange,
+  tokenPair,
+  onTokenPairChange,
   onBack,
   onContinue,
 }: {
@@ -53,30 +60,88 @@ export function SendComposeStep({
   onInputUnitChange: (next: SendInputUnit) => void;
   recipient: SendRecipient | null;
   onRecipientChange: (next: SendRecipient | null) => void;
+  /** Selected token for public mode. Private mode hardcodes ETH and
+   *  this is unused. */
+  tokenPair: TokenPair | null;
+  onTokenPairChange: (next: TokenPair | null) => void;
   onBack: () => void;
   onContinue: () => void;
 }) {
   const accent = mode === "private" ? "priv" : "pub";
 
-  // ETH/USD spot — powers the inputUnit toggle. Same shape the Swap
-  // modal uses ("eth/usd" shortId in the chainlink feeds).
   const prices = useQuery(api.prices.feeds.listLatest, {});
+  const tokensRaw = useQuery(api.catalog.tokens.list, {});
+
+  // Full token catalogue restricted to the selected chain. Drives the
+  // public-mode picker. Private mode is ETH-only so we don't surface
+  // these tokens there.
+  const pairs = useMemo<TokenPair[]>(() => {
+    if (!tokensRaw || chainId === null) return [];
+    return tokensRaw
+      .filter((t) => t.chainId === chainId)
+      .map(
+        (t): TokenPair => ({
+          symbol: t.symbol,
+          name: t.name,
+          chainId: t.chainId,
+          address: t.address,
+          decimals: t.decimals,
+          priceFeedShortId: t.priceFeedShortId,
+        }),
+      );
+  }, [tokensRaw, chainId]);
+
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  // Active token: private mode → synthetic ETH pair; public mode →
+  // user-picked pair or the chain's native ETH as a default.
+  const ethDefault = useMemo<TokenPair | null>(() => {
+    if (chainId === null) return null;
+    return (
+      pairs.find((p) => p.address.toLowerCase() === ETH_SENTINEL) ?? null
+    );
+  }, [pairs, chainId]);
+  const activeToken: TokenPair | null = useMemo(() => {
+    if (mode === "private") {
+      // ETH-only for shielded sends. Synthesize a TokenPair from the
+      // catalogue's native ETH on this chain so balance/USD all flow
+      // through the same shape as public.
+      return ethDefault;
+    }
+    return tokenPair ?? ethDefault;
+  }, [mode, tokenPair, ethDefault]);
+
   const ethUsdPrice = useMemo<number | null>(() => {
     if (!prices) return null;
     const feed = prices.find((p) => p.shortId === "eth/usd");
     if (!feed) return null;
     return Number(feed.answer) / 10 ** feed.feedDecimals;
   }, [prices]);
+  const tokenUsdPrice = useMemo<number | null>(() => {
+    if (!activeToken) return null;
+    if (!activeToken.priceFeedShortId) return 1; // USDC / AUDD stables
+    if (!prices) return null;
+    const feed = prices.find(
+      (p) => p.shortId === activeToken.priceFeedShortId,
+    );
+    if (!feed) return null;
+    return Number(feed.answer) / 10 ** feed.feedDecimals;
+  }, [activeToken, prices]);
+
+  // Single conversion factor for the input-unit toggle. For ETH the
+  // chainlink ETH/USD feed is authoritative. For stablecoins we use
+  // their own price-feed-or-$1 fallback (see tokenUsdPrice above).
+  const priceForToggle = tokenUsdPrice ?? ethUsdPrice;
 
   const toggleInputUnit = () => {
-    if (!ethUsdPrice || ethUsdPrice <= 0) return;
+    if (!priceForToggle || priceForToggle <= 0) return;
     const next: SendInputUnit = inputUnit === "token" ? "usd" : "token";
     const n = Number(amount);
     if (amount && Number.isFinite(n) && n > 0) {
       onAmountChange(
         next === "usd"
-          ? (n * ethUsdPrice).toFixed(2)
-          : (n / ethUsdPrice).toFixed(6),
+          ? (n * priceForToggle).toFixed(2)
+          : (n / priceForToggle).toFixed(6),
       );
     }
     onInputUnitChange(next);
@@ -85,21 +150,21 @@ export function SendComposeStep({
   const secondaryLine = useMemo(() => {
     const n = Number(amount);
     if (!amount || !Number.isFinite(n) || n <= 0) return "";
-    if (!ethUsdPrice || ethUsdPrice <= 0) return "";
-    if (inputUnit === "token") return `≈ $${(n * ethUsdPrice).toFixed(2)}`;
-    return `≈ ${(n / ethUsdPrice).toFixed(6)} ETH`;
-  }, [amount, inputUnit, ethUsdPrice]);
+    if (!priceForToggle || priceForToggle <= 0) return "";
+    if (inputUnit === "token") return `≈ $${(n * priceForToggle).toFixed(2)}`;
+    return `≈ ${(n / priceForToggle).toFixed(6)} ${activeToken?.symbol ?? "ETH"}`;
+  }, [amount, inputUnit, priceForToggle, activeToken?.symbol]);
 
   // Mode-aware balance display.
-  // Public: live `usePublicBalance` against the chain's native asset.
+  // Public: live `usePublicBalance` against the active token.
   // Private: sum of `state==="spendable"` ETH notes on this chain.
   const pubBalance = usePublicBalance(
-    chainId !== null
+    activeToken !== null
       ? {
-          chainId,
-          address: ETH_SENTINEL,
-          symbol: "ETH",
-          decimals: 18,
+          chainId: activeToken.chainId,
+          address: activeToken.address,
+          symbol: activeToken.symbol,
+          decimals: activeToken.decimals,
         }
       : {
           chainId: 1,
@@ -107,7 +172,7 @@ export function SendComposeStep({
           symbol: "",
           decimals: 18,
         },
-    chainId !== null && mode === "public" ? evmAddress : null,
+    activeToken !== null && mode === "public" ? evmAddress : null,
   );
   const notes = useSyncExternalStore(
     subscribeNotes,
@@ -134,10 +199,9 @@ export function SendComposeStep({
     mode === "private"
       ? privSpendableWei
       : pubBalance.data?.balanceWei ?? null;
+  const tokenDecimals = activeToken?.decimals ?? 18;
   const balanceLabel =
-    balanceWei !== null
-      ? formatEther(balanceWei)
-      : null;
+    balanceWei !== null ? formatUnits(balanceWei, tokenDecimals) : null;
   // For private send the max-spendable per-tx is the largest single
   // note (we don't multi-input join yet). For public, it's the wallet
   // balance minus a small ETH gas buffer.
@@ -164,15 +228,15 @@ export function SendComposeStep({
 
   const onMax = () => {
     if (maxSpendable === 0n) return;
-    onAmountChange(formatEther(maxSpendable));
+    onAmountChange(formatUnits(maxSpendable, tokenDecimals));
   };
 
   const amountValid = (() => {
     const n = Number(amount);
     if (!Number.isFinite(n) || n <= 0) return false;
     if (inputUnit === "usd") {
-      // Need a working ETH/USD feed to convert downstream.
-      return ethUsdPrice !== null && ethUsdPrice > 0;
+      // Need a working price feed to convert downstream.
+      return priceForToggle !== null && priceForToggle > 0;
     }
     return true;
   })();
@@ -183,7 +247,11 @@ export function SendComposeStep({
       : HEX_32BYTE.test(recipient.poseidon) &&
         HEX_UNCOMPRESSED_PUBKEY.test(recipient.envelope));
 
-  const reviewDisabled = !amountValid || !recipientValid || chainId === null;
+  const reviewDisabled =
+    !amountValid ||
+    !recipientValid ||
+    chainId === null ||
+    activeToken === null;
 
   return (
     <div className="flex flex-col gap-5 px-5 pt-2 pb-5 sm:px-6 sm:pt-3 sm:pb-6">
@@ -239,33 +307,62 @@ export function SendComposeStep({
             )}
           />
           <span className="shrink-0 text-[16px] font-medium text-ink-mute/70">
-            {inputUnit === "usd" ? "USD" : "ETH"}
+            {inputUnit === "usd" ? "USD" : activeToken?.symbol ?? "ETH"}
           </span>
-          <span
-            className={cn(
-              "inline-flex items-center gap-1.5 shrink-0 rounded-full",
-              "bg-card border border-line h-9 px-2.5",
-              "text-[13px] font-semibold text-ink",
-            )}
-          >
-            <AssetMark symbol="ETH" size={22} />
-            ETH
-          </span>
+          {mode === "public" && pairs.length > 1 ? (
+            <div className="relative">
+              <TokenSelectButton
+                token={activeToken}
+                open={pickerOpen}
+                onClick={() => setPickerOpen((o) => !o)}
+              />
+              {pickerOpen && (
+                <TokenDropdown
+                  pairs={pairs}
+                  selected={activeToken}
+                  counterpart={null}
+                  evmAddress={evmAddress}
+                  prices={prices ?? undefined}
+                  lockChainId={chainId ?? undefined}
+                  defaultFilter="mine"
+                  onSelect={(p) => {
+                    onTokenPairChange(p);
+                    onAmountChange("");
+                    onInputUnitChange("token");
+                    setPickerOpen(false);
+                  }}
+                  onClose={() => setPickerOpen(false)}
+                />
+              )}
+            </div>
+          ) : (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 shrink-0 rounded-full",
+                "bg-card border border-line h-9 px-2.5",
+                "text-[13px] font-semibold text-ink",
+              )}
+            >
+              <AssetMark symbol={activeToken?.symbol ?? "ETH"} size={22} />
+              {activeToken?.symbol ?? "ETH"}
+            </span>
+          )}
         </div>
         {/* Secondary equivalent + View-in toggle, matching the
             SwapModal pattern (and SendModal's older one). Hidden
             until both the user has typed something and we have a
             usable ETH/USD price. */}
-        {(secondaryLine || ethUsdPrice !== null) && (
+        {(secondaryLine || priceForToggle !== null) && (
           <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px] text-ink-mute">
             <span className="min-w-0 truncate font-mono">{secondaryLine}</span>
-            {ethUsdPrice !== null && (
+            {priceForToggle !== null && (
               <button
                 type="button"
                 onClick={toggleInputUnit}
                 className="shrink-0 text-[10.5px] font-medium text-ink-mute underline-offset-2 hover:text-ink hover:underline"
               >
-                View in {inputUnit === "token" ? "USD" : "ETH"}
+                View in{" "}
+                {inputUnit === "token" ? "USD" : activeToken?.symbol ?? "ETH"}
               </button>
             )}
           </div>

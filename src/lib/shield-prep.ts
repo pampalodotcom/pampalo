@@ -16,6 +16,32 @@ const ETH_ASSET_ID = BigInt(ETH_SENTINEL);
 const SHIELD_NATIVE_IFACE = new Interface([
   "function shieldNative(bytes proof, bytes32[] publicInputs, bytes encryptedPayload) external payable returns (uint256 id)",
 ]);
+const SHIELD_ERC20_IFACE = new Interface([
+  "function shield(address erc20, uint256 amount, bytes proof, bytes32[] publicInputs, bytes encryptedPayload) external returns (uint256 id)",
+]);
+const ERC20_APPROVE_IFACE = new Interface([
+  "function approve(address spender, uint256 value) external returns (bool)",
+]);
+
+/**
+ * Encode the calldata for an `IERC20.approve(spender, value)` call.
+ * Used by the ERC-20 shield path so we can sign approve + shield in
+ * the same PRF ceremony and broadcast them with sequential nonces.
+ */
+export function buildErc20Approve(
+  tokenAddress: string,
+  spender: string,
+  amount: bigint,
+): { to: string; data: string; value: string } {
+  return {
+    to: tokenAddress.toLowerCase(),
+    data: ERC20_APPROVE_IFACE.encodeFunctionData("approve", [
+      spender,
+      amount,
+    ]),
+    value: "0",
+  };
+}
 
 export type ShieldNativeInput = {
   /** Amount of ETH to shield, in wei. */
@@ -238,5 +264,147 @@ export async function prepareShieldNative(
     encryptedPayload,
     publicInputs,
     proofBytes,
+  };
+}
+
+// ─── ERC-20 shield ───────────────────────────────────────────────────────
+
+export type ShieldErc20Input = {
+  /** Lowercased ERC-20 contract address. Treated as the witness's
+   *  `asset_id` after BigInt-conversion. */
+  tokenAddress: string;
+  /** Amount in token base units. */
+  amount: bigint;
+  chainId: number;
+  pampaloAddress: string;
+  ownerPoseidon: string;
+  envelopePubKey: string;
+};
+
+export type PreparedShieldErc20Tx = {
+  to: string;
+  data: string;
+  /** Always "0" — ERC-20 shield carries no ETH value. */
+  value: string;
+  chainId: number;
+  leafCommitment: string;
+  secret: string;
+  encryptedPayload: string;
+  publicInputs: readonly string[];
+  proofBytes: string;
+  /** Echo of the spent token so the confirm sheet can render
+   *  symbol/amount without re-resolving. */
+  tokenAddress: string;
+  amount: string;
+};
+
+/**
+ * ERC-20 sibling of `prepareShieldNative`. Witness layout is
+ * identical (asset_id is the token's address as a uint160, asset_amount
+ * is base units); calldata uses `shield(asset, amount, ...)` instead
+ * of the payable `shieldNative(...)`.
+ */
+export async function prepareShieldErc20(
+  input: ShieldErc20Input,
+): Promise<PreparedShieldErc20Tx> {
+  const {
+    tokenAddress,
+    amount,
+    chainId,
+    pampaloAddress,
+    ownerPoseidon,
+    envelopePubKey,
+  } = input;
+  if (amount <= 0n) throw new Error("amount must be > 0");
+
+  const secret = randomSecret();
+  const owner = BigInt(ownerPoseidon);
+  const assetId = BigInt(tokenAddress);
+
+  const mods = await getWarmModules();
+  type ShieldCtor = new () => {
+    init: () => Promise<void>;
+    shieldNoir: {
+      execute: (witness: Record<string, string>) => Promise<{ witness: Uint8Array }>;
+    };
+    shieldBackend: {
+      generateProof: (
+        witness: Uint8Array,
+        opts: { keccakZK: boolean },
+      ) => Promise<{ proof: Uint8Array | string; publicInputs: string[] }>;
+    };
+  };
+  type NoteEncryptionStatic = {
+    encryptNoteData: (
+      data: {
+        secret: string | bigint;
+        owner: string | bigint;
+        asset_id: string | bigint;
+        asset_amount: string | bigint;
+      },
+      pub: string,
+    ) => Promise<string>;
+  };
+  const Shield = mods.Shield as ShieldCtor;
+  const NoteEncryption = mods.NoteEncryption as NoteEncryptionStatic;
+  const poseidon2Hash = mods.poseidon2Hash as (xs: bigint[]) => bigint;
+
+  const leafBig = poseidon2Hash([assetId, amount, owner, secret]);
+  const leafCommitment = "0x" + leafBig.toString(16).padStart(64, "0");
+
+  const encryptedPayload = await NoteEncryption.encryptNoteData(
+    {
+      secret,
+      owner,
+      asset_id: assetId,
+      asset_amount: amount,
+    },
+    envelopePubKey,
+  );
+
+  const shield = new Shield();
+  await shield.init();
+  const { witness } = await shield.shieldNoir.execute({
+    hash: leafBig.toString(),
+    asset_id: assetId.toString(),
+    asset_amount: amount.toString(),
+    owner: owner.toString(),
+    secret: secret.toString(),
+  });
+  const proof = await shield.shieldBackend.generateProof(witness, {
+    keccakZK: true,
+  });
+
+  const proofBytes =
+    typeof proof.proof === "string"
+      ? proof.proof
+      : "0x" +
+        Array.from(proof.proof)
+          .map((b: number) => b.toString(16).padStart(2, "0"))
+          .join("");
+  const publicInputs = (proof.publicInputs as readonly string[]).map(
+    (s) => s,
+  ) as readonly string[];
+
+  const data = SHIELD_ERC20_IFACE.encodeFunctionData("shield", [
+    tokenAddress,
+    amount,
+    proofBytes,
+    publicInputs,
+    encryptedPayload,
+  ]);
+
+  return {
+    to: pampaloAddress,
+    data,
+    value: "0",
+    chainId,
+    leafCommitment,
+    secret: secret.toString(),
+    encryptedPayload,
+    publicInputs,
+    proofBytes,
+    tokenAddress: tokenAddress.toLowerCase(),
+    amount: amount.toString(),
   };
 }

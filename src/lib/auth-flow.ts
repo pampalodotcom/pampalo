@@ -534,6 +534,12 @@ export async function withUnlockedWallet<T>(
     if (sessionToken) {
       await syncOnTxSign(dekKey, sessionToken)
     }
+    // Notes sync piggyback. Fire-and-forget so the caller's `fn`
+    // result returns immediately; the sync runs in the background
+    // with a captured copy of address + privKey (scrubbed in
+    // `finally` below doesn't reach them — they live in the spawned
+    // promise's closure until it resolves, then GC).
+    void syncShieldNotesOnSignIn(wallet.privateKey, wallet.address)
     return result
   } finally {
     new Uint8Array(dekBytes).fill(0)
@@ -623,6 +629,14 @@ export async function signTransactionWithPasskey(
     if (sessionToken) {
       await syncOnTxSign(dekKey, sessionToken)
     }
+    // Trigger (b'): shielded-notes sync piggyback. Fire-and-forget so
+    // the caller's signed tx returns immediately; the sync runs in the
+    // background using a copy of the wallet's address + private key
+    // that we capture before scrubbing. Errors are swallowed inside
+    // syncShieldNotesOnSignIn.
+    const addressForSync = wallet.address
+    const privKeyForSync = wallet.privateKey
+    void syncShieldNotesOnSignIn(privKeyForSync, addressForSync)
     return signed
   } finally {
     new Uint8Array(dekBytes).fill(0)

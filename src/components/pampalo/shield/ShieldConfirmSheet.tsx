@@ -4,13 +4,16 @@ import { useQuery } from "convex/react";
 import { VisuallyHidden } from "radix-ui";
 import { toast } from "sonner";
 import { api } from "../../../../convex/_generated/api";
-import { signTransactionWithPasskey } from "@/lib/auth-flow";
 import { ETH_SENTINEL } from "@/lib/eth";
 import { appendNote } from "@/lib/idb-notes";
 import {
+  buildErc20Approve,
+  prepareShieldErc20,
   prepareShieldNative,
+  type PreparedShieldErc20Tx,
   type PreparedShieldNativeTx,
 } from "@/lib/shield-prep";
+import { withUnlockedWallet } from "@/lib/auth-flow";
 import { useRpcClient } from "@/lib/rpc";
 import { useIsDesktop } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
@@ -39,6 +42,10 @@ import { AssetMark } from "../AssetMark";
 // against. Base Sepolia's block gas limit is well above this, so the
 // only cost is the gas fee.
 const SHIELD_GAS_LIMIT = 7_000_000n;
+// ERC-20 approve costs ~46k for a fresh slot, ~30k for a re-approve.
+// 120k leaves comfortable headroom across all ERC-20 implementations
+// we'd plausibly see.
+const APPROVE_GAS_LIMIT = 120_000n;
 
 // Local alias for readability at the IDB-write call site below.
 // ETH_SENTINEL lives in src/lib/eth.ts as the single source of truth.
@@ -48,7 +55,9 @@ type Phase =
   | "idle"
   | "preparing"
   | "signing"
-  | "broadcasting"
+  | "approving"
+  | "submitting"
+  | "awaiting"
   | "done"
   | "error";
 
@@ -58,6 +67,10 @@ export type ShieldConfirmPayload = {
   chainId: number;
   symbol: string;
   decimals: number;
+  /** Lowercased asset address. `ETH_SENTINEL` for native ETH; an
+   *  ERC-20 contract address otherwise. Drives the prepareShield* fork
+   *  + the approve preamble. */
+  assetAddress: string;
 };
 
 type Props = {
@@ -98,7 +111,9 @@ export function ShieldConfirmSheet({
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [prepared, setPrepared] = useState<PreparedShieldNativeTx | null>(null);
+  const [prepared, setPrepared] = useState<
+    PreparedShieldNativeTx | PreparedShieldErc20Tx | null
+  >(null);
   const [signedTx, setSignedTx] = useState<string | null>(null);
 
   // Reset everything when the sheet closes so a re-open starts clean.
@@ -135,21 +150,61 @@ export function ShieldConfirmSheet({
     }
     setError(null);
 
+    // Defensive: the route is supposed to inject the asset address from
+    // the catalog before opening this sheet. If it didn't, we'd silently
+    // misroute through prepareShieldNative and shield as ETH at the
+    // wrong decimals — exactly the bug that ate 2,478,900 wei trying to
+    // shield USDC. Fail loudly instead.
+    if (
+      !payload.assetAddress ||
+      !/^0x[0-9a-fA-F]{40}$/.test(payload.assetAddress)
+    ) {
+      setError(
+        `Shield was opened without a resolved ${payload.symbol} address. ` +
+          "Close the sheet, reload, and try again.",
+      );
+      setPhase("error");
+      return;
+    }
+    const isNative =
+      payload.assetAddress.toLowerCase() === ETH_ADDRESS.toLowerCase();
+    if (!isNative && payload.symbol.toUpperCase() === "ETH") {
+      setError(
+        "ETH/asset address mismatch detected. Refusing to shield to avoid a " +
+          "wrong-decimals broadcast.",
+      );
+      setPhase("error");
+      return;
+    }
+
     try {
       setPhase("preparing");
       // (1) Proof + ECIES payload + calldata. Heavy — first run pays
       // the bb.js WASM warmup; subsequent runs in the same tab are fast.
-      const prep = await prepareShieldNative({
-        amount: payload.amount,
-        chainId: payload.chainId,
-        pampaloAddress: deployment.pampaloAddress,
-        ownerPoseidon: addresses.poseidon,
-        envelopePubKey: addresses.envelope,
-      });
+      const prep = isNative
+        ? await prepareShieldNative({
+            amount: payload.amount,
+            chainId: payload.chainId,
+            pampaloAddress: deployment.pampaloAddress,
+            ownerPoseidon: addresses.poseidon,
+            envelopePubKey: addresses.envelope,
+          })
+        : await prepareShieldErc20({
+            tokenAddress: payload.assetAddress,
+            amount: payload.amount,
+            chainId: payload.chainId,
+            pampaloAddress: deployment.pampaloAddress,
+            ownerPoseidon: addresses.poseidon,
+            envelopePubKey: addresses.envelope,
+          });
       setPrepared(prep);
 
-      // (2) Nonce + gas fields.
+      // (2) Gas fields + starting nonce. For ERC-20 we'll consume two
+      // sequential nonces — approve(N) then shield(N+1). EVM guarantees
+      // they execute in nonce order, so the shield can never observe a
+      // stale allowance.
       const nonceRes = await rpc.getNonce(payload.chainId, addresses.evm);
+      const startNonce = Number(nonceRes.nonce);
       const useEip1559 = gas.priorityFeeWei !== undefined;
       const baseGasPriceWei = BigInt(gas.gasPriceWei);
       const maxPriorityFeePerGas =
@@ -158,49 +213,101 @@ export function ShieldConfirmSheet({
           : undefined;
       const maxFeePerGas = useEip1559 ? baseGasPriceWei : undefined;
       const legacyGasPrice = useEip1559 ? undefined : baseGasPriceWei;
+      const fees = useEip1559
+        ? {
+            maxFeePerGas,
+            maxPriorityFeePerGas,
+            gasPrice: undefined as bigint | undefined,
+            type: 2 as number | undefined,
+          }
+        : {
+            maxFeePerGas: undefined as bigint | undefined,
+            maxPriorityFeePerGas: undefined as bigint | undefined,
+            gasPrice: legacyGasPrice,
+            type: undefined as number | undefined,
+          };
 
-      // (3) Passkey unlock → mnemonic decrypt → signTransaction. This
-      // is the moment the user sees the WebAuthn ceremony.
+      // (3) Sign in one PRF window. For ERC-20 this is { approve, shield };
+      // for ETH it's just { shield }. `withUnlockedWallet` runs the PRF
+      // ceremony once and yields the unlocked Wallet to this closure.
       setPhase("signing");
-      const signed = await signTransactionWithPasskey({
-        chainId: payload.chainId,
-        to: prep.to,
-        value: BigInt(prep.value),
-        data: prep.data,
-        nonce: Number(nonceRes.nonce),
-        gasLimit: SHIELD_GAS_LIMIT,
-        gasPrice: legacyGasPrice,
-        maxFeePerGas,
-        maxPriorityFeePerGas,
-      });
-      setSignedTx(signed);
+      const signed = await withUnlockedWallet(async (wallet) => {
+        const buildAndSign = (
+          to: string,
+          data: string,
+          value: bigint,
+          nonce: number,
+          gasLimit: bigint,
+        ) =>
+          wallet.signTransaction({
+            chainId: payload.chainId,
+            to,
+            data,
+            value,
+            nonce,
+            gasLimit,
+            ...fees,
+          });
 
-      // (4) Broadcast. The Convex indexer picks up the resulting
-      // ShieldQueued within ~30s and the /sentry reactive query
-      // surfaces it; the optimistic IDB write (slice "Wire it" in
-      // SHIELD_FLOW.md §3.4) lands separately so this path stays
-      // small.
-      setPhase("broadcasting");
+        if (isNative) {
+          const shieldSigned = await buildAndSign(
+            prep.to,
+            prep.data,
+            BigInt(prep.value),
+            startNonce,
+            SHIELD_GAS_LIMIT,
+          );
+          return { shield: shieldSigned, approve: null as string | null };
+        }
+        // ERC-20: approve(spender = pampalo router, amount) at nonce N,
+        // then shield(asset, amount, ...) at nonce N+1.
+        const approveTx = buildErc20Approve(
+          payload.assetAddress,
+          deployment.pampaloAddress,
+          payload.amount,
+        );
+        const approveSigned = await buildAndSign(
+          approveTx.to,
+          approveTx.data,
+          BigInt(approveTx.value),
+          startNonce,
+          APPROVE_GAS_LIMIT,
+        );
+        const shieldSigned = await buildAndSign(
+          prep.to,
+          prep.data,
+          BigInt(prep.value),
+          startNonce + 1,
+          SHIELD_GAS_LIMIT,
+        );
+        return { approve: approveSigned, shield: shieldSigned };
+      });
+      setSignedTx(signed.shield);
+
+      // (4) Broadcast. ERC-20 path sends approve first, then shield.
+      // We don't wait for approve to mine — nonce ordering ensures the
+      // shield can't execute before the approve regardless of when
+      // each lands. If approve reverts, shield reverts too (no
+      // double-spend hazard).
+      if (signed.approve) {
+        setPhase("approving");
+        await rpc.sendRawTransaction(payload.chainId, signed.approve);
+      }
+      setPhase("submitting");
       const { txHash } = await rpc.sendRawTransaction(
         payload.chainId,
-        signed,
+        signed.shield,
       );
       onBroadcasted?.({
         chainId: payload.chainId,
-        assetAddress: ETH_ADDRESS,
+        assetAddress: payload.assetAddress,
         txHash,
       });
 
-      // Optimistic IDB write — same-device case. We have the full
-      // four-tuple locally from `prep`; no decryption needed. The
-      // Convex reactive sync will eventually reconcile (forward-only
-      // state machine ensures no regression). For unlockTime we use
-      // (now + shieldWaitSeconds) as an approximation; the Convex
-      // reactive update will patch in the exact block-timestamp-based
-      // value within ~30s. See SHIELD_FLOW.md §3.4.
+      // Optimistic IDB write — same as native shield.
       try {
         await appendNote({
-          asset: ETH_ADDRESS,
+          asset: payload.assetAddress,
           assetDecimals: payload.decimals,
           amount: payload.amount.toString(),
           owner: addresses.poseidon,
@@ -215,13 +322,15 @@ export function ShieldConfirmSheet({
           queuedTxHash: txHash,
         });
       } catch (idbErr) {
-        // Don't fail the user-visible flow if IDB write hiccups —
-        // Convex reactive sync will populate the row from the chain
-        // event within ~30s on its own.
         console.warn("[shield] optimistic IDB write failed", idbErr);
       }
 
-      setPhase("done");
+      // Brief "awaiting confirmation" state so the user sees the final
+      // step land before the sheet closes and hands off to the asset
+      // row's "Confirming on-chain…" pill (driven by wallet.tsx's
+      // receipt poll). Without this beat the broadcast → close
+      // transition looks instantaneous and the journey is lost.
+      setPhase("awaiting");
       toast.success(
         `Shield broadcast · ${txHash.slice(0, 10)}…${txHash.slice(-6)}`,
       );
@@ -230,6 +339,8 @@ export function ShieldConfirmSheet({
         txHash,
         leafCommitment: prep.leafCommitment,
       });
+      await new Promise((r) => setTimeout(r, 900));
+      setPhase("done");
       onOpenChange(false);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -238,17 +349,14 @@ export function ShieldConfirmSheet({
     }
   };
 
-  const closeable =
-    phase !== "preparing" &&
-    phase !== "signing" &&
-    phase !== "broadcasting";
-  const confirmDisabled =
-    !payload ||
-    !deployment ||
+  const isBusy =
     phase === "preparing" ||
     phase === "signing" ||
-    phase === "broadcasting" ||
-    phase === "done";
+    phase === "approving" ||
+    phase === "submitting" ||
+    phase === "awaiting";
+  const closeable = !isBusy;
+  const confirmDisabled = !payload || !deployment || isBusy || phase === "done";
 
   const confirmLabel = (() => {
     switch (phase) {
@@ -256,8 +364,14 @@ export function ShieldConfirmSheet({
         return "Generating proof…";
       case "signing":
         return "Awaiting passkey…";
-      case "broadcasting":
-        return "Broadcasting…";
+      case "approving":
+        return payload
+          ? `Approving Pampalo for ${amountFmt} ${payload.symbol}…`
+          : "Approving…";
+      case "submitting":
+        return "Submitting shield transaction…";
+      case "awaiting":
+        return "Awaiting confirmation…";
       case "done":
         return "Done";
       case "error":
@@ -325,7 +439,12 @@ export function ShieldConfirmSheet({
         </div>
 
         {/* Status / error line */}
-        <StatusLine phase={phase} error={error} />
+        <StatusLine
+          phase={phase}
+          error={error}
+          symbol={payload?.symbol}
+          amountFmt={amountFmt}
+        />
 
         {/* Action stack — Confirm sits on top of Cancel on every viewport,
             so the primary action is always closest to the user's thumb /
@@ -346,9 +465,7 @@ export function ShieldConfirmSheet({
                 "disabled:cursor-not-allowed disabled:opacity-60",
               )}
             >
-              {(phase === "preparing" ||
-                phase === "signing" ||
-                phase === "broadcasting") && (
+              {isBusy && (
                 <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
               )}
               <span className="truncate">{confirmLabel}</span>
@@ -431,9 +548,13 @@ function formatWait(seconds: number): string {
 function StatusLine({
   phase,
   error,
+  symbol,
+  amountFmt,
 }: {
   phase: Phase;
   error: string | null;
+  symbol?: string;
+  amountFmt?: string;
 }) {
   if (phase === "error" && error) {
     return (
@@ -444,34 +565,74 @@ function StatusLine({
   }
   if (phase === "preparing") {
     return (
-      <div className="text-[12.5px] text-ink-mute">
-        Generating the deposit proof and encrypting the note to your own
-        envelope key. First run pulls down the prover bundle (~few MB), so
-        this can take a few seconds.
-      </div>
+      <ProgressLine
+        label="Generating proof"
+        sub="First run pulls down the prover bundle (~few MB), so this can take a few seconds."
+      />
     );
   }
   if (phase === "signing") {
     return (
-      <div className="text-[12.5px] text-ink-mute">
-        Approve the passkey prompt to decrypt your mnemonic and sign the
-        transaction. The signed bytes never leave this tab.
-      </div>
+      <ProgressLine
+        label="Awaiting passkey signature"
+        sub="Approve the passkey prompt to decrypt your mnemonic and sign locally — the signed bytes never leave this tab."
+      />
+    );
+  }
+  if (phase === "approving") {
+    return (
+      <ProgressLine
+        label={
+          symbol && amountFmt
+            ? `Approving Pampalo to move ${amountFmt} ${symbol}`
+            : "Approving Pampalo to move tokens"
+        }
+        sub="Sending the ERC-20 allowance transaction. The shield broadcast follows immediately after."
+      />
+    );
+  }
+  if (phase === "submitting") {
+    return (
+      <ProgressLine
+        label="Submitting shield transaction"
+        sub="Broadcasting the signed shield to the network."
+      />
+    );
+  }
+  if (phase === "awaiting") {
+    return (
+      <ProgressLine
+        label="Awaiting confirmation"
+        sub="Transaction accepted by the node. The asset row will track the on-chain receipt."
+      />
     );
   }
   if (phase === "done") {
     return (
       <div className="rounded-xl border border-[var(--priv-soft-2)] bg-[var(--priv-soft)] px-3.5 py-2.5 text-[12.5px] text-[var(--priv)]">
-        Signed transaction is ready. Check the browser console for the
-        prepared payload — broadcasting lands in the next slice.
+        Shield broadcast. Track confirmation from the asset row.
       </div>
     );
   }
   return (
     <div className="text-[12.5px] text-ink-mute">
       Tap Confirm to generate the proof and sign the transaction. We'll
-      stop just before broadcasting so you can inspect what's about to be
-      sent.
+      broadcast it to the network once you approve the passkey prompt.
+    </div>
+  );
+}
+
+function ProgressLine({ label, sub }: { label: string; sub?: string }) {
+  return (
+    <div
+      className="flex items-start gap-2.5 rounded-xl border border-[var(--priv-soft-2)] bg-[var(--priv-soft)] px-3.5 py-2.5 text-[12.5px] text-[var(--priv)]"
+      aria-live="polite"
+    >
+      <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin" aria-hidden />
+      <div className="min-w-0">
+        <div className="font-semibold">{label}…</div>
+        {sub && <div className="mt-0.5 text-[11.5px] text-ink-mute">{sub}</div>}
+      </div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { formatEther, parseEther } from "ethers";
+import { formatUnits, parseUnits } from "ethers";
 import { useQuery } from "convex/react";
 import {
   CheckCircle2,
@@ -12,6 +12,8 @@ import {
 import { toast } from "sonner";
 import { api } from "../../../../convex/_generated/api";
 import { signTransactionWithPasskey, withUnlockedWallet } from "@/lib/auth-flow";
+import { buildSendTx, isNativeToken } from "@/lib/send-tx";
+import type { TokenPair } from "@/components/pampalo/AssetSelect";
 import { ETH_SENTINEL } from "@/lib/eth";
 import { txUrl } from "@/lib/explorer";
 import {
@@ -66,7 +68,11 @@ const CONFIRMATIONS_NEEDED = 1;
 // gives uncomfortable headroom now; once we measure actual costs across
 // the 1/2 and 1/3 output paths we can tighten.
 const TRANSFER_GAS_LIMIT = 8_000_000n;
-const PUBLIC_SEND_GAS_LIMIT = 21_000n;
+const PUBLIC_SEND_GAS_LIMIT_NATIVE = 21_000n;
+// ERC-20 transfer cost is dominated by SSTOREs against the token's
+// balanceOf mapping (~50k–80k for the common path). 100k leaves
+// generous headroom across the assets we surface.
+const PUBLIC_SEND_GAS_LIMIT_ERC20 = 100_000n;
 
 export function SendReviewStep({
   mode,
@@ -74,6 +80,7 @@ export function SendReviewStep({
   amount,
   inputUnit,
   recipient,
+  tokenPair,
   evmAddress,
   selfPoseidon,
   selfEnvelopePubKey,
@@ -85,6 +92,7 @@ export function SendReviewStep({
   amount: string;
   inputUnit: SendInputUnit;
   recipient: SendRecipient | null;
+  tokenPair: TokenPair | null;
   evmAddress: string;
   selfPoseidon: string;
   selfEnvelopePubKey: string;
@@ -119,21 +127,55 @@ export function SendReviewStep({
     () => getNotesSnapshot(),
   );
 
+  // Token used for THIS send. Private mode is ETH-only. Public mode
+  // uses whatever the user picked; falls back to ETH if nothing's
+  // selected (shouldn't happen because compose gates the Review
+  // button, but defensive).
+  const sendToken = useMemo<{
+    symbol: string;
+    address: string;
+    decimals: number;
+    priceFeedShortId?: string;
+  } | null>(() => {
+    if (mode === "private") {
+      return { symbol: "ETH", address: ETH_SENTINEL, decimals: 18 };
+    }
+    if (tokenPair) {
+      return {
+        symbol: tokenPair.symbol,
+        address: tokenPair.address,
+        decimals: tokenPair.decimals,
+        priceFeedShortId: tokenPair.priceFeedShortId,
+      };
+    }
+    return null;
+  }, [mode, tokenPair]);
+
+  const tokenUsdPrice = useMemo<number | null>(() => {
+    if (!sendToken) return null;
+    if (!sendToken.priceFeedShortId) return 1; // stablecoins
+    if (!prices) return null;
+    const feed = prices.find((p) => p.shortId === sendToken.priceFeedShortId);
+    if (!feed) return null;
+    return Number(feed.answer) / 10 ** feed.feedDecimals;
+  }, [sendToken, prices]);
+  const priceForReview = tokenUsdPrice ?? ethUsdPrice;
+
   const amountWei = useMemo<bigint | null>(() => {
-    if (!amount) return null;
+    if (!amount || !sendToken) return null;
     const n = Number(amount);
     if (!Number.isFinite(n) || n <= 0) return null;
     try {
-      if (inputUnit === "token") return parseEther(amount);
-      if (!ethUsdPrice || ethUsdPrice <= 0) return null;
-      // USD → ETH: divide USD by price-per-ETH. Truncate to 18 dp
-      // before parseEther since float division may overshoot.
-      const ethAmt = (n / ethUsdPrice).toFixed(18);
-      return parseEther(ethAmt);
+      if (inputUnit === "token") {
+        return parseUnits(amount, sendToken.decimals);
+      }
+      if (!priceForReview || priceForReview <= 0) return null;
+      const tokenAmt = (n / priceForReview).toFixed(sendToken.decimals);
+      return parseUnits(tokenAmt, sendToken.decimals);
     } catch {
       return null;
     }
-  }, [amount, inputUnit, ethUsdPrice]);
+  }, [amount, inputUnit, priceForReview, sendToken]);
 
   // Pick the first spendable IDB note that covers the amount. Single-
   // input only for the demo; multi-input join is a follow-up.
@@ -390,7 +432,8 @@ export function SendReviewStep({
       !recipient ||
       recipient.kind !== "public" ||
       amountWei === null ||
-      !gas?.gasPriceWei
+      !gas?.gasPriceWei ||
+      !sendToken
     ) {
       throw new Error("Public send not ready");
     }
@@ -406,13 +449,24 @@ export function SendReviewStep({
     const maxFeePerGas = useEip1559 ? baseGasPriceWei : undefined;
     const legacyGasPrice = useEip1559 ? undefined : baseGasPriceWei;
 
+    // Build the unsigned tx shape — native transfer or ERC-20
+    // transfer(recipient, amount) — via the existing helper.
+    const skeleton = buildSendTx({
+      tokenAddress: sendToken.address,
+      recipient: recipient.address.toLowerCase(),
+      amountWei,
+    });
+    const gasLimit = isNativeToken(sendToken.address)
+      ? PUBLIC_SEND_GAS_LIMIT_NATIVE
+      : PUBLIC_SEND_GAS_LIMIT_ERC20;
+
     const signed = await signTransactionWithPasskey({
       chainId,
-      to: recipient.address,
-      value: amountWei,
-      data: "0x",
+      to: skeleton.to,
+      value: BigInt(skeleton.value),
+      data: skeleton.data,
       nonce: Number(nonceRes.nonce),
-      gasLimit: PUBLIC_SEND_GAS_LIMIT,
+      gasLimit,
       gasPrice: legacyGasPrice,
       maxFeePerGas,
       maxPriorityFeePerGas,
@@ -428,10 +482,14 @@ export function SendReviewStep({
     phase === "preparing" || phase === "signing" || phase === "broadcasting";
   const isSuccessPanel = phase === "submitted" || phase === "confirmed";
 
-  // Canonical ETH display — round-trip through formatEther so a USD-
-  // mode amount shows as the actual ETH that will move on-chain.
-  const ethDisplay =
-    amountWei !== null ? trimEthDisplay(formatEther(amountWei)) : "0";
+  // Canonical token-amount display in the active token's units. Same
+  // trim helper as before — caps at 6 dp, strips trailing zeros — so
+  // a USD-mode amount shows as the actual token that will move.
+  const tokenDisplay =
+    amountWei !== null && sendToken !== null
+      ? trimEthDisplay(formatUnits(amountWei, sendToken.decimals))
+      : "0";
+  const tokenSymbol = sendToken?.symbol ?? "ETH";
 
   const confirmLabel = (() => {
     switch (phase) {
@@ -444,7 +502,7 @@ export function SendReviewStep({
       case "error":
         return "Try again";
       default:
-        return `Send ${ethDisplay} ETH`;
+        return `Send ${tokenDisplay} ${tokenSymbol}`;
     }
   })();
 
@@ -467,7 +525,7 @@ export function SendReviewStep({
           phase={phase}
           txHash={txHash}
           chainId={chainId}
-          amount={ethDisplay}
+          amount={`${tokenDisplay} ${tokenSymbol}`}
           onClose={onClose}
         />
       ) : (
@@ -482,14 +540,15 @@ export function SendReviewStep({
           </div>
 
           <div className="mt-1 flex flex-col items-center gap-1.5">
-            <AssetMark symbol="ETH" size={44} />
+            <AssetMark symbol={tokenSymbol} size={44} />
             <p className="font-serif text-[28px] font-bold text-ink">
-              {ethDisplay} ETH
+              {tokenDisplay} {tokenSymbol}
             </p>
-            {ethUsdPrice && amountWei !== null && (
+            {priceForReview && amountWei !== null && sendToken !== null && (
               <p className="text-[12px] text-ink-mute font-mono">
                 ≈ ${(
-                  Number(formatEther(amountWei)) * ethUsdPrice
+                  Number(formatUnits(amountWei, sendToken.decimals)) *
+                  priceForReview
                 ).toFixed(2)}
               </p>
             )}
@@ -621,6 +680,7 @@ function SuccessPanel({
   phase: "submitted" | "confirmed";
   txHash: string | null;
   chainId: number | null;
+  /** Already includes the token symbol — e.g. "0.5 ETH" or "250 USDC". */
   amount: string;
   onClose: () => void;
 }) {
@@ -693,7 +753,7 @@ function SuccessPanel({
         </h3>
         <p className="text-[13px] text-ink-mute max-w-[340px]">{subcopy}</p>
         <p className="font-serif text-[18px] font-bold text-ink mt-1">
-          {amount} ETH
+          {amount}
         </p>
       </div>
 
