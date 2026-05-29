@@ -14,7 +14,8 @@
 // (it lives below the main route content via __root.tsx, so portal-
 // rendered overlays are naturally outside it).
 
-import { ExternalLink, FileText } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { ExternalLink, FileText, ShieldAlert } from 'lucide-react'
 import { BrandLockup } from './BrandLockup'
 import { WarningChip } from './WarningChip'
 import { useAuth } from '@/lib/auth'
@@ -59,6 +60,9 @@ function FooterDesktop({ className }: { className?: string }) {
             <WarningChip>Experimental</WarningChip>
           </div>
           <div className="flex items-center gap-24">
+            <FooterInternalLink to="/sentry">
+              <ShieldAlert className="size-3 opacity-70" /> Sentry
+            </FooterInternalLink>
             <FooterLink href={DOCS_URL} external>
               <FileText className="size-3 opacity-70" /> Docs
             </FooterLink>
@@ -125,6 +129,9 @@ function FooterMobile({ className }: { className?: string }) {
         <Disclaimer short />
 
         <div className="flex items-center justify-center gap-[22px]">
+          <FooterInternalLink to="/sentry">
+            <ShieldAlert className="size-3 opacity-70" /> Sentry
+          </FooterInternalLink>
           <FooterLink href={DOCS_URL} external>
             <FileText className="size-3 opacity-70" /> Docs
           </FooterLink>
@@ -181,6 +188,26 @@ function FooterLink({
       {children}
       {external && <ExternalLink className="size-2.5 opacity-50" />}
     </a>
+  )
+}
+
+// Internal router variant — same visual treatment as FooterLink but
+// uses TanStack Router's <Link> so navigation stays client-side
+// instead of a hard reload.
+function FooterInternalLink({
+  to,
+  children,
+}: {
+  to: string
+  children: React.ReactNode
+}) {
+  return (
+    <Link
+      to={to}
+      className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-ink-soft transition-colors hover:text-ink"
+    >
+      {children}
+    </Link>
   )
 }
 
