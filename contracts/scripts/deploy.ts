@@ -28,6 +28,16 @@ import Poseidon2HuffJson from "../contracts/utils/Poseidon2Huff.json" with { typ
 
 const ETH_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 
+// Pause between major steps. On Base Sepolia we've seen Ignition's
+// journal get out of sync with the on-chain nonce when txs are
+// submitted back-to-back through Alchemy — a brief sleep gives the
+// RPC node time to settle and reduces the chance of a dropped tx
+// poisoning the next deploy. Not a real fix (a future pass should add
+// tx-replacement on timeout), just padding.
+const STEP_SLEEP_MS = 3000;
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
 // Chainlink AggregatorV3 feed addresses + staleness windows, keyed by
 // chainId. `maxAge` is ~2× the documented Chainlink heartbeat so
 // testnet lag doesn't bounce reads off the `stale price` revert.
@@ -99,6 +109,7 @@ async function main() {
   const { usdcDeployment } = await connection.ignition.deploy(TokensModule);
   const usdcAddress = await usdcDeployment.getAddress();
   console.log(`  USDC mock : ${usdcAddress}`);
+  await sleep(STEP_SLEEP_MS);
 
   // ── 2. Pampalo + verifiers ──────────────────────────────────────────
   console.log("\n[2/7] Deploying Pampalo + the four verifiers via Ignition...");
@@ -115,6 +126,7 @@ async function main() {
   console.log(`  TransferVerifier         : ${await transferVerifier.getAddress()}`);
   console.log(`  WithdrawVerifier         : ${await withdrawVerifier.getAddress()}`);
   console.log(`  TransferExternalVerifier : ${await transferExternalVerifier.getAddress()}`);
+  await sleep(STEP_SLEEP_MS);
 
   // ── 3-4. Poseidon2 huff + setPoseidon ───────────────────────────────
   console.log("\n[3/7] Checking Poseidon2 hasher state...");
@@ -135,10 +147,12 @@ async function main() {
     await poseidon2Huff.waitForDeployment();
     poseidon2HuffAddress = await poseidon2Huff.getAddress();
     console.log(`  Deployed: ${poseidon2HuffAddress}`);
+    await sleep(STEP_SLEEP_MS);
 
     console.log("\n[4/7] Calling pampalo.setPoseidon(...)");
     await (await pampalo.setPoseidon(poseidon2HuffAddress)).wait();
     console.log("  setPoseidon confirmed.");
+    await sleep(STEP_SLEEP_MS);
   }
 
   // ── 5. Oracles ──────────────────────────────────────────────────────
@@ -155,6 +169,7 @@ async function main() {
   console.log(
     `  USDC adapter (feed ${feeds.usdc.feed}, maxAge ${feeds.usdc.maxAge}s) : ${usdcOracleAddress}`,
   );
+  await sleep(STEP_SLEEP_MS);
 
   const ethOracle = await ChainlinkOracleFactory.deploy(
     feeds.eth.feed,
@@ -165,6 +180,7 @@ async function main() {
   console.log(
     `  ETH  adapter (feed ${feeds.eth.feed}, maxAge ${feeds.eth.maxAge}s) : ${ethOracleAddress}`,
   );
+  await sleep(STEP_SLEEP_MS);
 
   // ── 6. Register supported assets ────────────────────────────────────
   console.log("\n[6/7] Registering supported assets...");
@@ -183,6 +199,7 @@ async function main() {
       await pampalo.addSupportedAsset(a.address, a.oracle, a.decimals)
     ).wait();
     console.log(`  ${a.name.padEnd(8)} registered (decimals=${a.decimals})`);
+    await sleep(STEP_SLEEP_MS);
   }
 
   // ── 7. Write deployments JSON ───────────────────────────────────────

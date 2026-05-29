@@ -1,0 +1,21 @@
+{
+  "chainId": 84532,
+  "network": "baseSepolia",
+  "deployer": "0x19fD8b6945a6978B983fFA7AcA5EC9Ca2866c95c",
+  "pampalo": "0x1236dBc640d5ABA74F62CcDCc90EA4aF5D16B65f",
+  "poseidon2Huff": "0x30B6184fc8B9245B6476A47cA123e1f61ec0433A",
+  "verifiers": {
+    "deposit": "0xAFBf474809421c7Bfc2D28FC5Df2Bceaf49f884a",
+    "transfer": "0xF2A79D3B9531eFc24119c92A459E965ce5F8cd4f",
+    "withdraw": "0x33e0C0C81Cb4521De0CA7C6192c5547D3dB55bfB",
+    "transferExternal": "0xf134f7Ef352637870f3F02d0ff581727f6595469"
+  },
+  "tokens": {
+    "usdc": "0x8f9870294E7E5d3f532Fda2E41098c5162552B58"
+  },
+  "oracles": {
+    "usdc": "0x08b48280d2f318aB4b9e2d81355484d63bbCdcFe",
+    "eth": "0xDA0736cabA30Af8c4cF3ad575e7053C401b4a086"
+  },
+  "timestamp": "2026-05-29T00:10:18.478Z"
+}
