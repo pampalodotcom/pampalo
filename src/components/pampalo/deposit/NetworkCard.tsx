@@ -13,6 +13,10 @@ export type NetworkChoice = {
   chainId: number;
   name: string;
   tagline: string;
+  /** Optional — set by the Receive flow so the QR step can pick the
+   *  matching envelope key (path-0 shared vs slot-420 isolated). Deposit
+   *  callers don't populate this and the card itself doesn't care. */
+  separateDerivationKey?: boolean;
 };
 
 export function NetworkCard({

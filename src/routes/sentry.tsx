@@ -644,10 +644,18 @@ function QueueTable({
       <Table>
         <TableHeader>
           <TableRow className="border-line">
+            {/* Network + Shielder share one column below lg — the
+                shielder address otherwise pushes the row past the
+                table's track and forces a horizontal scrollbar. Header
+                renders the stacked label pair to match. */}
             <TableHead className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mute">
-              Network
+              <span className="hidden lg:inline">Network</span>
+              <span className="flex flex-col gap-0.5 leading-tight lg:hidden">
+                <span>Network</span>
+                <span>Shielder</span>
+              </span>
             </TableHead>
-            <TableHead className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mute">
+            <TableHead className="hidden lg:table-cell text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mute">
               Shielder
             </TableHead>
             <TableHead className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mute">
@@ -675,13 +683,19 @@ function QueueTable({
                 : undefined;
             return (
               <TableRow key={row._id} className="border-line">
-                <TableCell className="text-[12px] text-ink">
+                <TableCell className="text-[12px] text-ink align-top">
                   <NetworkCell
                     chainId={dep?.chainId ?? null}
                     name={dep?.networkName ?? null}
                   />
+                  <div className="mt-1.5 lg:hidden">
+                    <ShielderCell
+                      address={row.shielder}
+                      chainId={dep?.chainId ?? null}
+                    />
+                  </div>
                 </TableCell>
-                <TableCell className="text-[12px] text-ink">
+                <TableCell className="hidden lg:table-cell text-[12px] text-ink">
                   <ShielderCell
                     address={row.shielder}
                     chainId={dep?.chainId ?? null}

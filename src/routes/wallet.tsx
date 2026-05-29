@@ -28,6 +28,7 @@ import {
 } from "@/components/pampalo/shield/UnshieldConfirmSheet";
 import { BalanceCard } from "@/components/pampalo/BalanceCard";
 import { DepositSheet } from "@/components/pampalo/deposit/DepositSheet";
+import { ReceiveSheet } from "@/components/pampalo/receive/ReceiveSheet";
 import { BeachScene } from "@/components/pampalo/BeachScene";
 import { BrandLockup } from "@/components/pampalo/BrandLockup";
 import {
@@ -540,6 +541,7 @@ function BalanceCardConnected({
   const [swapOpen, setSwapOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
+  const [receiveOpen, setReceiveOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const onSync = async () => {
     if (syncing) return;
@@ -593,6 +595,7 @@ function BalanceCardConnected({
         onSend={() => setSendOpen(true)}
         onSync={onSync}
         syncing={syncing}
+        onReceive={() => setReceiveOpen(true)}
         onDeposit={() => setDepositOpen(true)}
       />
       <SwapModal
@@ -614,6 +617,10 @@ function BalanceCardConnected({
         envelope={envelope}
         poseidon={poseidon}
       />
+      <ReceiveSheet
+        open={receiveOpen}
+        onOpenChange={setReceiveOpen}
+      />
     </>
   );
 }
@@ -626,6 +633,7 @@ function BalanceCardWithBalances({
   onSend,
   onSync,
   syncing,
+  onReceive,
   onDeposit,
 }: {
   tokens: Token[];
@@ -635,6 +643,7 @@ function BalanceCardWithBalances({
   onSend?: () => void;
   onSync?: () => void;
   syncing?: boolean;
+  onReceive?: () => void;
   onDeposit?: () => void;
 }) {
   // IDB-backed private balances — same hook the per-asset rows use to
@@ -728,6 +737,7 @@ function BalanceCardWithBalances({
       onSend={onSend}
       onSync={onSync}
       syncing={syncing}
+      onReceive={onReceive}
       onDeposit={onDeposit}
     />
   );

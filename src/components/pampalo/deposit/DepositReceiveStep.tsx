@@ -60,16 +60,20 @@ export function DepositReceiveStep({
     // would tie the user's on-chain identity to their private one, so a
     // shielded share carries only the envelope + Poseidon material a
     // shield-to-others sender needs.
-    if (!isPrivate) params.set("evm", address);
+    // Short query keys — see /share validateSearch for the
+    // e/k/o/c → evm/envelope/poseidon/chainId mapping. Verbose names
+    // push the QR up several version steps because the envelope key
+    // alone is 132 hex chars.
+    if (!isPrivate) params.set("e", address);
     // The chainId is always carried — it pins the receive surface to a
     // specific network so the recipient can't accidentally send on the
     // wrong chain after scanning the QR.
-    params.set("chainId", String(network.chainId));
+    params.set("c", String(network.chainId));
     // Private mode includes the shielded-receive identifiers so the
     // person on the other end has everything a future shield-to-others
     // sender will need.
-    if (isPrivate && envelope) params.set("envelope", envelope);
-    if (isPrivate && poseidon) params.set("poseidon", poseidon);
+    if (isPrivate && envelope) params.set("k", envelope);
+    if (isPrivate && poseidon) params.set("o", poseidon);
     return `${window.location.origin}/share?${params.toString()}`;
   };
 
