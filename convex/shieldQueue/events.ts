@@ -23,6 +23,17 @@ const SIG_SHIELD_CANCELLED = "ShieldCancelled(uint256,address)";
 const SIG_SHIELD_CONTESTED = "ShieldContested(uint256,address,string)";
 const SIG_ASSET_SUPPORTED = "AssetSupported(address,address)";
 const SIG_ASSET_DISABLED = "AssetDisabled(address)";
+// PoseidonMerkleTree events — Pampalo inherits from it, so they're
+// emitted from the same address the existing filter already targets.
+// LeafInserted lands on every insert path: executeShield, transfer,
+// unshield, unshieldBundled.
+const SIG_LEAF_INSERTED = "LeafInserted(uint256,uint256,bytes32)";
+// NotePayload is emitted by transfer / unshield / shield(Native). The
+// shield case is already captured into shieldQueueEntries.encryptedPayload
+// with the shielder address; this index also fans into transferNotes
+// so the receiver-side trial-decrypt path (TRANSFERS.md §9.5) has one
+// table to walk for cross-recipient transfers.
+const SIG_NOTE_PAYLOAD = "NotePayload(bytes)";
 
 export const TOPIC = {
   shieldQueued: id(SIG_SHIELD_QUEUED),
@@ -31,6 +42,8 @@ export const TOPIC = {
   shieldContested: id(SIG_SHIELD_CONTESTED),
   assetSupported: id(SIG_ASSET_SUPPORTED),
   assetDisabled: id(SIG_ASSET_DISABLED),
+  leafInserted: id(SIG_LEAF_INSERTED),
+  notePayload: id(SIG_NOTE_PAYLOAD),
 } as const;
 
 /** Every topic-0 we'd ask `eth_getLogs` to filter on. */
@@ -107,13 +120,27 @@ export type DecodedAssetDisabled = {
   asset: string;
 };
 
+export type DecodedLeafInserted = {
+  kind: "LeafInserted";
+  epoch: number;              // tree index (which sub-tree this leaf lives in)
+  leafIndex: number;          // position within that epoch's tree
+  leafCommitment: string;     // 0x + 64 hex (lowercased)
+};
+
+export type DecodedNotePayload = {
+  kind: "NotePayload";
+  encryptedPayload: ArrayBuffer; // raw ECIES bytes
+};
+
 export type DecodedEvent =
   | DecodedShieldQueued
   | DecodedShieldExecuted
   | DecodedShieldCancelled
   | DecodedShieldContested
   | DecodedAssetSupported
-  | DecodedAssetDisabled;
+  | DecodedAssetDisabled
+  | DecodedLeafInserted
+  | DecodedNotePayload;
 
 function hexToArrayBuffer(hex: string): ArrayBuffer {
   const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
@@ -197,6 +224,33 @@ export function decodeLog(log: RawLog): DecodedEvent | null {
       return {
         kind: "AssetDisabled",
         asset: addressFromTopic(log.topics[1]!),
+      };
+    }
+
+    case TOPIC.leafInserted.toLowerCase(): {
+      // topics: [topic0, epoch (indexed uint256), leafIndex (indexed uint256)]
+      // data:   (bytes32 leafValue)
+      const [leafValueHex] = abi.decode(["bytes32"], log.data) as unknown as [
+        string,
+      ];
+      // Both topics are uint256 → JS number is safe (epoch grows with full
+      // trees, leafIndex caps at MAX_LEAF_INDEX = 2^11 - 1 = 2047 per tree).
+      return {
+        kind: "LeafInserted",
+        epoch: Number(BigInt(log.topics[1]!)),
+        leafIndex: Number(BigInt(log.topics[2]!)),
+        leafCommitment: lowerHash(leafValueHex),
+      };
+    }
+
+    case TOPIC.notePayload.toLowerCase(): {
+      // data: (bytes ciphertext)
+      const [ciphertextHex] = abi.decode(["bytes"], log.data) as unknown as [
+        string,
+      ];
+      return {
+        kind: "NotePayload",
+        encryptedPayload: hexToArrayBuffer(ciphertextHex),
       };
     }
 

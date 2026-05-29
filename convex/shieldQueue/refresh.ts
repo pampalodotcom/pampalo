@@ -243,6 +243,34 @@ async function indexOneDeployment(
             );
             break;
           }
+
+          case "LeafInserted": {
+            await ctx.runMutation(
+              internal.shieldQueue.store._upsertLeaf,
+              {
+                deploymentId: d._id,
+                epoch: decoded.epoch,
+                leafIndex: decoded.leafIndex,
+                leafCommitment: decoded.leafCommitment,
+                insertedTxHash: log.transactionHash,
+              },
+            );
+            break;
+          }
+
+          case "NotePayload": {
+            await ctx.runMutation(
+              internal.shieldQueue.store._upsertNotePayload,
+              {
+                deploymentId: d._id,
+                encryptedPayload: decoded.encryptedPayload,
+                txHash: log.transactionHash,
+                blockNumber: Number(BigInt(log.blockNumber)),
+                logIndex: Number(BigInt(log.logIndex)),
+              },
+            );
+            break;
+          }
         }
         logCount += 1;
       } catch (e) {

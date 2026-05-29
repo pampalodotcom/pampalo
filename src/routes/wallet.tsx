@@ -27,7 +27,7 @@ import {
   type NetworkFilter,
 } from "@/components/pampalo/NetworkFilterTabs";
 import { PageLoading } from "@/components/pampalo/PageLoading";
-import { SendModal } from "@/components/pampalo/SendModal";
+import { SendSheet } from "@/components/pampalo/send/SendSheet";
 import { SwapModal } from "@/components/pampalo/SwapModal";
 import { ThemeToggle } from "@/components/pampalo/ThemeToggle";
 import { useAccountModal } from "@/lib/account-modal";
@@ -487,10 +487,12 @@ function BalanceCardConnected({
         onOpenChange={setSwapOpen}
         evmAddress={evmAddress}
       />
-      <SendModal
+      <SendSheet
         open={sendOpen}
         onOpenChange={setSendOpen}
         evmAddress={evmAddress}
+        selfPoseidon={poseidon}
+        selfEnvelopePubKey={envelope}
       />
       <DepositSheet
         open={depositOpen}
@@ -522,6 +524,14 @@ function BalanceCardWithBalances({
   syncing?: boolean;
   onDeposit?: () => void;
 }) {
+  // IDB-backed private balances — same hook the per-asset rows use to
+  // render "0.01377 ETH" under PRIVATE. The per-token `usePrivateBalance`
+  // stub below still returns 0, so we no longer sum from it; instead
+  // we fold the per-asset spendable buckets into the dashboard total
+  // here. Without this, the top card shows "Private $0" even when the
+  // user demonstrably has shielded notes (the visible bug in the
+  // screenshot).
+  const privateBuckets = usePrivateBalances(evmAddress).perAsset;
   // Aggregate by symbol — one balance lookup per (chainId, address).
   // React allows this because the token list is stable across renders;
   // we map deterministically so hook order doesn't change.
@@ -571,18 +581,28 @@ function BalanceCardWithBalances({
       );
     }
 
-    if (r.priv.data) {
-      const amt = weiToNumber(r.priv.data.balanceWei, r.token.decimals);
-      if (price !== null) privateUsd += amt * price;
-    } else if (r.priv.isLoading) {
-      anyPrivLoading = true;
-    } else if (r.priv.error) {
-      // 2 s timeout in usePrivateBalance shows up here.
-      console.warn(
-        `Private balance failed (${r.token.symbol} on chain ${r.token.chainId}):`,
-        r.priv.error,
-      );
-    }
+    // r.priv (the legacy per-token hook) is a placeholder that always
+    // returns 0 — see SHIELD_FLOW.md notes downstream. The real
+    // private balance comes from the IDB-backed buckets folded in
+    // after this loop.
+  }
+
+  // Fold IDB-backed spendable balances into privateUsd by matching
+  // each bucket to its catalog token (for the price feed). Buckets
+  // for chains/assets not in the current catalog are silently
+  // ignored — same posture as a public balance for a token that
+  // dropped out of the catalogue.
+  for (const b of privateBuckets) {
+    const token = tokens.find(
+      (t) =>
+        t.chainId === b.chainId &&
+        t.address.toLowerCase() === b.asset,
+    );
+    if (!token) continue;
+    const price = usdPriceFor(token, prices ?? undefined);
+    if (price === null) continue;
+    const amt = weiToNumber(b.spendable, token.decimals);
+    privateUsd += amt * price;
   }
 
   const stillLoading = anyPubLoading || anyPrivLoading || anyPriceMissing;

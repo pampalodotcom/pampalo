@@ -81,6 +81,10 @@ export function clearBlob(): void {
 export function setAddresses(a: DerivedAddresses): void {
   addresses = a;
   writePersistedAddresses(a);
+  // Bind every per-wallet IDB store to this wallet. Two passkeys
+  // registered on the same browser profile must not share IDB buckets
+  // (idb-notes.ts, idb-sync-cursor.ts). Lazy-import to avoid a cycle.
+  void bindWalletScopedStores(a.evm);
 }
 export function getAddresses(): DerivedAddresses | null {
   return addresses;
@@ -88,6 +92,17 @@ export function getAddresses(): DerivedAddresses | null {
 export function clearAddresses(): void {
   addresses = null;
   writePersistedAddresses(null);
+  void bindWalletScopedStores(null);
+}
+
+async function bindWalletScopedStores(
+  address: string | null,
+): Promise<void> {
+  // Dynamic import keeps keystore module-level dependency-free at
+  // load — idb-notes pulls in idb-keyval which we don't want resident
+  // before sign-in flows even resolve.
+  const mod = await import("./idb-notes");
+  mod.setActiveWallet(address);
 }
 
 export function setSessionToken(t: string): void {
@@ -113,4 +128,5 @@ export function clearAll(): void {
   sessionToken = null;
   rpId = null;
   writePersistedAddresses(null);
+  void bindWalletScopedStores(null);
 }

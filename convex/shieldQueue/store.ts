@@ -184,6 +184,225 @@ export const _resolveShieldQueueEntry = internalMutation({
   },
 });
 
+// ─── Merkle leaves (TRANSFERS.md §9.5) ───────────────────────────────────
+
+/** Upsert a row mirroring `PoseidonMerkleTree.LeafInserted`. Idempotent
+ *  on (deploymentId, epoch, leafIndex): replaying the same event leaves
+ *  the row unchanged. */
+export const _upsertLeaf = internalMutation({
+  args: {
+    deploymentId: v.id("pampaloDeployments"),
+    epoch: v.number(),
+    leafIndex: v.number(),
+    leafCommitment: v.string(),
+    insertedTxHash: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("pampaloLeaves")
+      .withIndex("by_deployment_and_position", (q) =>
+        q
+          .eq("deploymentId", args.deploymentId)
+          .eq("epoch", args.epoch)
+          .eq("leafIndex", args.leafIndex),
+      )
+      .unique();
+    if (existing) {
+      // Replay — already indexed. Don't overwrite (insertedAt would
+      // drift each replay otherwise).
+      return existing._id;
+    }
+    return await ctx.db.insert("pampaloLeaves", {
+      deploymentId: args.deploymentId,
+      epoch: args.epoch,
+      leafIndex: args.leafIndex,
+      leafCommitment: args.leafCommitment.toLowerCase(),
+      insertedTxHash: args.insertedTxHash.toLowerCase(),
+      insertedAt: Date.now(),
+    });
+  },
+});
+
+/** Upsert a row mirroring `Pampalo.NotePayload(bytes)`. Idempotent on
+ *  (deploymentId, txHash, logIndex). */
+export const _upsertNotePayload = internalMutation({
+  args: {
+    deploymentId: v.id("pampaloDeployments"),
+    encryptedPayload: v.bytes(),
+    txHash: v.string(),
+    blockNumber: v.number(),
+    logIndex: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("transferNotes")
+      .withIndex("by_deployment_and_block", (q) =>
+        q
+          .eq("deploymentId", args.deploymentId)
+          .eq("blockNumber", args.blockNumber)
+          .eq("logIndex", args.logIndex),
+      )
+      .unique();
+    if (existing) return existing._id;
+    return await ctx.db.insert("transferNotes", {
+      deploymentId: args.deploymentId,
+      encryptedPayload: args.encryptedPayload,
+      txHash: args.txHash.toLowerCase(),
+      blockNumber: args.blockNumber,
+      logIndex: args.logIndex,
+      emittedAt: Date.now(),
+    });
+  },
+});
+
+/**
+ * Every NotePayload on a chain. Caller (the receiver-side trial-
+ * decrypt sync) walks the result and attempts ECIES decrypt on each
+ * row's `encryptedPayload`. Caps at 1000 rows — at v1 Base Sepolia
+ * volume this is more than enough; mainnet-scale paging is future.
+ */
+export const notePayloadsForChain = query({
+  args: { chainId: v.number() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    Array<{
+      _id: Id<"transferNotes">;
+      encryptedPayload: ArrayBuffer | string;
+      txHash: string;
+      blockNumber: number;
+      logIndex: number;
+    }>
+  > => {
+    const net = await ctx.db
+      .query("supportedNetworks")
+      .withIndex("by_chainId", (q) => q.eq("chainId", args.chainId))
+      .unique();
+    if (!net) return [];
+    const dep = await ctx.db
+      .query("pampaloDeployments")
+      .withIndex("by_networkId", (q) => q.eq("networkId", net._id))
+      .unique();
+    if (!dep) return [];
+
+    const rows = await ctx.db
+      .query("transferNotes")
+      .withIndex("by_deployment_and_block", (q) =>
+        q.eq("deploymentId", dep._id),
+      )
+      .order("asc")
+      .take(1000);
+
+    return rows.map((r) => ({
+      _id: r._id,
+      encryptedPayload: r.encryptedPayload,
+      txHash: r.txHash,
+      blockNumber: r.blockNumber,
+      logIndex: r.logIndex,
+    }));
+  },
+});
+
+/**
+ * Resolve a leaf commitment to its (epoch, leafIndex) — used by the
+ * receiver after a successful trial-decrypt to know where in the tree
+ * the discovered note sits. Returns null when the leaf isn't (yet)
+ * indexed; caller treats that as "wait for next Sync."
+ */
+export const leafPositionByCommitment = query({
+  args: { chainId: v.number(), leafCommitment: v.string() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    epoch: number;
+    leafIndex: number;
+    insertedTxHash: string;
+  } | null> => {
+    const net = await ctx.db
+      .query("supportedNetworks")
+      .withIndex("by_chainId", (q) => q.eq("chainId", args.chainId))
+      .unique();
+    if (!net) return null;
+    const dep = await ctx.db
+      .query("pampaloDeployments")
+      .withIndex("by_networkId", (q) => q.eq("networkId", net._id))
+      .unique();
+    if (!dep) return null;
+
+    const row = await ctx.db
+      .query("pampaloLeaves")
+      .withIndex("by_deployment_and_commitment", (q) =>
+        q
+          .eq("deploymentId", dep._id)
+          .eq("leafCommitment", args.leafCommitment.toLowerCase()),
+      )
+      .unique();
+    if (!row) return null;
+    return {
+      epoch: row.epoch,
+      leafIndex: row.leafIndex,
+      insertedTxHash: row.insertedTxHash,
+    };
+  },
+});
+
+/**
+ * Every executed leaf on a deployment, in `(epoch, leafIndex)` order.
+ * The client uses this to rebuild a local `PoseidonMerkleTree` mirror
+ * for transfer / unshield proof generation.
+ *
+ * `chainId` is taken instead of a Convex `Id` so the wallet doesn't
+ * need to know the deployment row id — the wallet already filters by
+ * chain everywhere else.
+ *
+ * Caps at 2048 rows because that's the max leaves per epoch
+ * (HEIGHT = 12 → MAX_LEAF_INDEX = 2^11 - 1 = 2047). v1 lives on a
+ * single epoch; if/when we roll over, this query grows a pagination
+ * arg and the client walks epoch-by-epoch.
+ */
+export const leavesForChain = query({
+  args: { chainId: v.number() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    Array<{
+      epoch: number;
+      leafIndex: number;
+      leafCommitment: string;
+      insertedTxHash: string;
+    }>
+  > => {
+    const net = await ctx.db
+      .query("supportedNetworks")
+      .withIndex("by_chainId", (q) => q.eq("chainId", args.chainId))
+      .unique();
+    if (!net) return [];
+    const dep = await ctx.db
+      .query("pampaloDeployments")
+      .withIndex("by_networkId", (q) => q.eq("networkId", net._id))
+      .unique();
+    if (!dep) return [];
+
+    const rows = await ctx.db
+      .query("pampaloLeaves")
+      .withIndex("by_deployment_and_position", (q) =>
+        q.eq("deploymentId", dep._id),
+      )
+      .order("asc")
+      .take(2048);
+
+    return rows.map((r) => ({
+      epoch: r.epoch,
+      leafIndex: r.leafIndex,
+      leafCommitment: r.leafCommitment,
+      insertedTxHash: r.insertedTxHash,
+    }));
+  },
+});
+
 export const _upsertAsset = internalMutation({
   args: {
     deploymentId: v.id("pampaloDeployments"),
