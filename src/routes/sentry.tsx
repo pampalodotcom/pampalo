@@ -682,7 +682,10 @@ function QueueTable({
                   )
                 : undefined;
             return (
-              <TableRow key={row._id} className="border-line">
+              <TableRow
+                key={row._id}
+                className="border-line [&>td]:py-4 [&>td:first-child]:pl-4 [&>td:last-child]:pr-4"
+              >
                 <TableCell className="text-[12px] text-ink align-top">
                   <NetworkCell
                     chainId={dep?.chainId ?? null}

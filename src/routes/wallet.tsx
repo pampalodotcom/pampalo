@@ -281,7 +281,11 @@ function Dashboard({
           // transient — keep polling
         }
       };
-      const handle = window.setInterval(() => void tick(), 3_000);
+      // 1.5s poll — Base Sepolia blocks land in ~2s, so the average
+      // detection latency drops from ~1.5s (3s/2) to ~0.75s (1.5s/2).
+      // Cheap on the RPC side (single eth_getTransactionReceipt per
+      // tick) and visibly shortens the "Confirming on-chain" window.
+      const handle = window.setInterval(() => void tick(), 1_500);
       intervals.push(handle);
       void tick();
     }
