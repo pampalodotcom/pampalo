@@ -12,6 +12,7 @@ import {
   type AssetBucket,
 } from "@/lib/use-private-balances";
 import { useShieldBudget } from "@/lib/use-shield-budget";
+import { useShieldQueueSync } from "@/lib/use-shield-queue-sync";
 import {
   ShieldConfirmSheet,
   type ShieldConfirmPayload,
@@ -203,6 +204,13 @@ function Dashboard({
   // Convex reconcile path that touches `idb-notes.ts` propagates here
   // automatically.
   const privateBalances = usePrivateBalances();
+
+  // Same-device Convex → IDB writer. Reactively patches IDB notes
+  // forward (queued → spendable/cancelled/contested) whenever the
+  // server-side indexer flips a row's state. Cross-device hydration
+  // (decrypt + insert from a foreign device's optimistic write) is
+  // deferred. See SHIELD_FLOW.md §3.4.
+  useShieldQueueSync(evmAddress);
 
   // Pre-warm the bb.js + deposit circuit bundle on idle. First-shield
   // latency is dominated by WASM warmup; doing it speculatively after
