@@ -70,6 +70,14 @@ type Props = {
     envelope: string;
     poseidon: string;
   };
+  /** Fired after the raw tx is accepted by Alchemy. Caller registers
+   *  the (chainId, asset) as "confirming on-chain" so the asset row
+   *  locks its slider + action buttons until the receipt mines. */
+  onBroadcasted?: (info: {
+    chainId: number;
+    assetAddress: string;
+    txHash: string;
+  }) => void;
 };
 
 export function ShieldConfirmSheet({
@@ -77,6 +85,7 @@ export function ShieldConfirmSheet({
   onOpenChange,
   payload,
   addresses,
+  onBroadcasted,
 }: Props) {
   const isDesktop = useIsDesktop();
   const rpc = useRpcClient();
@@ -176,6 +185,11 @@ export function ShieldConfirmSheet({
         payload.chainId,
         signed,
       );
+      onBroadcasted?.({
+        chainId: payload.chainId,
+        assetAddress: ETH_ADDRESS,
+        txHash,
+      });
 
       // Optimistic IDB write — same-device case. We have the full
       // four-tuple locally from `prep`; no decryption needed. The
