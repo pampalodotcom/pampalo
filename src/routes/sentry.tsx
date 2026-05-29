@@ -2,7 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAction, usePaginatedQuery, useQuery } from "convex/react";
 import {
+  Check,
   Clock3,
+  Copy,
+  ExternalLink,
   Eye,
   Loader2,
   RefreshCcw,
@@ -10,12 +13,15 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
+import { formatUnits } from "ethers";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { AccountAvatar } from "@/components/pampalo/AccountAvatar";
+import { AssetMark } from "@/components/pampalo/AssetMark";
 import { BeachScene } from "@/components/pampalo/BeachScene";
 import { BrandLockup } from "@/components/pampalo/BrandLockup";
+import { NetworkLogo } from "@/components/pampalo/deposit/NetworkLogo";
 import {
   NetworkFilterTabs,
   type NetworkFilter,
@@ -32,10 +38,12 @@ import {
 import { ThemeToggle } from "@/components/pampalo/ThemeToggle";
 import { useAccountModal } from "@/lib/account-modal";
 import { useAuth } from "@/lib/auth";
+import { useClipboard } from "@/lib/use-clipboard";
 import {
   useDeploymentRoles,
   type DeploymentRoles,
 } from "@/lib/use-deployment-roles";
+import { addressUrl, txUrl } from "@/lib/explorer";
 import { useIsDesktop } from "@/lib/use-media-query";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -74,7 +82,23 @@ function Sentry() {
   const isDesktop = useIsDesktop();
 
   const deployments = useDeploymentsList();
+  const tokens = useQuery(api.catalog.tokens.list, {});
   const [filter, setFilter] = useState<NetworkFilter>("all");
+
+  // Rows the user just submitted a finalise tx for. The row stays in
+  // the `queued` Convex view until the indexer flips it to `executed`
+  // (~30s), so without this transition state the row would just sit
+  // there with action buttons until it vanished. We treat the user's
+  // own broadcast as authoritative — once they submit, we render a
+  // "Finalising…" pill and hide the buttons.
+  const [finalising, setFinalising] = useState<Set<string>>(new Set());
+  const markFinalising = (rowId: string) => {
+    setFinalising((prev) => {
+      const next = new Set(prev);
+      next.add(rowId);
+      return next;
+    });
+  };
 
   // ─── Role detection per deployment ───────────────────────────────
   // Each deployment renders a RoleProbe that calls useDeploymentRoles
@@ -225,14 +249,14 @@ function Sentry() {
             value={filter}
             options={filterOptions}
             onChange={setFilter}
-            className="hidden sm:inline-flex"
+            className="hidden md:inline-flex"
           />
           <NetworkFilterTabs
             value={filter}
             options={filterOptions}
             onChange={setFilter}
             appearance="badges"
-            className="sm:hidden"
+            className="md:hidden"
           />
         </header>
 
@@ -263,6 +287,8 @@ function Sentry() {
           status={paginated.status}
           results={paginated.results}
           deployments={deployments ?? []}
+          tokens={tokens ?? []}
+          finalising={finalising}
           authed={auth.state.status === "authenticated"}
           rolesByChainId={rolesByChainId}
           onContest={(row) => setContestPayload({ row })}
@@ -358,6 +384,13 @@ function Sentry() {
         payload={actionPayload}
         evmAddress={evmAddress}
         deployments={deployments ?? []}
+        onSubmitted={(rowId) => {
+          markFinalising(rowId);
+          // Nudge the indexer — the cron picks the event up within 30s
+          // on its own, but a manual refresh shortens the gap between
+          // "user submitted" and "row drops out of the queue".
+          void refresh().catch(() => undefined);
+        }}
       />
     </main>
   );
@@ -461,9 +494,22 @@ function RoleChip({
 type RowHandlers = {
   authed: boolean;
   rolesByChainId: Map<number, DeploymentRoles>;
+  /** Convex `_id`s for rows the user has already submitted a finalise
+   *  tx for. These rows render "Finalising…" instead of action
+   *  buttons until the indexer flips them to executed (and the row
+   *  falls out of the queued query). */
+  finalising: Set<string>;
   onContest: (row: ShieldQueueEntry) => void;
   onSponsor: (row: ShieldQueueEntry) => void;
   onFastTrack: (row: ShieldQueueEntry) => void;
+};
+
+type TokenInfo = {
+  chainId: number;
+  address: string;
+  name: string;
+  symbol: string;
+  decimals: number;
 };
 
 function QueueBody({
@@ -471,6 +517,8 @@ function QueueBody({
   status,
   results,
   deployments,
+  tokens,
+  finalising,
   authed,
   rolesByChainId,
   onContest,
@@ -481,8 +529,10 @@ function QueueBody({
   status: ReturnType<typeof usePaginatedQuery>["status"];
   results: ShieldQueueEntry[];
   deployments: Deployment[];
-} & Omit<RowHandlers, "rolesByChainId"> & {
+  tokens: TokenInfo[];
+} & Omit<RowHandlers, "rolesByChainId" | "finalising"> & {
     rolesByChainId: Map<number, DeploymentRoles>;
+    finalising: Set<string>;
   }) {
   if (status === "LoadingFirstPage") {
     return <QueueSkeleton isDesktop={isDesktop} />;
@@ -493,6 +543,7 @@ function QueueBody({
   const handlers: RowHandlers = {
     authed,
     rolesByChainId,
+    finalising,
     onContest,
     onSponsor,
     onFastTrack,
@@ -502,6 +553,7 @@ function QueueBody({
       <QueueTable
         results={results}
         deployments={deployments}
+        tokens={tokens}
         handlers={handlers}
       />
     );
@@ -510,6 +562,7 @@ function QueueBody({
     <QueueCards
       results={results}
       deployments={deployments}
+      tokens={tokens}
       handlers={handlers}
     />
   );
@@ -565,10 +618,12 @@ function QueueEmpty() {
 function QueueTable({
   results,
   deployments,
+  tokens,
   handlers,
 }: {
   results: ShieldQueueEntry[];
   deployments: Deployment[];
+  tokens: TokenInfo[];
   handlers: RowHandlers;
 }) {
   const deploymentChainById = useMemo(() => {
@@ -576,6 +631,13 @@ function QueueTable({
     for (const d of deployments) m.set(d._id, d);
     return m;
   }, [deployments]);
+  const tokenByChainAsset = useMemo(() => {
+    const m = new Map<string, TokenInfo>();
+    for (const t of tokens) {
+      m.set(`${t.chainId}:${t.address.toLowerCase()}`, t);
+    }
+    return m;
+  }, [tokens]);
 
   return (
     <div className="rounded-2xl border border-line bg-paper-lo p-2">
@@ -605,19 +667,35 @@ function QueueTable({
         <TableBody>
           {results.map((row) => {
             const dep = deploymentChainById.get(row.deploymentId);
+            const token =
+              dep
+                ? tokenByChainAsset.get(
+                    `${dep.chainId}:${row.asset.toLowerCase()}`,
+                  )
+                : undefined;
             return (
               <TableRow key={row._id} className="border-line">
-                <TableCell className="font-mono text-[12px] text-ink">
-                  {dep?.networkName ?? `chain ${row.deploymentId}`}
+                <TableCell className="text-[12px] text-ink">
+                  <NetworkCell
+                    chainId={dep?.chainId ?? null}
+                    name={dep?.networkName ?? null}
+                  />
                 </TableCell>
-                <TableCell className="font-mono text-[12px] text-ink">
-                  {shortAddress(row.shielder)}
+                <TableCell className="text-[12px] text-ink">
+                  <ShielderCell
+                    address={row.shielder}
+                    chainId={dep?.chainId ?? null}
+                  />
                 </TableCell>
-                <TableCell className="font-mono text-[12px] text-ink">
-                  {row.amount} ({shortAddress(row.asset)})
+                <TableCell className="text-[12px] text-ink">
+                  <AmountCell amount={row.amount} token={token} />
                 </TableCell>
-                <TableCell className="font-mono text-[12px] text-ink-soft">
-                  {timeAgo(row.queuedAt)}
+                <TableCell className="text-[12px] text-ink-soft">
+                  <QueuedCell
+                    queuedAt={row.queuedAt}
+                    chainId={dep?.chainId ?? null}
+                    txHash={row.queuedTxHash}
+                  />
                 </TableCell>
                 <TableCell className="font-mono text-[12px] text-ink-soft">
                   {unlockLabel(row.unlockTime)}
@@ -644,10 +722,12 @@ function QueueTable({
 function QueueCards({
   results,
   deployments,
+  tokens,
   handlers,
 }: {
   results: ShieldQueueEntry[];
   deployments: Deployment[];
+  tokens: TokenInfo[];
   handlers: RowHandlers;
 }) {
   const deploymentChainById = useMemo(() => {
@@ -655,34 +735,55 @@ function QueueCards({
     for (const d of deployments) m.set(d._id, d);
     return m;
   }, [deployments]);
+  const tokenByChainAsset = useMemo(() => {
+    const m = new Map<string, TokenInfo>();
+    for (const t of tokens) {
+      m.set(`${t.chainId}:${t.address.toLowerCase()}`, t);
+    }
+    return m;
+  }, [tokens]);
 
   return (
     <ul className="flex flex-col gap-3">
       {results.map((row) => {
         const dep = deploymentChainById.get(row.deploymentId);
+        const token =
+          dep
+            ? tokenByChainAsset.get(
+                `${dep.chainId}:${row.asset.toLowerCase()}`,
+              )
+            : undefined;
         return (
           <li key={row._id}>
             <div className="rounded-2xl card-cream p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mute">
-                    {dep?.networkName ?? `chain ?`}
-                  </div>
-                  <div className="mt-1 font-mono text-[13px] text-ink">
-                    {shortAddress(row.shielder)}
+                  <NetworkCell
+                    chainId={dep?.chainId ?? null}
+                    name={dep?.networkName ?? null}
+                  />
+                  <div className="mt-1.5">
+                    <ShielderCell
+                      address={row.shielder}
+                      chainId={dep?.chainId ?? null}
+                    />
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-mono text-[13px] font-semibold text-ink">
-                    {row.amount}
-                  </div>
-                  <div className="font-mono text-[11px] text-ink-mute">
-                    {shortAddress(row.asset)}
-                  </div>
+                  <AmountCell
+                    amount={row.amount}
+                    token={token}
+                    alignRight
+                  />
                 </div>
               </div>
               <div className="mt-3 flex items-center justify-between text-[11.5px] text-ink-mute">
-                <span>Queued {timeAgo(row.queuedAt)}</span>
+                <QueuedCell
+                  queuedAt={row.queuedAt}
+                  chainId={dep?.chainId ?? null}
+                  txHash={row.queuedTxHash}
+                  prefix="Queued "
+                />
                 <span>{unlockLabel(row.unlockTime)}</span>
               </div>
               <div className="mt-3">
@@ -701,6 +802,175 @@ function QueueCards({
   );
 }
 
+// ─── Row cells ──────────────────────────────────────────────────────────
+
+function NetworkCell({
+  chainId,
+  name,
+}: {
+  chainId: number | null;
+  name: string | null;
+}) {
+  if (chainId === null) {
+    return <span className="font-mono text-[12px] text-ink-mute">unknown</span>;
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <NetworkLogo chainId={chainId} size={18} />
+      <span className="text-[12.5px] font-medium text-ink">
+        {name ?? `chain ${chainId}`}
+      </span>
+    </span>
+  );
+}
+
+function AmountCell({
+  amount,
+  token,
+  alignRight,
+}: {
+  amount: string;
+  token: TokenInfo | undefined;
+  alignRight?: boolean;
+}) {
+  // Fall back gracefully when the token isn't in the catalog yet (the
+  // catalog query is still loading, or the asset is brand new). We
+  // still want the row to render rather than blank-out.
+  const decimals = token?.decimals;
+  const formatted =
+    decimals !== undefined ? formatTokenAmount(amount, decimals) : amount;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-2",
+        alignRight && "justify-end",
+      )}
+    >
+      {token?.symbol && <AssetMark symbol={token.symbol} size={22} />}
+      <span className="flex flex-col leading-tight">
+        <span className="font-mono text-[13px] font-semibold text-ink">
+          {formatted}
+          {token?.symbol && (
+            <span className="ml-1 text-ink-soft">{token.symbol}</span>
+          )}
+        </span>
+        {token?.name && (
+          <span className="text-[10.5px] text-ink-mute">{token.name}</span>
+        )}
+      </span>
+    </span>
+  );
+}
+
+function ShielderCell({
+  address,
+  chainId,
+}: {
+  address: string;
+  chainId: number | null;
+}) {
+  const { copied, copy } = useClipboard();
+  const url = chainId !== null ? addressUrl(chainId, address) : null;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="font-mono text-[12px] text-ink">
+        {shortAddress(address)}
+      </span>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          void copy(address);
+        }}
+        aria-label={copied ? "Address copied" : "Copy shielder address"}
+        title={copied ? "Copied" : "Copy address"}
+        className={cn(
+          "inline-flex size-5 items-center justify-center rounded",
+          "text-ink-mute transition-colors hover:bg-paper hover:text-ink",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-faint",
+          copied && "text-[var(--pub)]",
+        )}
+      >
+        {copied ? (
+          <Check className="size-3" aria-hidden />
+        ) : (
+          <Copy className="size-3" aria-hidden />
+        )}
+      </button>
+      {url && (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          aria-label="View shielder on block explorer"
+          title="View on block explorer"
+          className={cn(
+            "inline-flex size-5 items-center justify-center rounded",
+            "text-ink-mute transition-colors hover:bg-paper hover:text-ink",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-faint",
+          )}
+        >
+          <ExternalLink className="size-3" aria-hidden />
+        </a>
+      )}
+    </span>
+  );
+}
+
+function QueuedCell({
+  queuedAt,
+  chainId,
+  txHash,
+  prefix,
+}: {
+  queuedAt: number;
+  chainId: number | null;
+  txHash: string;
+  prefix?: string;
+}) {
+  const url = chainId !== null && txHash ? txUrl(chainId, txHash) : null;
+  const label = (
+    <span className="font-mono">
+      {prefix}
+      {timeAgo(queuedAt)}
+    </span>
+  );
+  if (!url) return label;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      title="View shield transaction on block explorer"
+      className={cn(
+        "inline-flex items-center gap-1.5",
+        "text-ink-soft transition-colors hover:text-ink",
+      )}
+    >
+      {label}
+      <ExternalLink className="size-3 opacity-70" aria-hidden />
+    </a>
+  );
+}
+
+// Format a base-units uint256 string into a short human-friendly decimal.
+// 5dp for small-decimal assets like ETH; 2dp for stablecoin-sized things.
+function formatTokenAmount(baseUnits: string, decimals: number): string {
+  const raw = formatUnits(baseUnits, decimals);
+  // formatUnits returns "0.123456789" or "1.0". Trim trailing zeros but
+  // keep a sane minimum (2 dp for ≥0.01, 5 dp for <0.01).
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return raw;
+  if (n === 0) return "0";
+  const dp = n >= 0.01 ? Math.min(5, Math.max(2, decimals)) : 8;
+  return n.toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: dp,
+  });
+}
+
 // ─── Per-row action surface ─────────────────────────────────────────────
 
 function RowActions({
@@ -714,6 +984,25 @@ function RowActions({
   handlers: RowHandlers;
   layout: "row" | "card";
 }) {
+  // Finalising — user already submitted a sponsor/fast-track tx. The
+  // Convex query still shows the row as `queued` until the indexer
+  // catches the executeShield* event (~30s); during that window we
+  // replace the action buttons with a calm progress pill.
+  if (handlers.finalising.has(row._id)) {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-full",
+          "bg-[var(--priv-soft)] px-3 py-1.5",
+          "text-[11.5px] font-semibold text-[var(--priv)]",
+        )}
+      >
+        <Loader2 className="size-3.5 animate-spin" aria-hidden />
+        Finalising…
+      </span>
+    );
+  }
+
   // Unauthed → one CTA. Same for both table cell and card.
   if (!handlers.authed) {
     return (

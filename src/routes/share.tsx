@@ -30,6 +30,10 @@ type ShareSearch = {
   evm?: string;
   envelope?: string;
   poseidon?: string;
+  /** Network the addresses live on. Drives the network logo/label
+   *  shown next to the addresses so the recipient can't misread which
+   *  chain to send on. */
+  chainId?: number;
   /** Optional display label, e.g. "Ben's wallet". */
   label?: string;
 };
@@ -48,6 +52,15 @@ function validateSearch(input: Record<string, unknown>): ShareSearch {
   }
   if (typeof input.poseidon === "string" && HEX_32BYTE.test(input.poseidon)) {
     out.poseidon = input.poseidon;
+  }
+  if (input.chainId !== undefined) {
+    const raw =
+      typeof input.chainId === "number"
+        ? input.chainId
+        : Number(input.chainId);
+    if (Number.isFinite(raw) && raw > 0 && Number.isInteger(raw)) {
+      out.chainId = raw;
+    }
   }
   if (typeof input.label === "string" && input.label.length <= 64) {
     out.label = input.label;

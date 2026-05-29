@@ -1,36 +1,40 @@
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils'
 
 // Public network slugs. Mapped to colour-dot classes in styles.css.
-export type NetworkSlug = "eth" | "base" | "arb" | "sepolia";
+export type NetworkSlug = 'eth' | 'base' | 'arb' | 'sepolia' | 'baseSepolia'
 
 const LABELS: Record<NetworkSlug, string> = {
-  eth: "Ethereum",
-  base: "Base",
-  arb: "Arbitrum",
-  sepolia: "Sepolia",
-};
+  eth: 'Ethereum',
+  base: 'Base',
+  arb: 'Arbitrum',
+  sepolia: 'Sepolia',
+  baseSepolia: 'Base Sepolia',
+}
 
 // Optional per-network logo. Networks without an entry fall back to the
 // CSS colour dot defined in styles.css.
 const LOGOS: Partial<Record<NetworkSlug, string>> = {
-  base: "/base-logo.svg",
-};
+  base: '/base-logo.svg',
+  baseSepolia: '/base-logo.svg',
+}
 
 /** Map a chainId from supportedNetworks → slug. Centralised so the
  *  client decides the chip's brand colour from a single place. */
 export function networkSlugForChainId(chainId: number): NetworkSlug | null {
   switch (chainId) {
     case 1:
-      return "eth";
+      return 'eth'
+    case 84532:
+      return 'baseSepolia'
     case 8453:
-      return "base";
+      return 'base'
     case 42161:
     case 421614:
-      return "arb";
+      return 'arb'
     case 11155111:
-      return "sepolia";
+      return 'sepolia'
     default:
-      return null;
+      return null
   }
 }
 
@@ -39,17 +43,17 @@ export function NetworkChip({
   label,
   className,
 }: {
-  network: NetworkSlug;
+  network: NetworkSlug
   /** Optional override; defaults to the canonical label for the slug. */
-  label?: string;
-  className?: string;
+  label?: string
+  className?: string
 }) {
-  const logo = LOGOS[network];
+  const logo = LOGOS[network]
   // When a logo is registered, suppress the CSS `::before` dot and render
   // an inline <img> instead. The `has-logo` modifier in styles.css hides
   // the dot for this case.
   return (
-    <span className={cn("net-chip", network, logo && "has-logo", className)}>
+    <span className={cn('net-chip', network, logo && 'has-logo', className)}>
       {logo && (
         <img
           src={logo}
@@ -63,5 +67,5 @@ export function NetworkChip({
       )}
       {label ?? LABELS[network]}
     </span>
-  );
+  )
 }

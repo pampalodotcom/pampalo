@@ -86,6 +86,10 @@ type Props = {
   payload: ActionConfirmPayload | null;
   evmAddress: string | null;
   deployments: Deployment[];
+  /** Called once when the broadcast succeeds — passes the row's
+   *  Convex `_id` so the parent can mark it as Finalising in the
+   *  shield queue table until the indexer reconciles. */
+  onSubmitted?: (rowId: string) => void;
 };
 
 export function ActionConfirmSheet({
@@ -94,6 +98,7 @@ export function ActionConfirmSheet({
   payload,
   evmAddress,
   deployments,
+  onSubmitted,
 }: Props) {
   const isDesktop = useIsDesktop();
   const rpc = useRpcClient();
@@ -207,6 +212,7 @@ export function ActionConfirmSheet({
       );
       setTxHash(hash);
       setPhase("submitted");
+      onSubmitted?.(payload.row._id);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
