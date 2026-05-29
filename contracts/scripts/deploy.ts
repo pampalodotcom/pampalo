@@ -1,4 +1,4 @@
-import { ContractFactory } from "ethers";
+import { ContractFactory, type Provider } from "ethers";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import hre from "hardhat";
@@ -37,6 +37,30 @@ const ETH_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 const STEP_SLEEP_MS = 3000;
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+// Wait until the chain reports the deployer's nonce has advanced to
+// `expected` (or higher). Used after `connection.ignition.deploy(...)`
+// because Alchemy's `getTransactionCount` lags the just-mined tx by a
+// few seconds, and the next Ignition module call would otherwise
+// HHE10404 with "should be N, but is N-1".
+const waitForNonce = async (
+  provider: Provider,
+  address: string,
+  expected: number,
+  timeoutMs = 120_000,
+): Promise<void> => {
+  const start = Date.now();
+  let last = -1;
+  while (Date.now() - start < timeoutMs) {
+    const actual = await provider.getTransactionCount(address, "latest");
+    if (actual >= expected) return;
+    last = actual;
+    await sleep(2000);
+  }
+  throw new Error(
+    `waitForNonce timeout for ${address}: expected ${expected}, last seen ${last}`,
+  );
+};
 
 // Chainlink AggregatorV3 feed addresses + staleness windows, keyed by
 // chainId. `maxAge` is ~2× the documented Chainlink heartbeat so
@@ -106,13 +130,24 @@ async function main() {
 
   // ── 1. Token mocks ──────────────────────────────────────────────────
   console.log("[1/7] Deploying USDC mock via Ignition...");
+  const nonceBeforeTokens = await provider.getTransactionCount(
+    deployer.address,
+    "latest",
+  );
   const { usdcDeployment } = await connection.ignition.deploy(TokensModule);
   const usdcAddress = await usdcDeployment.getAddress();
   console.log(`  USDC mock : ${usdcAddress}`);
+  // Wait for Alchemy's getTransactionCount to reflect at least one of
+  // the just-mined Ignition txs before kicking off the next module.
+  await waitForNonce(provider, deployer.address, nonceBeforeTokens + 1);
   await sleep(STEP_SLEEP_MS);
 
   // ── 2. Pampalo + verifiers ──────────────────────────────────────────
   console.log("\n[2/7] Deploying Pampalo + the four verifiers via Ignition...");
+  const nonceBeforePampalo = await provider.getTransactionCount(
+    deployer.address,
+    "latest",
+  );
   const {
     pampalo,
     depositVerifier,
@@ -126,6 +161,7 @@ async function main() {
   console.log(`  TransferVerifier         : ${await transferVerifier.getAddress()}`);
   console.log(`  WithdrawVerifier         : ${await withdrawVerifier.getAddress()}`);
   console.log(`  TransferExternalVerifier : ${await transferExternalVerifier.getAddress()}`);
+  await waitForNonce(provider, deployer.address, nonceBeforePampalo + 1);
   await sleep(STEP_SLEEP_MS);
 
   // ── 3-4. Poseidon2 huff + setPoseidon ───────────────────────────────

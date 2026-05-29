@@ -2,20 +2,20 @@
   "chainId": 84532,
   "network": "baseSepolia",
   "deployer": "0x19fD8b6945a6978B983fFA7AcA5EC9Ca2866c95c",
-  "pampalo": "0x1236dBc640d5ABA74F62CcDCc90EA4aF5D16B65f",
-  "poseidon2Huff": "0x30B6184fc8B9245B6476A47cA123e1f61ec0433A",
+  "pampalo": "0x3E6dfc4c233486A44e26A548e191c839f069037f",
+  "poseidon2Huff": "0x090Fd81205Da513803a78FB2628f032385564998",
   "verifiers": {
-    "deposit": "0xAFBf474809421c7Bfc2D28FC5Df2Bceaf49f884a",
-    "transfer": "0xF2A79D3B9531eFc24119c92A459E965ce5F8cd4f",
-    "withdraw": "0x33e0C0C81Cb4521De0CA7C6192c5547D3dB55bfB",
-    "transferExternal": "0xf134f7Ef352637870f3F02d0ff581727f6595469"
+    "deposit": "0xB656b7358c9Ef0CccC698405cFb090C854BC8460",
+    "transfer": "0x819CDE597613a12FCF2Ce8fc3fCAF25dfF585B71",
+    "withdraw": "0xA6C469Ceba94A8549a0692b85b68390549D23Bd7",
+    "transferExternal": "0xc729DfAAde6e9deE6BA95A04772d27bf45EcdDBD"
   },
   "tokens": {
-    "usdc": "0x8f9870294E7E5d3f532Fda2E41098c5162552B58"
+    "usdc": "0x4Fc9cc04f2A8d6Ff360352C61A4bb36Ab262Ae01"
   },
   "oracles": {
-    "usdc": "0x08b48280d2f318aB4b9e2d81355484d63bbCdcFe",
-    "eth": "0xDA0736cabA30Af8c4cF3ad575e7053C401b4a086"
+    "usdc": "0x1d787703FAAF8677Ac43784d6eC7875127f8BFF9",
+    "eth": "0x6aCC11a076eAE4236d734E2050E568B375944AB8"
   },
-  "timestamp": "2026-05-29T00:10:18.478Z"
+  "timestamp": "2026-05-29T02:10:52.365Z"
 }
