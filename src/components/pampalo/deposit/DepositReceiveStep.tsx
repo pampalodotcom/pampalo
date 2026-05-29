@@ -5,7 +5,9 @@ import {
   Copy,
   AlertTriangle,
   Check,
+  Share2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useClipboard } from "@/lib/use-clipboard";
 import { NetworkLogo } from "./NetworkLogo";
@@ -28,17 +30,58 @@ export function DepositReceiveStep({
   mode,
   network,
   address,
+  envelope,
+  poseidon,
   onBack,
 }: {
   mode: DepositMode;
   network: NetworkChoice;
   /** Full receive address. Truncated for display, copied in full. */
   address: string;
+  /** Envelope public key — included in the share URL for private mode
+   *  so a shield-to-others sender can recover the ECIES recipient. */
+  envelope?: string;
+  /** Poseidon identifier — same purpose, included as the future note
+   *  `owner` for shield-to-others. */
+  poseidon?: string;
   onBack: () => void;
 }) {
   const { copied, copy } = useClipboard();
   const isPrivate = mode === "private";
   const [showFull, setShowFull] = useState(false);
+
+  const onShareLink = async () => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams();
+    params.set("evm", address);
+    // Private mode includes the shielded-receive identifiers so the
+    // person on the other end has everything a future shield-to-others
+    // sender will need. Public mode only carries the EVM address.
+    if (isPrivate && envelope) params.set("envelope", envelope);
+    if (isPrivate && poseidon) params.set("poseidon", poseidon);
+    const url = `${window.location.origin}/share?${params.toString()}`;
+
+    const payload: ShareData = {
+      title: `Pampalo · ${isPrivate ? "Shielded" : "Public"} receive on ${network.name}`,
+      text: `Send to my Pampalo wallet on ${network.name}`,
+      url,
+    };
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share(payload);
+        return;
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") return;
+      }
+    }
+    // Fallback when no native share sheet — copy to clipboard.
+    try {
+      await navigator.clipboard.writeText(url);
+      toast("Share link copied to clipboard.");
+    } catch {
+      toast.error("Couldn't share — copy the address manually.");
+    }
+  };
 
   return (
     <div className="flex flex-col gap-5 px-5 pt-2 pb-5 sm:px-6 sm:pt-3 sm:pb-6">
@@ -152,6 +195,20 @@ export function DepositReceiveStep({
           </div>
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={onShareLink}
+        className={cn(
+          "inline-flex items-center justify-center gap-2 h-11 rounded-full",
+          "border border-line bg-card text-[13px] font-semibold text-ink",
+          "transition-colors hover:bg-paper-lo",
+          "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ink/15",
+        )}
+      >
+        <Share2 className="size-4" />
+        Share link
+      </button>
 
       <div className="flex items-start gap-2.5 rounded-2xl bg-[color-mix(in_oklab,var(--pub-soft)_60%,transparent)] px-4 py-3">
         <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--pub)]" />

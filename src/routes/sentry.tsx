@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAction, usePaginatedQuery, useQuery } from "convex/react";
 import { Clock3, Loader2, RefreshCcw, ShieldAlert, Zap } from "lucide-react";
 import { toast } from "sonner";
@@ -163,9 +163,13 @@ function Sentry() {
         <BeachScene height={220} theme={theme} />
         <div className="absolute inset-x-0 top-6 z-10 pointer-events-none">
           <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-5">
-            <div className="pointer-events-auto flex items-center gap-2">
+            <Link
+              to="/"
+              aria-label="Pampalo home"
+              className="pointer-events-auto flex items-center gap-2 rounded-md transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ink/15"
+            >
               <BrandLockup />
-            </div>
+            </Link>
             <div className="pointer-events-auto flex items-center gap-2">
               <ThemeToggle />
               {evmAddress && (

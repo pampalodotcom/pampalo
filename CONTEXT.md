@@ -77,7 +77,10 @@ encryption target when another user sends this user a note. Specifically,
 the **note secret** of every note addressed to a Poseidon identifier is
 ECIES-encrypted to the recipient's envelope key so the recipient — and
 only the recipient — can later read the secret out of public emit data,
-store it locally, and use it to spend the note.
+store it locally, and use it to spend the note. Derived on a dedicated
+HD path (separate from the EVM signing path) so the corresponding private
+key can be cached in memory for background note-scanning without also
+giving an attacker the ability to sign Pampalo writes. See ADR 0009.
 
 **Poseidon identifier**:
 `poseidon2([BigInt(privateKey)])` over BN254, zero-padded to 64 hex chars.
