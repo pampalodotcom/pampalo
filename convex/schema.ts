@@ -272,7 +272,11 @@ export default defineSchema({
   })
     .index("by_deployment_and_state", ["deploymentId", "state"])
     .index("by_shielder", ["shielder"])
-    .index("by_deployment_and_pendingId", ["deploymentId", "pendingId"]),
+    .index("by_deployment_and_pendingId", ["deploymentId", "pendingId"])
+    // Global all-deployments view by state — drives the /sentry default
+    // "all networks · queued" query without scan-and-filter. See
+    // SHIELD_FLOW.md §10.3.
+    .index("by_state", ["state"]),
 
   // Cached Uniswap pool addresses. Pool addresses are deterministic
   // (CREATE2 from factory + tokens [+ fee for v3]) and can always be

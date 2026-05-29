@@ -9,6 +9,7 @@
     "test:gas": "hardhat test --gas-stats",
     "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia",
     "deploy:base-sepolia": "hardhat run scripts/deploy.ts --network baseSepolia",
+    "grant-roles:base-sepolia": "hardhat run scripts/grant-roles.ts --network baseSepolia",
     "verify:sepolia": "hardhat ignition verify pampalo --network sepolia",
     "verify:base-sepolia": "hardhat ignition verify pampalo --network baseSepolia"
   },

@@ -1,6 +1,10 @@
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import { internalAction, type ActionCtx } from "../_generated/server";
+import {
+  action,
+  internalAction,
+  type ActionCtx,
+} from "../_generated/server";
 import { alchemyUrl, rpc } from "../lib/alchemy";
 import { ALL_TOPICS, decodeLog, type RawLog } from "./events";
 import type { IndexerDeployment } from "./store";
@@ -79,8 +83,13 @@ export const refreshShieldQueue = internalAction({
   },
 });
 
-// Manual one-shot for dashboard testing.
-export const refreshShieldQueueNow = internalAction({
+// Manual one-shot. Public so the /sentry "Refresh" button can call it
+// from the client (SHIELD_FLOW.md §10.8). Spam protection is layered:
+// the route has a 5s client-side throttle, and even bypassing that
+// just causes redundant `eth_getLogs` calls — the indexer dedupes on
+// upsert and the cursor only advances when blocks actually exist.
+// Alchemy quota is the only real cost.
+export const refreshShieldQueueNow = action({
   args: {},
   handler: async (ctx): Promise<unknown> =>
     await ctx.runAction(internal.shieldQueue.refresh.refreshShieldQueue, {

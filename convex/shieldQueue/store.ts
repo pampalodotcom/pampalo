@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import {
@@ -246,9 +247,17 @@ export const _upsertAsset = internalMutation({
 
 // ─── Public queries used by the wallet + Sentry surfaces ─────────────────
 
-/** All currently-queued shields across enabled deployments. Sentry default view. */
+/**
+ * Paginated shield-queue view for the public `/sentry` page. Uses
+ * `usePaginatedQuery` on the client; pageSize comes from the
+ * paginationOpts (the route currently passes 50). When
+ * `deploymentId` is set we hit the indexed `by_deployment_and_state`
+ * path; when it's null we hit the new global `by_state` index added
+ * for this exact use case (SHIELD_FLOW.md §10.3).
+ */
 export const queue = query({
   args: {
+    paginationOpts: paginationOptsValidator,
     state: v.optional(
       v.union(
         v.literal("queued"),
@@ -259,24 +268,23 @@ export const queue = query({
     ),
     deploymentId: v.optional(v.id("pampaloDeployments")),
   },
-  handler: async (ctx, args): Promise<Doc<"shieldQueueEntries">[]> => {
+  handler: async (ctx, args) => {
     const state = args.state ?? "queued";
-    if (args.deploymentId) {
+    if (args.deploymentId !== undefined) {
+      const deploymentId = args.deploymentId;
       return await ctx.db
         .query("shieldQueueEntries")
         .withIndex("by_deployment_and_state", (q) =>
-          q.eq("deploymentId", args.deploymentId!).eq("state", state),
+          q.eq("deploymentId", deploymentId).eq("state", state),
         )
         .order("desc")
-        .take(200);
+        .paginate(args.paginationOpts);
     }
-    // Cross-deployment: scan recent rows and filter by state. For v1
-    // traffic this is cheap; for scale we'd add a global-by-state index.
     return await ctx.db
       .query("shieldQueueEntries")
+      .withIndex("by_state", (q) => q.eq("state", state))
       .order("desc")
-      .filter((q) => q.eq(q.field("state"), state))
-      .take(200);
+      .paginate(args.paginationOpts);
   },
 });
 
@@ -309,7 +317,9 @@ export const enabledDeployments = query({
     ctx,
   ): Promise<
     Array<{
+      _id: Id<"pampaloDeployments">;
       chainId: number;
+      networkName: string;
       pampaloAddress: string;
       shieldWaitSeconds: number;
       defaultMonthlyCapUsdCents: number;
@@ -317,7 +327,9 @@ export const enabledDeployments = query({
   > => {
     const deployments = await ctx.db.query("pampaloDeployments").collect();
     const out: Array<{
+      _id: Id<"pampaloDeployments">;
       chainId: number;
+      networkName: string;
       pampaloAddress: string;
       shieldWaitSeconds: number;
       defaultMonthlyCapUsdCents: number;
@@ -327,7 +339,9 @@ export const enabledDeployments = query({
       const net = await ctx.db.get(d.networkId);
       if (!net) continue;
       out.push({
+        _id: d._id,
         chainId: net.chainId,
+        networkName: net.name,
         pampaloAddress: d.pampalo,
         shieldWaitSeconds: d.shieldWaitSeconds,
         defaultMonthlyCapUsdCents: d.defaultMonthlyCapUsdCents,
