@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Send } from "lucide-react";
+import { ArrowLeftRight, RefreshCw, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DepositButton } from "./deposit/DepositButton";
 import { SplitBar } from "./SplitBar";
@@ -18,6 +18,12 @@ type Props = {
    *  Swap so the visual order matches the verb order most users expect:
    *  Send → Swap. */
   onSend?: () => void;
+  /** Optional: render a Sync button that re-decrypts shield-queue notes
+   *  from Convex. Stacks below Send/Swap on mobile. */
+  onSync?: () => void;
+  /** Whether the sync operation is currently in flight (drives the
+   *  spinner + disabled state on the Sync button). */
+  syncing?: boolean;
   /** Optional: render the prominent Deposit CTA below the split bar. */
   onDeposit?: () => void;
 };
@@ -44,6 +50,8 @@ export function BalanceCard({
   className,
   onSwap,
   onSend,
+  onSync,
+  syncing,
   onDeposit,
 }: Props) {
   const isLoading =
@@ -62,15 +70,15 @@ export function BalanceCard({
         className,
       )}
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         <p className="eyebrow">Total Balance</p>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
           {onSend && (
             <button
               type="button"
               onClick={onSend}
               className={cn(
-                "inline-flex items-center gap-1.5",
+                "inline-flex items-center justify-center gap-1.5",
                 "h-[28px] px-3 rounded-full",
                 "border border-line bg-paper-lo text-ink",
                 "text-[12px] font-semibold",
@@ -88,7 +96,7 @@ export function BalanceCard({
               type="button"
               onClick={onSwap}
               className={cn(
-                "inline-flex items-center gap-1.5",
+                "inline-flex items-center justify-center gap-1.5",
                 "h-[28px] px-3 rounded-full",
                 "border border-line bg-paper-lo text-ink",
                 "text-[12px] font-semibold",
@@ -99,6 +107,29 @@ export function BalanceCard({
             >
               <ArrowLeftRight className="size-3.5" />
               Swap
+            </button>
+          )}
+          {onSync && (
+            <button
+              type="button"
+              onClick={onSync}
+              disabled={syncing}
+              aria-label={syncing ? "Syncing notes" : "Sync notes from Convex"}
+              className={cn(
+                "inline-flex items-center justify-center gap-1.5",
+                "h-[28px] px-3 rounded-full",
+                "border border-line bg-paper-lo text-ink",
+                "text-[12px] font-semibold",
+                "transition-colors hover:bg-[var(--priv-soft)] hover:text-[var(--priv)]",
+                "focus-visible:outline-none focus-visible:ring-3",
+                "focus-visible:ring-[var(--priv-soft-2)]",
+                "disabled:opacity-60 disabled:cursor-not-allowed",
+              )}
+            >
+              <RefreshCw
+                className={cn("size-3.5", syncing && "animate-spin")}
+              />
+              {syncing ? "Syncing…" : "Sync"}
             </button>
           )}
           <SyncIndicator />

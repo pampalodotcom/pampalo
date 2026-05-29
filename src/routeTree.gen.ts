@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WalletRouteImport } from './routes/wallet'
+import { Route as ShareRouteImport } from './routes/share'
 import { Route as SentryRouteImport } from './routes/sentry'
 import { Route as LoadingRouteImport } from './routes/loading'
 import { Route as ClearRouteImport } from './routes/clear'
@@ -19,6 +20,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const WalletRoute = WalletRouteImport.update({
   id: '/wallet',
   path: '/wallet',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShareRoute = ShareRouteImport.update({
+  id: '/share',
+  path: '/share',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SentryRoute = SentryRouteImport.update({
@@ -53,6 +59,7 @@ export interface FileRoutesByFullPath {
   '/clear': typeof ClearRoute
   '/loading': typeof LoadingRoute
   '/sentry': typeof SentryRoute
+  '/share': typeof ShareRoute
   '/wallet': typeof WalletRoute
 }
 export interface FileRoutesByTo {
@@ -61,6 +68,7 @@ export interface FileRoutesByTo {
   '/clear': typeof ClearRoute
   '/loading': typeof LoadingRoute
   '/sentry': typeof SentryRoute
+  '/share': typeof ShareRoute
   '/wallet': typeof WalletRoute
 }
 export interface FileRoutesById {
@@ -70,13 +78,28 @@ export interface FileRoutesById {
   '/clear': typeof ClearRoute
   '/loading': typeof LoadingRoute
   '/sentry': typeof SentryRoute
+  '/share': typeof ShareRoute
   '/wallet': typeof WalletRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/account' | '/clear' | '/loading' | '/sentry' | '/wallet'
+  fullPaths:
+    | '/'
+    | '/account'
+    | '/clear'
+    | '/loading'
+    | '/sentry'
+    | '/share'
+    | '/wallet'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/account' | '/clear' | '/loading' | '/sentry' | '/wallet'
+  to:
+    | '/'
+    | '/account'
+    | '/clear'
+    | '/loading'
+    | '/sentry'
+    | '/share'
+    | '/wallet'
   id:
     | '__root__'
     | '/'
@@ -84,6 +107,7 @@ export interface FileRouteTypes {
     | '/clear'
     | '/loading'
     | '/sentry'
+    | '/share'
     | '/wallet'
   fileRoutesById: FileRoutesById
 }
@@ -93,6 +117,7 @@ export interface RootRouteChildren {
   ClearRoute: typeof ClearRoute
   LoadingRoute: typeof LoadingRoute
   SentryRoute: typeof SentryRoute
+  ShareRoute: typeof ShareRoute
   WalletRoute: typeof WalletRoute
 }
 
@@ -103,6 +128,13 @@ declare module '@tanstack/react-router' {
       path: '/wallet'
       fullPath: '/wallet'
       preLoaderRoute: typeof WalletRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share': {
+      id: '/share'
+      path: '/share'
+      fullPath: '/share'
+      preLoaderRoute: typeof ShareRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sentry': {
@@ -149,6 +181,7 @@ const rootRouteChildren: RootRouteChildren = {
   ClearRoute: ClearRoute,
   LoadingRoute: LoadingRoute,
   SentryRoute: SentryRoute,
+  ShareRoute: ShareRoute,
   WalletRoute: WalletRoute,
 }
 export const routeTree = rootRouteImport

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { Loader2, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import {
 } from "@/lib/use-private-balances";
 import { useShieldBudget } from "@/lib/use-shield-budget";
 import { useShieldQueueSync } from "@/lib/use-shield-queue-sync";
+import { syncShieldNotesExplicit } from "@/lib/sync-shield-notes";
 import {
   ShieldConfirmSheet,
   type ShieldConfirmPayload,
@@ -84,9 +85,13 @@ function Wallet() {
         <BeachScene height={280} theme={theme} />
         <div className="absolute inset-x-0 top-6 z-10 pointer-events-none">
           <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-5 lg:max-w-4xl">
-            <div className="pointer-events-auto flex items-center gap-2">
+            <Link
+              to="/"
+              aria-label="Pampalo home"
+              className="pointer-events-auto flex items-center gap-2 rounded-md transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ink/15"
+            >
               <BrandLockup />
-            </div>
+            </Link>
             <div className="pointer-events-auto flex items-center gap-2">
               <ThemeToggle />
               {addresses && (
@@ -203,7 +208,7 @@ function Dashboard({
   // re-subscribes via useSyncExternalStore so any optimistic write or
   // Convex reconcile path that touches `idb-notes.ts` propagates here
   // automatically.
-  const privateBalances = usePrivateBalances();
+  const privateBalances = usePrivateBalances(evmAddress);
 
   // Same-device Convex → IDB writer. Reactively patches IDB notes
   // forward (queued → spendable/cancelled/contested) whenever the
@@ -306,6 +311,8 @@ function Dashboard({
         tokens={tokens ?? null}
         prices={prices ?? null}
         evmAddress={evmAddress}
+        envelope={addresses.envelope}
+        poseidon={addresses.poseidon}
       />
 
       <section className="rounded-3xl card-cream px-5 pt-4 pb-5">
@@ -408,14 +415,40 @@ function BalanceCardConnected({
   tokens,
   prices,
   evmAddress,
+  envelope,
+  poseidon,
 }: {
   tokens: Token[] | null;
   prices: PriceRow[] | null;
   evmAddress: string;
+  envelope: string;
+  poseidon: string;
 }) {
   const [swapOpen, setSwapOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const onSync = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const result = await syncShieldNotesExplicit();
+      const total =
+        result.added + result.skippedAlreadyPresent + result.skippedByCursor;
+      if (result.added > 0) {
+        toast(`Synced ${result.added} note${result.added === 1 ? "" : "s"}.`);
+      } else if (total === 0) {
+        toast("Nothing to sync.");
+      } else {
+        toast("Already up to date.");
+      }
+    } catch (e) {
+      console.warn("[sync] failed", e);
+      toast.error("Sync failed — try again.");
+    } finally {
+      setSyncing(false);
+    }
+  };
   if (!tokens) {
     return (
       <BalanceCard
@@ -445,6 +478,8 @@ function BalanceCardConnected({
         evmAddress={evmAddress}
         onSwap={() => setSwapOpen(true)}
         onSend={() => setSendOpen(true)}
+        onSync={onSync}
+        syncing={syncing}
         onDeposit={() => setDepositOpen(true)}
       />
       <SwapModal
@@ -461,6 +496,8 @@ function BalanceCardConnected({
         open={depositOpen}
         onOpenChange={setDepositOpen}
         address={evmAddress}
+        envelope={envelope}
+        poseidon={poseidon}
       />
     </>
   );
@@ -472,6 +509,8 @@ function BalanceCardWithBalances({
   evmAddress,
   onSwap,
   onSend,
+  onSync,
+  syncing,
   onDeposit,
 }: {
   tokens: Token[];
@@ -479,6 +518,8 @@ function BalanceCardWithBalances({
   evmAddress: string;
   onSwap?: () => void;
   onSend?: () => void;
+  onSync?: () => void;
+  syncing?: boolean;
   onDeposit?: () => void;
 }) {
   // Aggregate by symbol — one balance lookup per (chainId, address).
@@ -552,6 +593,8 @@ function BalanceCardWithBalances({
       privateUsd={stillLoading ? null : privateUsd}
       onSwap={onSwap}
       onSend={onSend}
+      onSync={onSync}
+      syncing={syncing}
       onDeposit={onDeposit}
     />
   );

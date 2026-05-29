@@ -3,7 +3,7 @@ import { useAction, useQuery } from "convex/react";
 import { ArrowDownUp, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { parseUnits } from "ethers";
 import { api } from "../../../convex/_generated/api";
-import { weiToNumber } from "@/lib/balances";
+import { usePublicBalance, weiToNumber } from "@/lib/balances";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -91,6 +91,41 @@ function formatAmount(n: number, decimals: number): string {
   });
 }
 
+// Convert a user-typed amount string in a given unit (token / usd /
+// eth) into token-decimal wei. Returns null on parse failure or zero
+// — the caller treats null as "no quote, hide the secondary line".
+function amountInUnitToTokenWei(
+  amountStr: string,
+  unit: "token" | "usd" | "eth",
+  token: TokenPair,
+  tokenPriceUsd: number | null,
+  ethUsdPrice: number | null,
+): bigint | null {
+  try {
+    let tokenStr: string;
+    if (unit === "token") {
+      tokenStr = amountStr;
+    } else if (unit === "usd") {
+      if (tokenPriceUsd === null || tokenPriceUsd <= 0) return null;
+      const usd = Number(amountStr);
+      if (!Number.isFinite(usd) || usd <= 0) return null;
+      tokenStr = (usd / tokenPriceUsd).toFixed(token.decimals);
+    } else {
+      // unit === "eth"
+      if (!ethUsdPrice || ethUsdPrice <= 0) return null;
+      if (tokenPriceUsd === null || tokenPriceUsd <= 0) return null;
+      const eth = Number(amountStr);
+      if (!Number.isFinite(eth) || eth <= 0) return null;
+      const usd = eth * ethUsdPrice;
+      tokenStr = (usd / tokenPriceUsd).toFixed(token.decimals);
+    }
+    const parsed = parseUnits(tokenStr, token.decimals);
+    return parsed <= 0n ? null : parsed;
+  } catch {
+    return null;
+  }
+}
+
 export function SwapModal({
   open,
   onOpenChange,
@@ -103,6 +138,17 @@ export function SwapModal({
 }) {
   const tokensRaw = useQuery(api.catalog.tokens.list, {});
   const prices = useQuery(api.prices.feeds.listLatest, {});
+
+  // ETH/USD spot — referenced by the input-mode toggle (USD ↔ ETH
+  // conversion on the pay side) and by the network-fee USD line under
+  // the quote list. Declared early so both sites share a single
+  // memoised reference.
+  const ethUsdPrice = useMemo<number | null>(() => {
+    if (!prices) return null;
+    const feed = prices.find((p) => p.shortId === "eth/usd");
+    if (!feed) return null;
+    return Number(feed.answer) / 10 ** feed.feedDecimals;
+  }, [prices]);
 
   // Flatten the catalogue into (token, chain) pairs the picker can
   // render. Memoised so the picker's per-row balance hooks see the
@@ -159,6 +205,63 @@ export function SwapModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Pay-side input unit. Same pattern as SendModal — the user can
+  // type in token-native units, USD, or ETH; we convert to token-wei
+  // for the quote engine + over-balance check on every keystroke. The
+  // toggle cycles token → usd → eth → token, skipping ETH when the
+  // pay token IS ETH (avoids a degenerate ETH-in-ETH toggle).
+  type InputUnit = "token" | "usd" | "eth";
+  const [payInputUnit, setPayInputUnit] = useState<InputUnit>("token");
+  // Reset to token whenever the user picks a new pay token so the
+  // unit label and input never get out of sync.
+  useEffect(() => {
+    setPayInputUnit("token");
+  }, [tokenIn?.symbol, tokenIn?.chainId]);
+
+  const tokenInPriceUsd = useMemo(
+    () => usdPriceFor(tokenIn, prices ?? undefined),
+    [tokenIn, prices],
+  );
+
+  // rawAmount → token-wei, honouring the current input unit. Returns
+  // null when the input doesn't parse or evaluates to zero; the quote
+  // effect treats that as "no quote".
+  const payAmountWei = useMemo<bigint | null>(() => {
+    if (kind !== "exactIn" || !tokenIn) return null;
+    if (!rawAmount) return null;
+    return amountInUnitToTokenWei(
+      rawAmount,
+      payInputUnit,
+      tokenIn,
+      tokenInPriceUsd,
+      ethUsdPrice,
+    );
+  }, [kind, rawAmount, payInputUnit, tokenIn, tokenInPriceUsd, ethUsdPrice]);
+
+  const cyclePayInputUnit = () => {
+    if (!tokenIn || tokenInPriceUsd === null || tokenInPriceUsd <= 0) return;
+    const isEth = tokenIn.symbol === "ETH";
+    const ethAllowed = !isEth && ethUsdPrice !== null && ethUsdPrice > 0;
+    const order: InputUnit[] = ethAllowed
+      ? ["token", "usd", "eth"]
+      : ["token", "usd"];
+    const idx = order.indexOf(payInputUnit);
+    const next = order[(idx + 1) % order.length];
+    // Re-express the current amount in the new unit so the user's
+    // typing isn't silently nuked by the toggle.
+    if (payAmountWei !== null) {
+      const tokenAmt = weiToNumber(payAmountWei, tokenIn.decimals);
+      if (next === "token") {
+        setRawAmount(formatAmount(tokenAmt, tokenIn.decimals));
+      } else if (next === "usd") {
+        setRawAmount((tokenAmt * tokenInPriceUsd).toFixed(2));
+      } else if (ethUsdPrice && ethUsdPrice > 0) {
+        setRawAmount(((tokenAmt * tokenInPriceUsd) / ethUsdPrice).toFixed(6));
+      }
+    }
+    setPayInputUnit(next);
+  };
+
   // When the user picks a token on a different chain than the OTHER
   // side already had selected, try to keep the swap same-chain by
   // switching the counterpart to the matching symbol on the new
@@ -187,7 +290,10 @@ export function SwapModal({
 
   // Debounced quote fetch. The cancel flag is declared at effect scope
   // so the cleanup can flip it and any in-flight async work bails out
-  // before touching React state.
+  // before touching React state. For exactIn we use `payAmountWei`,
+  // which is rawAmount converted from the active input unit
+  // (token/usd/eth) into token-wei. For exactOut we still parse
+  // rawAmount as receive-side token-units.
   useEffect(() => {
     if (!open || !tokenIn || !tokenOut || !inputSideToken) return;
     if (tokenIn.chainId !== tokenOut.chainId) return;
@@ -198,12 +304,21 @@ export function SwapModal({
       return;
     }
     let parsed: bigint;
-    try {
-      parsed = parseUnits(rawAmount || "0", inputSideToken.decimals);
-    } catch {
-      setError("Invalid amount");
-      setQuotes(null);
-      return;
+    if (kind === "exactIn") {
+      if (payAmountWei === null) {
+        setQuotes(null);
+        setError(null);
+        return;
+      }
+      parsed = payAmountWei;
+    } else {
+      try {
+        parsed = parseUnits(rawAmount || "0", inputSideToken.decimals);
+      } catch {
+        setError("Invalid amount");
+        setQuotes(null);
+        return;
+      }
     }
     if (parsed <= 0n) {
       setQuotes(null);
@@ -244,6 +359,7 @@ export function SwapModal({
   }, [
     open,
     rawAmount,
+    payAmountWei,
     kind,
     tokenIn,
     tokenOut,
@@ -312,16 +428,8 @@ export function SwapModal({
   //   gasPriceWei      (latestGas, refreshed every minute by the gas
   //     cron — see convex/gas.ts)
   //   eth/usd          (latestPrices, refreshed every 30s by the
-  //     prices cron — see convex/prices.ts)
-  // No extra RPC. Returns null while any input is still loading or if
-  // the picked quote has no gasEstimateUnits (only happens for the
-  // "unavailable" rows, which the best-quote selection skips anyway).
-  const ethUsdPrice = (() => {
-    if (!prices) return null;
-    const feed = prices.find((p) => p.shortId === "eth/usd");
-    if (!feed) return null;
-    return Number(feed.answer) / 10 ** feed.feedDecimals;
-  })();
+  //     prices cron — see convex/prices.ts; declared above so the
+  //     input-unit toggle can share it).
   const bestGasUsd = (() => {
     if (!best?.gasEstimateUnits || !gas?.gasPriceWei || ethUsdPrice === null) {
       return null;
@@ -404,6 +512,21 @@ export function SwapModal({
                 setRawAmount(v);
               }}
               usdValue={topUsd}
+              ethUsdPrice={ethUsdPrice}
+              inputUnit={payInputUnit}
+              onCycleInputUnit={cyclePayInputUnit}
+              tokenAmountWei={
+                kind === "exactIn"
+                  ? payAmountWei
+                  : best?.amountIn
+                    ? BigInt(best.amountIn)
+                    : null
+              }
+              showBalance
+              onFillBalance={(amt) => {
+                setKind("exactIn");
+                setRawAmount(amt);
+              }}
               // Pay-side dropdown lands on "My tokens" so the user
               // sees their balances immediately. Receive-side keeps
               // the "All" default since you may want to acquire
@@ -525,6 +648,12 @@ function SideBox({
   editable,
   onValueChange,
   usdValue,
+  ethUsdPrice,
+  inputUnit,
+  onCycleInputUnit,
+  tokenAmountWei,
+  showBalance,
+  onFillBalance,
   footer,
   pickerDefaultFilter,
 }: {
@@ -541,6 +670,21 @@ function SideBox({
   editable: boolean;
   onValueChange: (next: string) => void;
   usdValue: number | null;
+  /** ETH/USD spot. null hides the ETH leg of the toggle. */
+  ethUsdPrice?: number | null;
+  /** Active input unit on the pay side. Drives the trailing unit
+   *  label and the secondary equivalent line. */
+  inputUnit?: "token" | "usd" | "eth";
+  /** Cycle handler — undefined hides the toggle button. */
+  onCycleInputUnit?: () => void;
+  /** Effective token-wei amount the side represents. Used for the
+   *  over-balance guard on the pay side. */
+  tokenAmountWei?: bigint | null;
+  /** Pay-side only — render the Balance row with the Max button. */
+  showBalance?: boolean;
+  /** Called with the decimal amount string when the user taps Max.
+   *  Caller is responsible for honouring `inputUnit`. */
+  onFillBalance?: (amount: string) => void;
   /** Optional slot rendered below the USD/chip line. Used by the pay
    *  side for quick-pick balance tiles. */
   footer?: ReactNode;
@@ -550,6 +694,124 @@ function SideBox({
    *  don't hold yet. */
   pickerDefaultFilter?: "all" | "mine";
 }) {
+  // Live balance for the pay side. The hook always fires so the hook
+  // count is stable across renders; we pass a sentinel AssetRef + null
+  // userAddress when no token is selected so it short-circuits without
+  // hitting the RPC. Same shape as SendModal.
+  const balanceHook = usePublicBalance(
+    token
+      ? {
+          chainId: token.chainId,
+          address: token.address,
+          symbol: token.symbol,
+          decimals: token.decimals,
+        }
+      : {
+          chainId: 1,
+          address: "0x0000000000000000000000000000000000000000",
+          symbol: "",
+          decimals: 18,
+        },
+    token && showBalance ? evmAddress : null,
+  );
+  const balanceWei = balanceHook.data?.balanceWei ?? null;
+  const balanceNumber =
+    balanceWei !== null && token
+      ? weiToNumber(balanceWei, token.decimals)
+      : null;
+
+  const isEthAsset = token?.symbol === "ETH";
+  const tokenPriceUsd = token ? usdPriceFor(token, prices) : null;
+  const showInputToggle =
+    !!onCycleInputUnit &&
+    !!token &&
+    tokenPriceUsd !== null &&
+    tokenPriceUsd > 0;
+  const isOverBalance =
+    showBalance &&
+    tokenAmountWei !== null &&
+    tokenAmountWei !== undefined &&
+    balanceWei !== null &&
+    tokenAmountWei > balanceWei;
+
+  // Trailing unit label after the input (ETH/USD/symbol).
+  const unitLabel = (() => {
+    if (!token) return "";
+    if (inputUnit === "usd") return "USD";
+    if (inputUnit === "eth") return "ETH";
+    return token.symbol;
+  })();
+
+  // Next-unit hint for the toggle button (matches SendModal copy:
+  // "View in USD" / "View in ETH" / "View in {symbol}").
+  const nextUnitLabel = (() => {
+    if (!token) return "";
+    const order: Array<"token" | "usd" | "eth"> = isEthAsset
+      ? ["token", "usd"]
+      : ethUsdPrice
+        ? ["token", "usd", "eth"]
+        : ["token", "usd"];
+    const idx = order.indexOf(inputUnit ?? "token");
+    const next = order[(idx + 1) % order.length];
+    if (next === "usd") return "USD";
+    if (next === "eth") return "ETH";
+    return token.symbol;
+  })();
+
+  // Secondary line under the input. Shows the OTHER equivalents so
+  // the user always sees the same amount in another denomination.
+  const secondaryLine = (() => {
+    if (!token || tokenAmountWei === null || tokenAmountWei === undefined) {
+      return "";
+    }
+    const tokenAmt = weiToNumber(tokenAmountWei, token.decimals);
+    if (inputUnit === "token" || inputUnit === undefined) {
+      return usdValue === null ? "" : `≈ ${fmtUsd(usdValue)}`;
+    }
+    if (inputUnit === "usd") {
+      return `≈ ${formatAmount(tokenAmt, token.decimals)} ${token.symbol}`;
+    }
+    // inputUnit === "eth" — show the receive-side asset amount.
+    return `≈ ${formatAmount(tokenAmt, token.decimals)} ${token.symbol}`;
+  })();
+
+  // Max button respects the current input unit so the user sees a
+  // sensible number land in the field instead of mode-mismatched
+  // digits.
+  const onMax = () => {
+    if (!token || !onFillBalance || balanceWei === null) return;
+    const reserveWei = isEthAsset ? 5_000_000_000_000_000n : 0n; // 0.005 ETH
+    const maxWei =
+      balanceWei > reserveWei ? balanceWei - reserveWei : balanceWei;
+    if (maxWei <= 0n) {
+      onFillBalance("");
+      return;
+    }
+    const maxNumber = weiToNumber(maxWei, token.decimals);
+    if (inputUnit === "usd" && tokenPriceUsd !== null && tokenPriceUsd > 0) {
+      onFillBalance((maxNumber * tokenPriceUsd).toFixed(2));
+      return;
+    }
+    if (
+      inputUnit === "eth" &&
+      tokenPriceUsd !== null &&
+      tokenPriceUsd > 0 &&
+      ethUsdPrice &&
+      ethUsdPrice > 0
+    ) {
+      onFillBalance(((maxNumber * tokenPriceUsd) / ethUsdPrice).toFixed(6));
+      return;
+    }
+    const maxDp = token.decimals === 18 ? 6 : 4;
+    onFillBalance(
+      maxNumber.toLocaleString("en-US", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: maxDp,
+        useGrouping: false,
+      }),
+    );
+  };
+
   return (
     <div className="min-w-0 rounded-xl border border-border bg-muted/30 p-3">
       <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -563,11 +825,16 @@ function SideBox({
           onChange={(e) => onValueChange(e.target.value)}
           placeholder="0"
           className={cn(
-            "min-w-0 flex-1 bg-transparent text-2xl font-semibold outline-none",
+            "input-fit-content min-w-[1.5ch] max-w-full bg-transparent text-2xl font-semibold outline-none",
             !editable && "text-muted-foreground",
           )}
         />
-        <div className="relative">
+        {token && unitLabel && (
+          <span className="shrink-0 text-base font-medium text-ink-mute/70">
+            {unitLabel}
+          </span>
+        )}
+        <div className="relative ml-auto">
           <TokenSelectButton
             token={token}
             open={pickerOpen}
@@ -595,11 +862,48 @@ function SideBox({
         </div>
       </div>
       <div className="mt-1 flex h-[16px] min-w-0 items-center justify-between gap-2 text-[11px] text-muted-foreground">
-        <span className="min-w-0 truncate font-mono">
-          {usdValue === null ? "" : `≈ ${fmtUsd(usdValue)}`}
-        </span>
+        <div className="flex min-w-0 items-center gap-2">
+          {isOverBalance ? (
+            <span className="min-w-0 truncate text-destructive">
+              Insufficient balance
+            </span>
+          ) : (
+            <span className="min-w-0 truncate font-mono">{secondaryLine}</span>
+          )}
+          {showInputToggle && (
+            <button
+              type="button"
+              onClick={onCycleInputUnit}
+              className="shrink-0 text-[10.5px] font-medium text-ink-mute underline-offset-2 hover:text-ink hover:underline"
+            >
+              View in {nextUnitLabel}
+            </button>
+          )}
+        </div>
         {token && <ChainPill chainId={token.chainId} />}
       </div>
+      {showBalance && token && balanceNumber !== null && (
+        <div className="mt-2 flex items-center justify-end gap-2">
+          <span className="font-mono text-[11px] text-muted-foreground">
+            Balance:{" "}
+            {balanceNumber.toLocaleString("en-US", {
+              minimumFractionDigits: 0,
+              maximumFractionDigits: token.decimals === 18 ? 6 : 4,
+              useGrouping: false,
+            })}{" "}
+            {token.symbol}
+          </span>
+          {onFillBalance && balanceWei !== null && balanceWei > 0n && (
+            <button
+              type="button"
+              onClick={onMax}
+              className="rounded-md border border-line bg-paper-lo px-2 py-0.5 text-[10.5px] font-semibold text-ink hover:bg-paper"
+            >
+              Max
+            </button>
+          )}
+        </div>
+      )}
       {footer && <div className="mt-2">{footer}</div>}
     </div>
   );

@@ -48,6 +48,7 @@ import {
 import { PrfNotSupportedError, UnknownCredentialError } from './auth-errors'
 import { clearPrefsMemoryForSignOut } from './preferences'
 import { syncOnSignInComplete, syncOnTxSign } from './preferences-sync'
+import { syncShieldNotesOnSignIn } from './sync-shield-notes'
 import { Timing } from './timing'
 
 // ─── Typed errors for compatibility failures ─────────────────────────────
@@ -383,6 +384,10 @@ export async function reAuthenticate(): Promise<ReAuthOutcome> {
     if (sessionToken) {
       await syncOnSignInComplete(dekKey, sessionToken)
     }
+    // Trigger (a'): cross-device shield-note hydration. Uses the
+    // wallet that's already in scope — no extra PRF prompt. Failures
+    // are swallowed inside the sync module.
+    await syncShieldNotesOnSignIn(wallet.privateKey, addresses.evm)
     t.finish()
     return { addresses }
   } finally {
@@ -646,6 +651,7 @@ async function unlockAfterAssertion(
     // See CLIENT_SIDE_FIRST.md. Failures are swallowed inside the sync
     // module — they must not abort sign-in.
     await syncOnSignInComplete(dekKey, sessionToken)
+    await syncShieldNotesOnSignIn(wallet.privateKey, addresses.evm)
     if (!parentTiming) t.finish()
     return { addresses, sessionToken }
   } finally {

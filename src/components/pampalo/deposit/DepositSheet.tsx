@@ -30,9 +30,22 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   /** Receive address shown on step 2. Must be the user's EVM address. */
   address: string;
+  /** Optional envelope public key — surfaced in the private-mode
+   *  receive step's shareable URL so a future shield-to-others sender
+   *  can derive the ECIES recipient. */
+  envelope?: string;
+  /** Optional Poseidon identifier — surfaced alongside the envelope
+   *  in private-mode share URLs as the recipient note `owner`. */
+  poseidon?: string;
 };
 
-export function DepositSheet({ open, onOpenChange, address }: Props) {
+export function DepositSheet({
+  open,
+  onOpenChange,
+  address,
+  envelope,
+  poseidon,
+}: Props) {
   const isDesktop = useIsDesktop();
 
   const [step, setStep] = useState<DepositStep>("pick");
@@ -74,7 +87,7 @@ export function DepositSheet({ open, onOpenChange, address }: Props) {
           selectedNetworkId={network?.id ?? null}
           onSelectNetwork={setNetwork}
           onContinue={() => {
-            if (network && mode === "public") setStep("receive");
+            if (network) setStep("receive");
           }}
         />
       ) : network ? (
@@ -82,6 +95,8 @@ export function DepositSheet({ open, onOpenChange, address }: Props) {
           mode={mode}
           network={network}
           address={address}
+          envelope={envelope}
+          poseidon={poseidon}
           onBack={() => setStep("pick")}
         />
       ) : null}

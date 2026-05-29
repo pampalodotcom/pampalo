@@ -20,6 +20,7 @@ const NET_DOT_COLOR: Record<NetworkSlug, string> = {
   base: "#0052FF",
   arb: "#28A0F0",
   sepolia: "#888888",
+  baseSepolia: "#0052FF",
 };
 
 export function NetworkFilterTabs({
@@ -57,7 +58,7 @@ export function NetworkFilterTabs({
               aria-pressed={active}
               className={cn(
                 "inline-flex h-7 items-center gap-1.5 rounded-full px-2.5",
-                "text-[12px] font-semibold transition-colors",
+                "whitespace-nowrap text-[12px] font-semibold transition-colors",
                 active
                   ? "bg-ink text-paper"
                   : "border border-line bg-transparent text-ink-soft hover:bg-paper-lo",
@@ -83,7 +84,7 @@ export function NetworkFilterTabs({
       role="tablist"
       aria-label="Network filter"
       className={cn(
-        "inline-flex items-center gap-1 p-1 rounded-full",
+        "inline-flex shrink-0 items-center gap-1 p-1 rounded-full",
         "bg-paper-lo border border-line",
         className,
       )}
@@ -99,7 +100,7 @@ export function NetworkFilterTabs({
             onClick={() => onChange(opt.value)}
             className={cn(
               "h-7 px-3 rounded-full",
-              "text-[12.5px] font-semibold",
+              "whitespace-nowrap text-[12.5px] font-semibold",
               "transition-colors",
               active
                 ? "bg-card text-ink shadow-sm"
