@@ -30,10 +30,14 @@ import { AssetMark } from "../AssetMark";
 // instead. Wired this way deliberately while the IDB optimistic-write
 // path is still under construction (SHIELD_FLOW.md §7.1 step 9).
 
-// Conservative shield gas: the circuit verifier alone is ~400k, queue
-// storage + ERC20.transferFrom (or ETH escrow) adds maybe 80k. 800k
-// covers both with headroom; revisit after live observation.
-const SHIELD_GAS_LIMIT = 800_000n;
+// UltraHonk verify() on the deposit circuit is gas-monstrous —
+// 6–7M is realistic on Base Sepolia. First tx with 800k consumed
+// 98.7% before reverting (almost certainly OOG masquerading as
+// "execution reverted"). Setting 7M as the starting budget; tune
+// downward once we have a confirmed shield receipt to measure
+// against. Base Sepolia's block gas limit is well above this, so the
+// only cost is the gas fee.
+const SHIELD_GAS_LIMIT = 7_000_000n;
 
 // Native-ETH sentinel — matches Pampalo.ETH_ADDRESS and the catalog
 // convention. Used as the `asset` field on shield-native notes.
