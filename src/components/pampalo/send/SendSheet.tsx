@@ -12,6 +12,7 @@ import { VisuallyHidden } from "radix-ui";
 import { SendPickStep } from "./SendPickStep";
 import { SendComposeStep } from "./SendComposeStep";
 import { SendReviewStep } from "./SendReviewStep";
+import type { TokenPair } from "@/components/pampalo/AssetSelect";
 
 // Three-step send flow. Mirrors the deposit sheet shape — same
 // Sheet/Dialog responsive split, same in-sheet step routing.
@@ -59,6 +60,10 @@ export function SendSheet({
   const [amount, setAmount] = useState<string>("");
   const [inputUnit, setInputUnit] = useState<SendInputUnit>("token");
   const [recipient, setRecipient] = useState<SendRecipient | null>(null);
+  // Selected token for public mode (ETH / USDC / AUDD / …). Private
+  // mode is locked to ETH for v1 (only ETH is currently shielded),
+  // so this is unused in that branch.
+  const [tokenPair, setTokenPair] = useState<TokenPair | null>(null);
 
   // Reset everything on close so re-opening starts fresh.
   useEffect(() => {
@@ -68,15 +73,18 @@ export function SendSheet({
       setAmount("");
       setInputUnit("token");
       setRecipient(null);
+      setTokenPair(null);
     }
   }, [open]);
 
   // Switching mode invalidates the recipient (a public 0x and a
-  // private pair aren't interchangeable). Same call as deposit.
+  // private pair aren't interchangeable) and the selected token
+  // (private mode is ETH-only).
   const onModeChange = (next: SendMode) => {
     if (next === mode) return;
     setMode(next);
     setRecipient(null);
+    setTokenPair(null);
   };
 
   const accent = mode === "private" ? "priv" : "pub";
@@ -121,6 +129,8 @@ export function SendSheet({
           onInputUnitChange={setInputUnit}
           recipient={recipient}
           onRecipientChange={setRecipient}
+          tokenPair={tokenPair}
+          onTokenPairChange={setTokenPair}
           onBack={() => setStep("pick")}
           onContinue={() => setStep("review")}
         />
@@ -131,6 +141,7 @@ export function SendSheet({
           amount={amount}
           inputUnit={inputUnit}
           recipient={recipient}
+          tokenPair={tokenPair}
           evmAddress={evmAddress}
           selfPoseidon={selfPoseidon}
           selfEnvelopePubKey={selfEnvelopePubKey}

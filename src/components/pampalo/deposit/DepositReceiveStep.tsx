@@ -55,14 +55,19 @@ export function DepositReceiveStep({
   const buildShareUrl = (): string | null => {
     if (typeof window === "undefined") return null;
     const params = new URLSearchParams();
-    params.set("evm", address);
+    // Public mode shares the EVM address. Private mode deliberately
+    // omits it: linking the public address to the shielded identifiers
+    // would tie the user's on-chain identity to their private one, so a
+    // shielded share carries only the envelope + Poseidon material a
+    // shield-to-others sender needs.
+    if (!isPrivate) params.set("evm", address);
     // The chainId is always carried — it pins the receive surface to a
     // specific network so the recipient can't accidentally send on the
     // wrong chain after scanning the QR.
     params.set("chainId", String(network.chainId));
     // Private mode includes the shielded-receive identifiers so the
     // person on the other end has everything a future shield-to-others
-    // sender will need. Public mode only carries the EVM address.
+    // sender will need.
     if (isPrivate && envelope) params.set("envelope", envelope);
     if (isPrivate && poseidon) params.set("poseidon", poseidon);
     return `${window.location.origin}/share?${params.toString()}`;

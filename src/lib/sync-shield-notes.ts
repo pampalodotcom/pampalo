@@ -382,6 +382,65 @@ export async function syncShieldNotesOnSignIn(
   }
 }
 
+// ─── Lightweight leaf-index backfill (no PRF required) ───────────────────
+//
+// Every PoseidonMerkleTree.LeafInserted event is publicly indexed into
+// `pampaloLeaves`; mapping a commitment to its position is just a map
+// lookup. The shield-side IDB writer doesn't populate the position
+// (it only sets state + unlockTime + queuedTxHash), which means
+// freshly-spendable notes can't be spent in a transfer until either
+// the user taps Sync OR this auto-backfill runs.
+//
+// Fast: one Convex query per affected chain, then a few patches in
+// IDB. No envelope private key, no PRF, no decrypt. Safe to call on
+// every wallet mount.
+export async function backfillLeafIndices(): Promise<{
+  patched: number;
+}> {
+  const convex = getConvexClient();
+  if (!convex) return { patched: 0 };
+
+  const allNotes = await listNotes();
+  const chainsWithGaps = new Set<number>();
+  for (const note of allNotes) {
+    if (note.state === "spendable" && note.leafIndex === undefined) {
+      chainsWithGaps.add(note.networkChainId);
+    }
+  }
+  if (chainsWithGaps.size === 0) return { patched: 0 };
+
+  let patched = 0;
+  for (const chainId of chainsWithGaps) {
+    const leaves = await convex.query(
+      api.shieldQueue.store.leavesForChain,
+      { chainId },
+    );
+    const leafByCommitment = new Map<
+      string,
+      { epoch: number; leafIndex: number }
+    >();
+    for (const l of leaves) {
+      leafByCommitment.set(l.leafCommitment.toLowerCase(), {
+        epoch: l.epoch,
+        leafIndex: l.leafIndex,
+      });
+    }
+    for (const note of allNotes) {
+      if (note.networkChainId !== chainId) continue;
+      if (note.state !== "spendable") continue;
+      if (note.leafIndex !== undefined) continue;
+      const pos = leafByCommitment.get(note.leafCommitment.toLowerCase());
+      if (!pos) continue;
+      await patchNoteByLeaf(note.leafCommitment, {
+        leafIndex: pos.leafIndex,
+        treeIndex: pos.epoch,
+      });
+      patched += 1;
+    }
+  }
+  return { patched };
+}
+
 // ─── Explicit user-tapped sync ───────────────────────────────────────────
 
 export async function syncShieldNotesExplicit(): Promise<SyncShieldNotesResult> {

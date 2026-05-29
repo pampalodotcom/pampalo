@@ -14,7 +14,10 @@ import {
 } from "@/lib/use-private-balances";
 import { useShieldBudget } from "@/lib/use-shield-budget";
 import { useShieldQueueSync } from "@/lib/use-shield-queue-sync";
-import { syncShieldNotesExplicit } from "@/lib/sync-shield-notes";
+import {
+  backfillLeafIndices,
+  syncShieldNotesExplicit,
+} from "@/lib/sync-shield-notes";
 import {
   ShieldConfirmSheet,
   type ShieldConfirmPayload,
@@ -298,6 +301,18 @@ function Dashboard({
   // (decrypt + insert from a foreign device's optimistic write) is
   // deferred. See SHIELD_FLOW.md §3.4.
   useShieldQueueSync(evmAddress);
+
+  // Lightweight leaf-index backfill on every wallet mount. No PRF
+  // needed — it's pure IDB ↔ pampaloLeaves reconciliation. Without
+  // this, a freshly-spendable note can't be spent in a transfer
+  // until the user remembers to tap Sync (the shield-side writer
+  // only patches state + unlockTime + queuedTxHash; leafIndex lives
+  // in pampaloLeaves). Runs once per mount.
+  useEffect(() => {
+    void backfillLeafIndices().catch((e) => {
+      console.warn("[wallet] leaf-index backfill failed", e);
+    });
+  }, [evmAddress]);
 
   // Pre-warm the bb.js + deposit circuit bundle on idle. First-shield
   // latency is dominated by WASM warmup; doing it speculatively after
@@ -891,6 +906,13 @@ function AssetGroupRow({
         console.log("[finalise]", note);
       }}
       onMove={(payload) => {
+        // Resolve the on-chain asset address for the active chain.
+        // The slider/AssetRow only knows about chainId + symbol; the
+        // address lives on the catalog Token rows we already have here.
+        const assetAddress =
+          tokens
+            .find((t) => t.chainId === payload.chainId)
+            ?.address.toLowerCase() ?? "";
         if (payload.intent === "shield") {
           onShield({
             intent: "shield",
@@ -898,6 +920,7 @@ function AssetGroupRow({
             chainId: payload.chainId,
             symbol: payload.symbol,
             decimals: payload.decimals,
+            assetAddress,
           });
           return;
         }

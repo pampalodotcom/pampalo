@@ -46,7 +46,8 @@ type Phase =
   | "idle"
   | "preparing"
   | "signing"
-  | "broadcasting"
+  | "submitting"
+  | "awaiting"
   | "done"
   | "error";
 
@@ -236,7 +237,7 @@ export function UnshieldConfirmSheet({
       });
       setSignedTx(signed);
 
-      setPhase("broadcasting");
+      setPhase("submitting");
       const { txHash } = await rpc.sendRawTransaction(payload.chainId, signed);
       setBroadcastedTxHash(txHash);
       onBroadcasted?.({
@@ -283,10 +284,12 @@ export function UnshieldConfirmSheet({
         console.warn("[unshield] optimistic IDB writes failed", idbErr);
       }
 
-      setPhase("done");
+      setPhase("awaiting");
       toast.success(
         `Unshielded ${amountFmt} ${payload.symbol} · ${txHash.slice(0, 10)}…${txHash.slice(-6)}`,
       );
+      await new Promise((r) => setTimeout(r, 900));
+      setPhase("done");
       onOpenChange(false);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -295,17 +298,13 @@ export function UnshieldConfirmSheet({
     }
   };
 
-  const closeable =
-    phase !== "preparing" &&
-    phase !== "signing" &&
-    phase !== "broadcasting";
-  const confirmDisabled =
-    !payload ||
-    !deployment ||
+  const isBusy =
     phase === "preparing" ||
     phase === "signing" ||
-    phase === "broadcasting" ||
-    phase === "done";
+    phase === "submitting" ||
+    phase === "awaiting";
+  const closeable = !isBusy;
+  const confirmDisabled = !payload || !deployment || isBusy || phase === "done";
 
   const confirmLabel = (() => {
     switch (phase) {
@@ -313,8 +312,10 @@ export function UnshieldConfirmSheet({
         return "Generating proof…";
       case "signing":
         return "Awaiting passkey…";
-      case "broadcasting":
-        return "Broadcasting…";
+      case "submitting":
+        return "Submitting unshield transaction…";
+      case "awaiting":
+        return "Awaiting confirmation…";
       case "done":
         return "Done";
       case "error":
@@ -397,9 +398,7 @@ export function UnshieldConfirmSheet({
                 "disabled:cursor-not-allowed disabled:opacity-60",
               )}
             >
-              {(phase === "preparing" ||
-                phase === "signing" ||
-                phase === "broadcasting") && (
+              {isBusy && (
                 <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
               )}
               <span className="truncate">{confirmLabel}</span>
@@ -481,19 +480,57 @@ function StatusLine({
   }
   if (phase === "preparing") {
     return (
-      <p className="text-[12.5px] text-ink-mute">
-        Building the unshield proof — first run on a fresh tab pays the
-        bb.js WASM warm-up (a few seconds).
-      </p>
+      <ProgressLine
+        label="Generating proof"
+        sub="First run on a fresh tab pays the bb.js WASM warm-up (a few seconds)."
+      />
+    );
+  }
+  if (phase === "signing") {
+    return (
+      <ProgressLine
+        label="Awaiting passkey signature"
+        sub="Approve the passkey prompt to decrypt your mnemonic and sign locally."
+      />
+    );
+  }
+  if (phase === "submitting") {
+    return (
+      <ProgressLine
+        label="Submitting unshield transaction"
+        sub="Broadcasting the signed unshield to the network."
+      />
+    );
+  }
+  if (phase === "awaiting") {
+    return (
+      <ProgressLine
+        label="Awaiting confirmation"
+        sub="Transaction accepted by the node. The asset row will track the on-chain receipt."
+      />
     );
   }
   if (phase === "done") {
     return (
-      <p className="text-[12.5px] text-[var(--pub)]">
-        Unshield broadcast. Your public balance updates as soon as the
-        tx mines.
-      </p>
+      <div className="rounded-xl border border-[var(--pub-soft-2)] bg-[var(--pub-soft)] px-3.5 py-2.5 text-[12.5px] text-[var(--pub)]">
+        Unshield broadcast. Your public balance updates as soon as the tx mines.
+      </div>
     );
   }
   return null;
+}
+
+function ProgressLine({ label, sub }: { label: string; sub?: string }) {
+  return (
+    <div
+      className="flex items-start gap-2.5 rounded-xl border border-[var(--pub-soft-2)] bg-[var(--pub-soft)] px-3.5 py-2.5 text-[12.5px] text-[var(--pub)]"
+      aria-live="polite"
+    >
+      <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin" aria-hidden />
+      <div className="min-w-0">
+        <div className="font-semibold">{label}…</div>
+        {sub && <div className="mt-0.5 text-[11.5px] text-ink-mute">{sub}</div>}
+      </div>
+    </div>
+  );
 }
