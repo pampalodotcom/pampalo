@@ -39,6 +39,7 @@
     "ethers": "^6.16.0",
     "idb-keyval": "^6.2.2",
     "lucide-react": "^0.545.0",
+    "motion": "^12.40.0",
     "next-themes": "^0.4.6",
     "nitro": "npm:nitro-nightly@latest",
     "qrcode": "^1.5.4",

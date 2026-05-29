@@ -66,7 +66,30 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-}
+
+  /* Tiny pulse used by the <Sparkles /> icon next to the stale-data
+     nudge. The shiny-text + blink-cursor utilities below are from
+     magicui (animated-shiny-text + typing-animation). */
+  --animate-twinkle: twinkle 5.4s ease-in-out infinite;
+  --animate-shiny-text: shiny-text 8s infinite;
+  @keyframes shiny-text {
+  0%, 90%, 100% {
+    background-position: calc(-100% - var(--shiny-width)) 0;
+    }
+  30%, 60% {
+    background-position: calc(100% + var(--shiny-width)) 0;
+    }
+  }
+  --animate-blink-cursor: blink-cursor 1.2s step-end infinite
+;
+  @keyframes blink-cursor {
+  0%, 49% {
+    opacity: 1;
+    }
+  50%, 100% {
+    opacity: 0;
+    }
+  }}
 
 :root {
   /* Light-mode brand tokens (mirrored to Tailwind via @theme above). */
@@ -377,6 +400,25 @@ body {
   }
   to {
     opacity: 1;
+  }
+}
+
+/* Tiny "✨" pulse used in front of the stale-data nudge. */
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.82);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-twinkle {
+    animation: none !important;
   }
 }
 

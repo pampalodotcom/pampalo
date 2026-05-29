@@ -1,9 +1,20 @@
-import { ArrowLeftRight, RefreshCw, Send } from "lucide-react";
+import { ArrowLeftRight, RefreshCw, Send, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AnimatedShinyText } from "@/components/ui/animated-shiny-text";
+import { TypingAnimation } from "@/components/ui/typing-animation";
 import { DepositButton } from "./deposit/DepositButton";
 import { ReceiveButton } from "./receive/ReceiveButton";
 import { SplitBar } from "./SplitBar";
 import { SunIcon, MoonIcon } from "./SunMoonIcons";
+
+// Rotated through the TypingAnimation when balances may be stale. Kept
+// short + a bit playful — the goal is to draw the eye toward Sync, not
+// to teach the user about merkle cursors.
+const STALE_NUDGE_PHRASES = [
+  "hey! you should sync",
+  "there could be some new things to sync",
+  "sync time? or not aha",
+];
 // SyncIndicator (the "Sync Preferences" chip) is intentionally hidden
 // for now — the underlying preferences-sync module has known bugs
 // that need a rework before it should be user-visible. The hook +
@@ -28,6 +39,11 @@ type Props = {
   /** Whether the sync operation is currently in flight (drives the
    *  spinner + disabled state on the Sync button). */
   syncing?: boolean;
+  /** When true (and not currently syncing), the Sync button shimmers
+   *  warmly and a tiny "Balances may be stale — tap Sync" nudge line
+   *  is rendered below the action row. Drives the eye toward Sync
+   *  when the in-tab cursor has aged past the staleness TTL. */
+  staleSync?: boolean;
   /** Optional: render a Receive button that opens the QR-share sheet. */
   onReceive?: () => void;
   /** Optional: render the prominent Deposit CTA below the split bar. */
@@ -58,9 +74,15 @@ export function BalanceCard({
   onSend,
   onSync,
   syncing,
+  staleSync,
   onReceive,
   onDeposit,
 }: Props) {
+  // The Sync chip's label shimmers (magicui AnimatedShinyText) when
+  // either: the cursor is stale, or sync is in flight. The icon picks
+  // up animate-spin only during the in-flight window.
+  const syncShiny = !!staleSync && !syncing;
+  const syncShimmerActive = !!syncing || syncShiny;
   const isLoading =
     loading || totalUsd === null || publicUsd === null || privateUsd === null;
 
@@ -156,12 +178,40 @@ export function BalanceCard({
               <RefreshCw
                 className={cn("size-3.5", syncing && "animate-spin")}
               />
-              {syncing ? "Syncing…" : "Sync"}
+              {syncShimmerActive ? (
+                <AnimatedShinyText className="text-ink mx-0 max-w-none">
+                  {syncing ? "Syncing…" : "Sync"}
+                </AnimatedShinyText>
+              ) : (
+                <span>Sync</span>
+              )}
             </button>
           )}
           {/* <SyncIndicator /> — disabled: see note at top of file. */}
         </div>
       </div>
+
+      {syncShiny && (
+        // Idle nudge — typed out, cycling through a few short phrases
+        // so the line keeps drawing the eye without being a static ad.
+        // Hidden during an active sync (the chip already conveys
+        // "something's happening").
+        <div className="-mt-1 flex items-center justify-end gap-1.5">
+          <Sparkles
+            className="size-3 text-[var(--pub-hi)] animate-twinkle"
+            aria-hidden
+          />
+          <TypingAnimation
+            words={STALE_NUDGE_PHRASES}
+            loop
+            typeSpeed={55}
+            deleteSpeed={28}
+            pauseDelay={1800}
+            cursorStyle="line"
+            className="text-[11.5px] font-medium text-[var(--pub)] leading-snug tracking-normal"
+          />
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2.5">
         <span className="bal-chip pub">

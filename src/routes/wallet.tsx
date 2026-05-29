@@ -543,6 +543,14 @@ function BalanceCardConnected({
   const [depositOpen, setDepositOpen] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  // Staleness nudge — the Sync chip shimmers warmly and a hint line
+  // appears between the action row and the balance chips while
+  // `staleSync` is true. Starts true on mount (we haven't reconciled
+  // with Convex yet in this session) and flips off after a successful
+  // sync. A timer flips it back on after STALE_TTL_MS so the user gets
+  // a fresh nudge if they hang out on the dashboard.
+  const STALE_TTL_MS = 120_000;
+  const [staleSync, setStaleSync] = useState(true);
   const onSync = async () => {
     if (syncing) return;
     setSyncing(true);
@@ -557,6 +565,7 @@ function BalanceCardConnected({
       } else {
         toast("Already up to date.");
       }
+      setStaleSync(false);
     } catch (e) {
       console.warn("[sync] failed", e);
       toast.error("Sync failed — try again.");
@@ -564,6 +573,11 @@ function BalanceCardConnected({
       setSyncing(false);
     }
   };
+  useEffect(() => {
+    if (staleSync) return;
+    const t = setTimeout(() => setStaleSync(true), STALE_TTL_MS);
+    return () => clearTimeout(t);
+  }, [staleSync]);
   if (!tokens) {
     return (
       <BalanceCard
@@ -595,6 +609,7 @@ function BalanceCardConnected({
         onSend={() => setSendOpen(true)}
         onSync={onSync}
         syncing={syncing}
+        staleSync={staleSync}
         onReceive={() => setReceiveOpen(true)}
         onDeposit={() => setDepositOpen(true)}
       />
@@ -633,6 +648,7 @@ function BalanceCardWithBalances({
   onSend,
   onSync,
   syncing,
+  staleSync,
   onReceive,
   onDeposit,
 }: {
@@ -643,6 +659,7 @@ function BalanceCardWithBalances({
   onSend?: () => void;
   onSync?: () => void;
   syncing?: boolean;
+  staleSync?: boolean;
   onReceive?: () => void;
   onDeposit?: () => void;
 }) {
@@ -737,6 +754,7 @@ function BalanceCardWithBalances({
       onSend={onSend}
       onSync={onSync}
       syncing={syncing}
+      staleSync={staleSync}
       onReceive={onReceive}
       onDeposit={onDeposit}
     />
