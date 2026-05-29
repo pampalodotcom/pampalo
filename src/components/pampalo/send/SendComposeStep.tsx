@@ -1,4 +1,4 @@
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useQuery } from "convex/react";
 import { formatUnits } from "ethers";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -110,6 +110,20 @@ export function SendComposeStep({
     }
     return tokenPair ?? ethDefault;
   }, [mode, tokenPair, ethDefault]);
+
+  // Sync the parent's `tokenPair` to the active default in public
+  // mode. The compose UI happily *renders* ethDefault as a fallback,
+  // but the review step reads the parent state directly — so if the
+  // user proceeds without opening the picker we'd ship a null token
+  // and the review screen would show "0 ETH". Mirror the visible
+  // selection back to the parent so the review step sees the same
+  // truth the user just confirmed.
+  useEffect(() => {
+    if (mode !== "public") return;
+    if (tokenPair !== null) return;
+    if (ethDefault === null) return;
+    onTokenPairChange(ethDefault);
+  }, [mode, tokenPair, ethDefault, onTokenPairChange]);
 
   const ethUsdPrice = useMemo<number | null>(() => {
     if (!prices) return null;

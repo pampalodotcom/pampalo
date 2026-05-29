@@ -18,13 +18,21 @@ import { cn } from "@/lib/utils";
 // drops the Export-Secret affordance.
 //
 // Usage:
-//   /share?evm=0xabc…  → just the EVM address
-//   /share?evm=0xabc…&envelope=0x04…&poseidon=0x…  → all three
+//   /share?e=0xabc…  → just the EVM address
+//   /share?e=0xabc…&k=0x04…&o=0x…  → all three
 //
 // All three fields are public material per AUTH.md §1, so encoding
 // them in a query string is fine. The address-derivation logic on
 // the wallet side guarantees the triple is consistent for a given
 // mnemonic; this page just renders whatever the caller passed.
+//
+// Query keys are deliberately single-letter — the envelope public
+// key alone is 132 hex chars, and longer key names push the QR up
+// several version steps (the modal QR is uncomfortably dense above
+// ~280 chars). Internal property names stay full-length for
+// readability; the mapping happens in validateSearch.
+//   e → evm address       k → envelope (ECIES key)
+//   o → poseidon owner    c → chainId       l → label
 
 type ShareSearch = {
   evm?: string;
@@ -44,26 +52,23 @@ const HEX_32BYTE = /^0x[0-9a-fA-F]{64}$/;
 
 function validateSearch(input: Record<string, unknown>): ShareSearch {
   const out: ShareSearch = {};
-  if (typeof input.evm === "string" && HEX_ADDR.test(input.evm)) {
-    out.evm = input.evm;
+  if (typeof input.e === "string" && HEX_ADDR.test(input.e)) {
+    out.evm = input.e;
   }
-  if (typeof input.envelope === "string" && HEX_LONG.test(input.envelope)) {
-    out.envelope = input.envelope;
+  if (typeof input.k === "string" && HEX_LONG.test(input.k)) {
+    out.envelope = input.k;
   }
-  if (typeof input.poseidon === "string" && HEX_32BYTE.test(input.poseidon)) {
-    out.poseidon = input.poseidon;
+  if (typeof input.o === "string" && HEX_32BYTE.test(input.o)) {
+    out.poseidon = input.o;
   }
-  if (input.chainId !== undefined) {
-    const raw =
-      typeof input.chainId === "number"
-        ? input.chainId
-        : Number(input.chainId);
+  if (input.c !== undefined) {
+    const raw = typeof input.c === "number" ? input.c : Number(input.c);
     if (Number.isFinite(raw) && raw > 0 && Number.isInteger(raw)) {
       out.chainId = raw;
     }
   }
-  if (typeof input.label === "string" && input.label.length <= 64) {
-    out.label = input.label;
+  if (typeof input.l === "string" && input.l.length <= 64) {
+    out.label = input.l;
   }
   return out;
 }

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Interface } from "ethers";
 import { useQuery } from "convex/react";
-import { Loader2, ShieldAlert } from "lucide-react";
+import { CheckCircle2, ExternalLink, Loader2, ShieldAlert } from "lucide-react";
 import { VisuallyHidden } from "radix-ui";
 import { toast } from "sonner";
+import { txUrl } from "@/lib/explorer";
 import { api } from "../../../../convex/_generated/api";
 import type { Doc } from "../../../../convex/_generated/dataModel";
 import { signTransactionWithPasskey } from "@/lib/auth-flow";
@@ -37,7 +38,16 @@ export type ContestPayload = {
   row: Doc<"shieldQueueEntries">;
 };
 
-type Phase = "idle" | "signing" | "broadcasting" | "done" | "error";
+type Phase =
+  | "idle"
+  | "signing"
+  | "submitting"
+  | "awaiting"
+  | "confirmed"
+  | "error";
+
+const RECEIPT_POLL_MS = 2_500;
+const RECEIPT_TIMEOUT_MS = 60_000;
 
 type Props = {
   open: boolean;
@@ -72,12 +82,20 @@ export function ContestSheet({
   const [reason, setReason] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  // Cancellation flag for the receipt poller — flipped on close so a
+  // late receipt doesn't try to setState on an unmounted sheet.
+  const cancelRef = useRef(false);
 
   useEffect(() => {
     if (!open) {
       setReason("");
       setPhase("idle");
       setError(null);
+      setTxHash(null);
+      cancelRef.current = true;
+    } else {
+      cancelRef.current = false;
     }
   }, [open]);
 
@@ -125,13 +143,49 @@ export function ContestSheet({
         maxPriorityFeePerGas,
       });
 
-      setPhase("broadcasting");
-      await rpc.sendRawTransaction(deployment.chainId, signed);
-      setPhase("done");
-      toast.success(
-        "Shield contested. The shielder has been refunded.",
+      setPhase("submitting");
+      const { txHash: hash } = await rpc.sendRawTransaction(
+        deployment.chainId,
+        signed,
       );
-      onOpenChange(false);
+      setTxHash(hash);
+
+      // Hold the sheet through the on-chain receipt so the user gets
+      // an explicit "Contested" beat instead of the sheet vanishing
+      // and a toast being the only signal. Bail out cleanly on close
+      // or after the global timeout.
+      setPhase("awaiting");
+      const startedAt = Date.now();
+      while (!cancelRef.current) {
+        if (Date.now() - startedAt > RECEIPT_TIMEOUT_MS) {
+          toast(
+            "Contest submitted. Still waiting on the receipt — close this and check the explorer if it doesn't land soon.",
+          );
+          return;
+        }
+        try {
+          const res = await rpc.getTransactionStatus(
+            deployment.chainId,
+            hash,
+          );
+          if (cancelRef.current) return;
+          if (res.status === false) {
+            setError("Contest transaction reverted on-chain.");
+            setPhase("error");
+            return;
+          }
+          if (res.status === true && res.confirmations >= 1) {
+            setPhase("confirmed");
+            toast.success(
+              "Shield contested. The shielder has been refunded.",
+            );
+            return;
+          }
+        } catch {
+          // transient — keep polling
+        }
+        await new Promise((r) => setTimeout(r, RECEIPT_POLL_MS));
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
@@ -139,30 +193,40 @@ export function ContestSheet({
     }
   };
 
-  const closeable = phase !== "signing" && phase !== "broadcasting";
+  const isBusy =
+    phase === "signing" || phase === "submitting" || phase === "awaiting";
+  // While the on-chain receipt is being polled the user can close — the
+  // poll's cancellation flag ensures stale results are dropped. Block
+  // close only during the signing + broadcast window where a back-out
+  // would leave a half-sent tx.
+  const closeable = phase !== "signing" && phase !== "submitting";
   const confirmDisabled =
     !payload ||
     !deployment ||
     !evmAddress ||
     !reasonValid ||
-    phase === "signing" ||
-    phase === "broadcasting" ||
-    phase === "done";
+    isBusy ||
+    phase === "confirmed";
 
   const confirmLabel = (() => {
     switch (phase) {
       case "signing":
         return "Awaiting passkey…";
-      case "broadcasting":
-        return "Broadcasting…";
-      case "done":
-        return "Done";
+      case "submitting":
+        return "Submitting contest…";
+      case "awaiting":
+        return "Awaiting confirmation…";
+      case "confirmed":
+        return "Contested";
       case "error":
         return "Try again";
       default:
         return "Contest shield";
     }
   })();
+
+  const explorer =
+    deployment && txHash ? txUrl(deployment.chainId, txHash) : null;
 
   const body = (
     <div className="flex flex-col">
@@ -215,7 +279,7 @@ export function ContestSheet({
             id="contest-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            disabled={phase === "signing" || phase === "broadcasting"}
+            disabled={isBusy || phase === "confirmed"}
             placeholder="e.g. Source address appears on the OFAC SDN list…"
             className={cn(
               "mt-1.5 block w-full resize-y rounded-xl border border-line",
@@ -251,8 +315,10 @@ export function ContestSheet({
           </div>
         )}
 
+        <StatusLine phase={phase} explorer={explorer} />
+
         <div className="flex flex-col gap-2">
-          {phase !== "done" && (
+          {phase !== "confirmed" && (
             <button
               type="button"
               onClick={onConfirm}
@@ -264,7 +330,7 @@ export function ContestSheet({
                 "disabled:cursor-not-allowed disabled:opacity-60",
               )}
             >
-              {(phase === "signing" || phase === "broadcasting") && (
+              {isBusy && (
                 <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
               )}
               <span className="truncate">{confirmLabel}</span>
@@ -282,7 +348,7 @@ export function ContestSheet({
               "disabled:cursor-not-allowed disabled:opacity-50",
             )}
           >
-            Cancel
+            {phase === "confirmed" ? "Close" : "Cancel"}
           </button>
         </div>
       </div>
@@ -319,4 +385,101 @@ export function ContestSheet({
 function shortAddress(addr: string): string {
   if (!addr.startsWith("0x") || addr.length < 12) return addr;
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+function StatusLine({
+  phase,
+  explorer,
+}: {
+  phase: Phase;
+  explorer: string | null;
+}) {
+  if (phase === "signing") {
+    return (
+      <ProgressLine
+        label="Awaiting passkey signature"
+        sub="Approve the passkey prompt to decrypt your mnemonic and sign the contest locally."
+      />
+    );
+  }
+  if (phase === "submitting") {
+    return (
+      <ProgressLine
+        label="Submitting contest transaction"
+        sub="Broadcasting the signed contest to the network."
+      />
+    );
+  }
+  if (phase === "awaiting") {
+    return (
+      <ProgressLine
+        label="Awaiting confirmation"
+        sub="Waiting for the on-chain receipt. The shielder will be refunded once it mines."
+        explorer={explorer}
+      />
+    );
+  }
+  if (phase === "confirmed") {
+    return (
+      <div
+        className="flex items-start gap-2.5 rounded-xl border border-[var(--priv-soft-2)] bg-[var(--priv-soft)] px-3.5 py-2.5 text-[12.5px] text-[var(--priv)]"
+        aria-live="polite"
+      >
+        <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold">Contest confirmed on-chain</div>
+          <div className="mt-0.5 text-[11.5px] text-ink-mute">
+            The shielder has been refunded and your reason is now part of
+            the public record.
+          </div>
+          {explorer && (
+            <a
+              href={explorer}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-ink-soft underline-offset-2 hover:text-ink hover:underline"
+            >
+              View transaction
+              <ExternalLink className="size-3" aria-hidden />
+            </a>
+          )}
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
+function ProgressLine({
+  label,
+  sub,
+  explorer,
+}: {
+  label: string;
+  sub?: string;
+  explorer?: string | null;
+}) {
+  return (
+    <div
+      className="flex items-start gap-2.5 rounded-xl border border-[var(--pub-soft-2)] bg-[var(--pub-soft)] px-3.5 py-2.5 text-[12.5px] text-[var(--pub)]"
+      aria-live="polite"
+    >
+      <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin" aria-hidden />
+      <div className="min-w-0 flex-1">
+        <div className="font-semibold">{label}…</div>
+        {sub && <div className="mt-0.5 text-[11.5px] text-ink-mute">{sub}</div>}
+        {explorer && (
+          <a
+            href={explorer}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-ink-soft underline-offset-2 hover:text-ink hover:underline"
+          >
+            View on explorer
+            <ExternalLink className="size-3" aria-hidden />
+          </a>
+        )}
+      </div>
+    </div>
+  );
 }

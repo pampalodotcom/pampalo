@@ -7,7 +7,6 @@ import {
   ExternalLink,
   Loader2,
   Send,
-  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../../../convex/_generated/api";
@@ -138,7 +137,15 @@ export function SendReviewStep({
     priceFeedShortId?: string;
   } | null>(() => {
     if (mode === "private") {
-      return { symbol: "ETH", address: ETH_SENTINEL, decimals: 18 };
+      // Private mode is ETH-only for v1. Tag the synthetic token with
+      // the eth/usd feed id so the USD conversion below picks the real
+      // price rather than falling into the stablecoin "= $1" branch.
+      return {
+        symbol: "ETH",
+        address: ETH_SENTINEL,
+        decimals: 18,
+        priceFeedShortId: "eth/usd",
+      };
     }
     if (tokenPair) {
       return {
@@ -702,7 +709,24 @@ function SuccessPanel({
 
   return (
     <div className="flex flex-col items-center gap-4 px-2 pt-2 text-center">
+      {/* Halo + icon — soft pulse on the disk + a slow ping ring while
+          pending. The previous compose stacked a spinning Loader2 on
+          top of a Sparkles at 40% opacity, which read as broken (the
+          two icons clashed). Pure-pulse pattern reads as "in flight"
+          without the visual noise. */}
       <div className="relative inline-flex size-16 items-center justify-center">
+        {!isConfirmed && (
+          <span
+            className={cn(
+              "absolute inset-0 rounded-full opacity-60",
+              accent === "priv"
+                ? "bg-[var(--priv-soft-2)]"
+                : "bg-[var(--pub-soft-2)]",
+              "animate-ping",
+            )}
+            aria-hidden
+          />
+        )}
         <span
           className={cn(
             "absolute inset-0 rounded-full",
@@ -724,26 +748,15 @@ function SuccessPanel({
             aria-hidden
           />
         ) : (
-          <>
-            <Sparkles
-              className={cn(
-                "absolute size-10 opacity-40",
-                accent === "priv"
-                  ? "text-[var(--priv)]"
-                  : "text-[var(--pub)]",
-              )}
-              aria-hidden
-            />
-            <Loader2
-              className={cn(
-                "relative size-9 animate-spin",
-                accent === "priv"
-                  ? "text-[var(--priv)]"
-                  : "text-[var(--pub)]",
-              )}
-              aria-hidden
-            />
-          </>
+          <Send
+            className={cn(
+              "relative size-8",
+              accent === "priv"
+                ? "text-[var(--priv)]"
+                : "text-[var(--pub)]",
+            )}
+            aria-hidden
+          />
         )}
       </div>
 

@@ -1,6 +1,7 @@
 import { ArrowLeftRight, RefreshCw, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DepositButton } from "./deposit/DepositButton";
+import { ReceiveButton } from "./receive/ReceiveButton";
 import { SplitBar } from "./SplitBar";
 import { SunIcon, MoonIcon } from "./SunMoonIcons";
 // SyncIndicator (the "Sync Preferences" chip) is intentionally hidden
@@ -27,6 +28,8 @@ type Props = {
   /** Whether the sync operation is currently in flight (drives the
    *  spinner + disabled state on the Sync button). */
   syncing?: boolean;
+  /** Optional: render a Receive button that opens the QR-share sheet. */
+  onReceive?: () => void;
   /** Optional: render the prominent Deposit CTA below the split bar. */
   onDeposit?: () => void;
 };
@@ -55,6 +58,7 @@ export function BalanceCard({
   onSend,
   onSync,
   syncing,
+  onReceive,
   onDeposit,
 }: Props) {
   const isLoading =
@@ -185,7 +189,16 @@ export function BalanceCard({
 
       <SplitBar publicValue={pub} privateValue={priv} height={8} />
 
-      {onDeposit && <DepositButton onClick={onDeposit} className="mt-1" />}
+      {(onDeposit || onReceive) && (
+        // Primary CTA row. When both are present we render them
+        // side-by-side at full-width-each so they share the same
+        // prominence. When only one is wired up it falls through to a
+        // single full-width button (legacy single-CTA layout).
+        <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:gap-2">
+          {onDeposit && <DepositButton onClick={onDeposit} />}
+          {onReceive && <ReceiveButton onClick={onReceive} />}
+        </div>
+      )}
     </section>
   );
 }

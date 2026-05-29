@@ -1,96 +1,71 @@
 import { useState } from "react";
 import {
-  ChevronLeft,
-  ChevronDown,
-  Copy,
   AlertTriangle,
   Check,
+  ChevronDown,
+  ChevronLeft,
+  Copy,
   Share2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { useClipboard } from "@/lib/use-clipboard";
-import { NetworkLogo } from "./NetworkLogo";
-import { QRCanvas } from "./QRCanvas";
-import type { NetworkChoice } from "./NetworkCard";
-import type { DepositMode } from "./DepositSheet";
+import { cn } from "@/lib/utils";
+import { NetworkLogo } from "../deposit/NetworkLogo";
+import { QRCanvas } from "../deposit/QRCanvas";
+import type { NetworkChoice } from "../deposit/NetworkCard";
 
-// Step 2 — show the receive address + QR for the chosen network. In
-// private mode the address well also surfaces the envelope + Poseidon
-// identifiers so the user can copy each independently and the share
-// link carries everything a future shield-to-others sender will need.
+// Step 2 of Receive — single QR carrying all three identifiers
+// (evm + envelope + poseidon + chainId) plus the same trio rendered
+// as copyable rows. The /share route on the other end already knows
+// how to parse this triple so a Pampalo-to-Pampalo scan lands the
+// recipient with everything a private *or* public sender would need.
 
 function truncate(addr: string): string {
   if (addr.length <= 12) return addr;
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-export function DepositReceiveStep({
-  mode,
+export function ReceiveQRStep({
   network,
-  address,
+  evm,
   envelope,
   poseidon,
   onBack,
 }: {
-  mode: DepositMode;
   network: NetworkChoice;
-  /** Full receive address. Truncated for display, copied in full. */
-  address: string;
-  /** Envelope public key — included in the share URL for private mode
-   *  so a shield-to-others sender can recover the ECIES recipient. */
-  envelope?: string;
-  /** Poseidon identifier — same purpose, included as the future note
-   *  `owner` for shield-to-others. */
-  poseidon?: string;
+  evm: string;
+  envelope: string;
+  poseidon: string;
   onBack: () => void;
 }) {
-  const isPrivate = mode === "private";
   const [showFull, setShowFull] = useState(false);
   const { copied: urlCopied, copy: copyUrl } = useClipboard();
 
-  // Build the canonical share URL once per render. The Share link
-  // button (Web Share API) and the explicit Copy URL button both use
-  // it so they can never drift.
   const buildShareUrl = (): string | null => {
     if (typeof window === "undefined") return null;
     const params = new URLSearchParams();
-    // Public mode shares the EVM address. Private mode deliberately
-    // omits it: linking the public address to the shielded identifiers
-    // would tie the user's on-chain identity to their private one, so a
-    // shielded share carries only the envelope + Poseidon material a
-    // shield-to-others sender needs.
-    // Short query keys — see /share validateSearch for the
-    // e/k/o/c → evm/envelope/poseidon/chainId mapping. Verbose names
-    // push the QR up several version steps because the envelope key
-    // alone is 132 hex chars.
-    if (!isPrivate) params.set("e", address);
-    // The chainId is always carried — it pins the receive surface to a
-    // specific network so the recipient can't accidentally send on the
-    // wrong chain after scanning the QR.
+    // Short keys — the envelope public key alone is 132 hex chars, so
+    // verbose param names push the QR up several version steps. See
+    // /share validateSearch for the e/k/o/c mapping.
+    params.set("e", evm);
+    params.set("k", envelope);
+    params.set("o", poseidon);
     params.set("c", String(network.chainId));
-    // Private mode includes the shielded-receive identifiers so the
-    // person on the other end has everything a future shield-to-others
-    // sender will need.
-    if (isPrivate && envelope) params.set("k", envelope);
-    if (isPrivate && poseidon) params.set("o", poseidon);
     return `${window.location.origin}/share?${params.toString()}`;
   };
+  const shareUrl = buildShareUrl();
 
   const onCopyUrl = async () => {
-    const url = buildShareUrl();
-    if (!url) return;
-    await copyUrl(url);
+    if (!shareUrl) return;
+    await copyUrl(shareUrl);
   };
 
   const onShareLink = async () => {
-    const url = buildShareUrl();
-    if (!url) return;
-
+    if (!shareUrl) return;
     const payload: ShareData = {
-      title: `Pampalo · ${isPrivate ? "Shielded" : "Public"} receive on ${network.name}`,
+      title: `Pampalo · Receive on ${network.name}`,
       text: `Send to my Pampalo wallet on ${network.name}`,
-      url,
+      url: shareUrl,
     };
     if (typeof navigator.share === "function") {
       try {
@@ -100,12 +75,11 @@ export function DepositReceiveStep({
         if (e instanceof Error && e.name === "AbortError") return;
       }
     }
-    // Fallback when no native share sheet — copy to clipboard.
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(shareUrl);
       toast("Share link copied to clipboard.");
     } catch {
-      toast.error("Couldn't share — copy the address manually.");
+      toast.error("Couldn't share — copy an address manually.");
     }
   };
 
@@ -121,29 +95,20 @@ export function DepositReceiveStep({
 
       <div className="flex flex-col items-center gap-1.5 text-center">
         <h2 className="font-serif text-[22px] font-bold tracking-[-0.01em] text-ink">
-          Send to this address
+          Your receive code
         </h2>
         <p className="text-[13px] text-ink-mute">
-          Funds land in your{" "}
-          <span
-            className={cn(
-              "font-semibold",
-              isPrivate ? "text-[var(--priv)]" : "text-[var(--pub)]",
-            )}
-          >
-            {isPrivate ? "shielded" : "public"}
-          </span>{" "}
-          balance on{" "}
-          <span className="font-semibold text-ink">{network.name}</span>.
+          Scan to send to your wallet on{" "}
+          <span className="font-semibold text-ink">{network.name}</span> —
+          covers public and shielded transfers.
         </p>
       </div>
 
       <div className="flex flex-col items-center gap-2.5">
         <div className="relative rounded-2xl bg-white p-3 shadow-sm">
-          <QRCanvas value={address} size={168} />
-          {/* Brand badge in the QR centre. The QR's "M" error correction
-              tolerates ~15% obscured area, well above the badge's
-              footprint, so the code still scans cleanly. */}
+          {shareUrl && <QRCanvas value={shareUrl} size={196} />}
+          {/* Brand badge in the QR centre. "M" error correction tolerates
+              ~15% obscured area, well above the badge's footprint. */}
           <span
             className="absolute left-1/2 top-1/2 inline-flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white p-1 shadow-sm"
             aria-hidden
@@ -166,7 +131,7 @@ export function DepositReceiveStep({
             "inline-flex items-center gap-1.5 rounded-full",
             "border border-line bg-card px-3 h-8 text-[12px] font-semibold",
             "transition-colors hover:bg-paper-lo",
-            urlCopied && "border-[var(--pub)] text-[var(--pub)]",
+            urlCopied && "border-[var(--priv)] text-[var(--priv)]",
           )}
         >
           {urlCopied ? (
@@ -185,22 +150,18 @@ export function DepositReceiveStep({
         <div className="flex items-center gap-3 px-3 pt-3 pb-2">
           <NetworkLogo chainId={network.chainId} size={28} />
           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-ink-mute">
-            {network.name} · {isPrivate ? "Shielded" : "Public"}
+            {network.name}
           </p>
         </div>
         <div className="flex flex-col">
           <AddressRow
-            label="Ethereum"
-            value={address}
+            label="EVM"
+            value={evm}
             showFull={showFull}
             onToggleFull={() => setShowFull((v) => !v)}
           />
-          {isPrivate && envelope && (
-            <AddressRow label="Envelope" value={envelope} />
-          )}
-          {isPrivate && poseidon && (
-            <AddressRow label="Private" value={poseidon} />
-          )}
+          <AddressRow label="Envelope" value={envelope} />
+          <AddressRow label="Poseidon" value={poseidon} />
         </div>
       </div>
 
@@ -218,21 +179,22 @@ export function DepositReceiveStep({
         Share link
       </button>
 
-      <div className="flex items-start gap-2.5 rounded-2xl bg-[color-mix(in_oklab,var(--pub-soft)_60%,transparent)] px-4 py-3">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--pub)]" />
+      {/* Privacy note. Unlike DepositReceiveStep's "private mode" share
+          URL — which deliberately omits the EVM address to avoid linking
+          the user's on-chain identity to their shielded one — this code
+          intentionally carries all three. Flag it so the user knows. */}
+      <div className="flex items-start gap-2.5 rounded-2xl bg-[color-mix(in_oklab,var(--priv-soft)_60%,transparent)] px-4 py-3">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--priv)]" />
         <p className="text-[12.5px] leading-relaxed text-ink">
-          Only send assets on <span className="font-semibold">{network.name}</span>.
-          Funds sent on another network may be unrecoverable.
+          This code includes your public + shielded addresses together.
+          Anyone you share it with can link your EVM identity to your
+          shielded identifiers.
         </p>
       </div>
     </div>
   );
 }
 
-// One row inside the address well. Owns its own Copy state so the
-// rows don't share a single "copied" beat. `onToggleFull` is only
-// passed for the long EVM row; envelope + poseidon stay
-// non-truncatable since they're displayed as wrap-anywhere text.
 function AddressRow({
   label,
   value,
@@ -287,7 +249,7 @@ function AddressRow({
           className={cn(
             "inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 h-8 text-[11.5px] font-semibold",
             "transition-colors hover:bg-paper",
-            copied && "border-[var(--pub)] text-[var(--pub)]",
+            copied && "border-[var(--priv)] text-[var(--priv)]",
           )}
         >
           {copied ? (

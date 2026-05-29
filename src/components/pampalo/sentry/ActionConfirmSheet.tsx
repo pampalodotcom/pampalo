@@ -6,7 +6,6 @@ import {
   Clock3,
   ExternalLink,
   Loader2,
-  Sparkles,
   Zap,
 } from "lucide-react";
 import { VisuallyHidden } from "radix-ui";
@@ -474,9 +473,23 @@ function SuccessPanel({
 
   return (
     <div className="flex flex-col items-center gap-4 px-2 pt-2 text-center">
-      {/* Halo + icon — animated ring + soft pulse glow while pending,
-          static "ready" pose when confirmed. */}
+      {/* Halo + icon — soft pulse on the disk + a slow ping ring while
+          pending, static "ready" pose when confirmed. The previous
+          compose stacked a spinning Loader2 on top of a Sparkles at
+          40% opacity, which read as broken (the two icons clashed). */}
       <div className="relative inline-flex size-16 items-center justify-center">
+        {!isConfirmed && (
+          <span
+            className={cn(
+              "absolute inset-0 rounded-full opacity-60",
+              isFastTrack
+                ? "bg-[var(--pub-soft-2)]"
+                : "bg-[var(--priv-soft-2)]",
+              "animate-ping",
+            )}
+            aria-hidden
+          />
+        )}
         <span
           className={cn(
             "absolute inset-0 rounded-full",
@@ -493,23 +506,16 @@ function SuccessPanel({
             )}
             aria-hidden
           />
+        ) : isFastTrack ? (
+          <Zap
+            className={cn("relative size-8", "text-[var(--pub)]")}
+            aria-hidden
+          />
         ) : (
-          <>
-            <Sparkles
-              className={cn(
-                "absolute size-10 opacity-40",
-                isFastTrack ? "text-[var(--pub)]" : "text-[var(--priv)]",
-              )}
-              aria-hidden
-            />
-            <Loader2
-              className={cn(
-                "relative size-9 animate-spin",
-                isFastTrack ? "text-[var(--pub)]" : "text-[var(--priv)]",
-              )}
-              aria-hidden
-            />
-          </>
+          <Clock3
+            className={cn("relative size-8", "text-[var(--priv)]")}
+            aria-hidden
+          />
         )}
       </div>
 
