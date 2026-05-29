@@ -429,6 +429,78 @@ body {
   transform: translateX(-1px);
 }
 
+/* SplitSlider — wraps SplitBar with a draggable handle. Hit area is
+   padded vertically so the grab target is ~36px tall without growing
+   the visible 12px bar. */
+.split-slider {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  touch-action: none;
+  cursor: grab;
+  outline: none;
+  user-select: none;
+}
+.split-slider.is-disabled {
+  cursor: default;
+}
+.split-slider.is-dragging {
+  cursor: grabbing;
+}
+.split-slider:focus-visible {
+  outline: 2px solid var(--color-ink-faint);
+  outline-offset: 4px;
+  border-radius: 999px;
+}
+.split-slider-bar-wrap {
+  position: relative;
+  flex: 1;
+  width: 100%;
+}
+.split-slider-baseline {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  width: 0;
+  border-left: 1px dashed var(--color-ink-faint);
+  transform: translateX(-0.5px);
+  pointer-events: none;
+}
+.split-slider-handle {
+  position: absolute;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  margin-left: -11px;
+  margin-top: -11px;
+  background: var(--color-paper);
+  border: 2px solid var(--color-ink);
+  border-radius: 999px;
+  box-shadow: 0 3px 10px rgba(12, 34, 54, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  pointer-events: none;
+  transition:
+    transform 80ms ease,
+    box-shadow 120ms ease;
+}
+.split-slider.is-dragging .split-slider-handle {
+  transform: scale(1.08);
+  box-shadow:
+    0 6px 18px rgba(12, 34, 54, 0.28),
+    0 0 0 6px rgba(12, 34, 54, 0.08);
+}
+.split-slider-handle .grip {
+  width: 2px;
+  height: 8px;
+  background: var(--color-ink);
+  border-radius: 1px;
+  opacity: 0.55;
+}
+
 /* Per-network pill, e.g. "Ethereum" / "Base". Coloured dot on the left
    uses the standard brand colour from each chain. */
 .net-chip {

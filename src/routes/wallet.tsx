@@ -158,9 +158,27 @@ function Dashboard({ evmAddress }: { evmAddress: string }) {
   const tokensRaw = useQuery(api.catalog.tokens.list, {});
   const prices = useQuery(api.prices.feeds.listLatest, {});
   const networksRaw = useQuery(api.catalog.networks.list, {});
+  // (chainId, lowercased tokenAddress) pairs the Pampalo contract suite
+  // is currently registered to handle. Used to gate the shield/unshield
+  // slider per row — if the pair isn't here, the row shows a static
+  // SplitBar instead of a draggable handle.
+  //
+  // Forced empty when the network filter is "all": multi-chain rows
+  // can't decide which deployment to shield through, so we only expose
+  // the slider once the user has picked a specific network.
+  const shieldablePairsRaw = useQuery(api.shieldQueue.store.shieldablePairs, {});
   const [testnetsEnabled] = useTestnetsEnabled();
 
   const [filter, setFilter] = useState<NetworkFilter>("all");
+
+  const shieldableKeys = useMemo(() => {
+    const s = new Set<string>();
+    if (filter === "all") return s;
+    for (const p of shieldablePairsRaw ?? []) {
+      s.add(`${p.chainId}:${p.tokenAddress.toLowerCase()}`);
+    }
+    return s;
+  }, [shieldablePairsRaw, filter]);
 
   // Hide testnet chains + tokens unless the user opted in via the
   // session-scoped preference in the account modal.
@@ -291,6 +309,7 @@ function Dashboard({ evmAddress }: { evmAddress: string }) {
                     tokens={g.tokens}
                     prices={prices ?? undefined}
                     evmAddress={evmAddress}
+                    shieldableKeys={shieldableKeys}
                   />
                 </li>
               );
@@ -470,15 +489,16 @@ function BalanceCardWithBalances({
 // per network.
 
 function AssetGroupRow({
-  symbol,
   tokens,
   prices,
   evmAddress,
+  shieldableKeys,
 }: {
   symbol: string;
   tokens: Token[];
   prices: PriceRow[] | undefined;
   evmAddress: string;
+  shieldableKeys: Set<string>;
 }) {
   // Same deterministic-render assumption as the BalanceCard: token list
   // is stable so hook order is stable.
@@ -541,10 +561,33 @@ function AssetGroupRow({
     chainIds: tokens.map((t) => t.chainId),
   };
 
+  // Shieldable if any token in this group is in the (chainId, address)
+  // set. Multi-chain rows show the slider when at least one chain is
+  // supported; the active chain is still asset.chainIds[0] for v1 until
+  // the per-row network-select pill (SHIELD_FLOW.md §9.1) lands.
+  const shieldable = tokens.some((t) =>
+    shieldableKeys.has(`${t.chainId}:${t.address.toLowerCase()}`),
+  );
+
   return (
     <AssetRow
       asset={data}
-      onMove={() => toast(`Move ${symbol} — coming soon`)}
+      shieldable={shieldable}
+      onMove={(payload) => {
+        // Slice-5 stub: the slider + dirty-row UI is wired and
+        // produces a typed payload, but proof gen / passkey sign /
+        // optimistic IDB write all land in slice 6. Log + toast for
+        // now so the round-trip is visible during integration.
+        console.log("[asset move]", {
+          ...payload,
+          amount: payload.amount.toString(),
+        });
+        toast(
+          `${payload.intent === "shield" ? "Shield" : "Unshield"} ${
+            payload.symbol
+          } — proof gen lands next`,
+        );
+      }}
     />
   );
 }

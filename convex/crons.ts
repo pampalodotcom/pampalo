@@ -31,4 +31,14 @@ crons.interval(
   {},
 );
 
+// Per-deployment shield-queue indexer. 1-min cron + self-scheduled
+// +30s shadow tick ⇒ ~30s effective cadence. See SHIELD_FLOW.md §5
+// and convex/shieldQueue/refresh.ts for the rationale.
+crons.interval(
+  "refresh shield queue",
+  { minutes: 1 },
+  internal.shieldQueue.refresh.refreshShieldQueue,
+  {},
+);
+
 export default crons;
