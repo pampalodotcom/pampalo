@@ -419,11 +419,20 @@ export function ShieldConfirmSheet({
             </div>
             <Moon className="size-5 shrink-0 text-[var(--priv)]" aria-hidden />
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-3 text-[11.5px]">
+          <div className="mt-3 flex flex-col gap-3 text-[11.5px]">
             <div>
-              <div className="text-ink-mute">Pampalo router</div>
+              <div className="text-ink-mute">Pampalo Contract</div>
               <div className="mt-0.5 truncate font-mono text-[11px] text-ink">
                 {deployment?.pampaloAddress ?? "…"}
+              </div>
+            </div>
+            <div>
+              <div className="text-ink-mute">
+                Recipient (Your {deployment?.networkName ?? "network"} Poseidon
+                Address)
+              </div>
+              <div className="mt-0.5 break-all font-mono text-[11px] text-ink">
+                {addresses.poseidon}
               </div>
             </div>
             <div>
