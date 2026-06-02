@@ -55,9 +55,9 @@ type SheetSide = "top" | "bottom" | "left" | "right";
 
 const sideStyles: Record<SheetSide, string> = {
   bottom:
-    "inset-x-0 bottom-0 rounded-t-3xl border-t data-open:slide-in-from-bottom data-closed:slide-out-to-bottom",
+    "inset-x-0 bottom-0 max-h-[90dvh] overflow-hidden rounded-t-3xl border-t data-open:slide-in-from-bottom data-closed:slide-out-to-bottom",
   top:
-    "inset-x-0 top-0 rounded-b-3xl border-b data-open:slide-in-from-top data-closed:slide-out-to-top",
+    "inset-x-0 top-0 max-h-[90dvh] overflow-hidden rounded-b-3xl border-b data-open:slide-in-from-top data-closed:slide-out-to-top",
   left:
     "inset-y-0 left-0 h-full w-[85%] max-w-sm rounded-r-3xl border-r data-open:slide-in-from-left data-closed:slide-out-to-left",
   right:
@@ -101,7 +101,15 @@ function SheetContent({
           </div>
         )}
 
-        {children}
+        {/* Scroll region: lets tall bodies (e.g. the shielded deposit
+         *  step with extra address rows) scroll *inside* the sheet
+         *  instead of pushing it past the viewport, which would scroll
+         *  the close button off-screen and trap the user. The drag
+         *  handle above and the absolutely-positioned close button stay
+         *  pinned because they live outside this overflow container. */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+          {children}
+        </div>
 
         {showCloseButton && (
           <DialogPrimitive.Close data-slot="sheet-close" asChild>
