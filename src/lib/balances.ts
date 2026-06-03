@@ -163,10 +163,7 @@ async function withTimeout<T>(
   });
 }
 
-export function usePrivateBalance(
-  asset: AssetRef,
-  userAddress: string | null,
-) {
+export function usePrivateBalance(asset: AssetRef, userAddress: string | null) {
   return useQuery<PrivateBalance>({
     queryKey: [
       "private-balance",

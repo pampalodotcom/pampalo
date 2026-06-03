@@ -9,7 +9,13 @@
 // in. We keep the bootstrap-call result authoritative for first paint and
 // then let the Convex subscription take over.
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { base64UrlToBuffer } from "./encoding";

@@ -31,7 +31,9 @@ export function NetworkCard({
   onSelect: () => void;
 }) {
   const accentClass =
-    mode === "public" ? "border-[var(--pub)] bg-[var(--pub-soft)]" : "border-[var(--priv)] bg-[var(--priv-soft)]";
+    mode === "public"
+      ? "border-[var(--pub)] bg-[var(--pub-soft)]"
+      : "border-[var(--priv)] bg-[var(--priv-soft)]";
   const checkClass =
     mode === "public"
       ? "bg-[var(--pub)] text-[var(--paper)]"

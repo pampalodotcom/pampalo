@@ -75,7 +75,9 @@ function emptyResult(): SyncShieldNotesResult {
   };
 }
 
-function convexStateToIdb(s: "queued" | "executed" | "cancelled" | "contested"): NoteState {
+function convexStateToIdb(
+  s: "queued" | "executed" | "cancelled" | "contested",
+): NoteState {
   return s === "executed" ? "spendable" : s;
 }
 
@@ -138,16 +140,18 @@ export async function syncShieldNotesWithPrivKey(
       continue;
     }
 
-    let plain: { secret: string; owner: string; asset_id: string; asset_amount: string };
+    let plain: {
+      secret: string;
+      owner: string;
+      asset_id: string;
+      asset_amount: string;
+    };
     try {
       // Convex `v.bytes()` can surface as ArrayBuffer or base64url string
       // depending on runtime version. Normalize before hexlifying so the
       // decrypt path always sees `0x…`.
       const ciphertext = ciphertextToHex(row.encryptedPayload);
-      plain = await NoteDecryption.decryptNoteData(
-        ciphertext,
-        envelopePrivKey,
-      );
+      plain = await NoteDecryption.decryptNoteData(ciphertext, envelopePrivKey);
     } catch (e) {
       console.warn(
         "[sync-shield-notes] decrypt failed for leaf",
@@ -275,15 +279,15 @@ async function scanTransferInNotesForChain(
   }
 
   for (const row of payloads) {
-    let plain:
-      | { secret: string; owner: string; asset_id: string; asset_amount: string }
-      | null = null;
+    let plain: {
+      secret: string;
+      owner: string;
+      asset_id: string;
+      asset_amount: string;
+    } | null = null;
     try {
       const ciphertext = ciphertextToHex(row.encryptedPayload);
-      plain = await NoteDecryption.decryptNoteData(
-        ciphertext,
-        envelopePrivKey,
-      );
+      plain = await NoteDecryption.decryptNoteData(ciphertext, envelopePrivKey);
     } catch {
       // Decrypt failed → payload is for someone else. Quiet: this is
       // the common case in the trial-decrypt model.
@@ -322,8 +326,7 @@ async function scanTransferInNotesForChain(
     const asset = "0x" + assetBig.toString(16).padStart(40, "0");
     const assetLower = asset.toLowerCase();
     const decimals =
-      decimalsByAsset.get(assetLower) ??
-      (assetLower === ETH_SENTINEL ? 18 : 0);
+      decimalsByAsset.get(assetLower) ?? (assetLower === ETH_SENTINEL ? 18 : 0);
 
     await appendNote({
       asset: assetLower,
@@ -411,10 +414,9 @@ export async function backfillLeafIndices(): Promise<{
 
   let patched = 0;
   for (const chainId of chainsWithGaps) {
-    const leaves = await convex.query(
-      api.shieldQueue.store.leavesForChain,
-      { chainId },
-    );
+    const leaves = await convex.query(api.shieldQueue.store.leavesForChain, {
+      chainId,
+    });
     const leafByCommitment = new Map<
       string,
       { epoch: number; leafIndex: number }

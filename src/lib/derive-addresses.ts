@@ -28,7 +28,12 @@
 // Kept here for callers who need to reduce a witness explicitly (e.g.
 // `ownerSecret = privateKey % POSEIDON_MAX` inside ZK circuits).
 
-import { HDNodeWallet, SigningKey, Wallet, type HDNodeWallet as HDNodeWalletT } from "ethers";
+import {
+  HDNodeWallet,
+  SigningKey,
+  Wallet,
+  type HDNodeWallet as HDNodeWalletT,
+} from "ethers";
 import { poseidon2Hash } from "@zkpassport/poseidon2";
 
 export const POSEIDON_MAX = BigInt(

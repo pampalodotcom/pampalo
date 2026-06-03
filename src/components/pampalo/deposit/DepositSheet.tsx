@@ -2,16 +2,8 @@ import { useEffect, useState } from "react";
 import { ArrowDownToLine } from "lucide-react";
 import { useIsDesktop } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { VisuallyHidden } from "radix-ui";
 import { DepositPickStep } from "./DepositPickStep";
 import { DepositReceiveStep } from "./DepositReceiveStep";

@@ -95,9 +95,7 @@ export function clearAddresses(): void {
   void bindWalletScopedStores(null);
 }
 
-async function bindWalletScopedStores(
-  address: string | null,
-): Promise<void> {
+async function bindWalletScopedStores(address: string | null): Promise<void> {
   // Dynamic import keeps keystore module-level dependency-free at
   // load — idb-notes pulls in idb-keyval which we don't want resident
   // before sign-in flows even resolve.

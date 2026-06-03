@@ -19,11 +19,7 @@ import { useRpcClient } from "@/lib/rpc";
 import { useIsDesktop } from "@/lib/use-media-query";
 import { useMerkleTree } from "@/lib/use-merkle-tree";
 import { cn } from "@/lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { AssetMark } from "../AssetMark";
 
@@ -96,10 +92,8 @@ export function UnshieldConfirmSheet({
   );
   const merkle = useMerkleTree(payload?.chainId ?? null, open);
 
-  const notes = useSyncExternalStore(
-    subscribeNotes,
-    getNotesSnapshot,
-    () => getNotesSnapshot(),
+  const notes = useSyncExternalStore(subscribeNotes, getNotesSnapshot, () =>
+    getNotesSnapshot(),
   );
 
   const [phase, setPhase] = useState<Phase>("idle");
@@ -357,8 +351,7 @@ export function UnshieldConfirmSheet({
                 {payload ? `${amountFmt} ${payload.symbol}` : "—"}
               </div>
               <div className="text-[11.5px] text-ink-mute">
-                Moving from your shielded balance back to your public
-                wallet on{" "}
+                Moving from your shielded balance back to your public wallet on{" "}
                 {deployment ? `chain ${deployment.chainId}` : "this chain"}.
               </div>
             </div>
@@ -464,13 +457,7 @@ export function UnshieldConfirmSheet({
   );
 }
 
-function StatusLine({
-  phase,
-  error,
-}: {
-  phase: Phase;
-  error: string | null;
-}) {
+function StatusLine({ phase, error }: { phase: Phase; error: string | null }) {
   if (error) {
     return (
       <div className="rounded-xl border border-[var(--pub-soft-2)] bg-[var(--pub-soft)] px-3.5 py-2.5 text-[12.5px] text-[var(--pub)]">

@@ -53,7 +53,10 @@ describe("buildV2SwapTx", () => {
       UNISWAP_CLIENT_ADDRESSES[1]!.v2Router02.toLowerCase(),
     );
     expect(tx.value).toBe("0");
-    const decoded = v2Iface.decodeFunctionData("swapExactTokensForTokens", tx.data);
+    const decoded = v2Iface.decodeFunctionData(
+      "swapExactTokensForTokens",
+      tx.data,
+    );
     expect(decoded[0]).toBe(1_000_000n);
     expect(decoded[1]).toBe(990_000n);
     expect(decoded[2].map((a: string) => a.toLowerCase())).toEqual([
@@ -76,7 +79,10 @@ describe("buildV2SwapTx", () => {
       deadlineSeconds: DEADLINE,
     });
     expect(tx.value).toBe("0");
-    const decoded = v2Iface.decodeFunctionData("swapTokensForExactTokens", tx.data);
+    const decoded = v2Iface.decodeFunctionData(
+      "swapTokensForExactTokens",
+      tx.data,
+    );
     expect(decoded[0]).toBe(1_000_000n);
     expect(decoded[1]).toBe(1_100_000n);
   });
@@ -93,7 +99,10 @@ describe("buildV2SwapTx", () => {
       deadlineSeconds: DEADLINE,
     });
     expect(tx.value).toBe((10n ** 18n).toString());
-    const decoded = v2Iface.decodeFunctionData("swapExactETHForTokens", tx.data);
+    const decoded = v2Iface.decodeFunctionData(
+      "swapExactETHForTokens",
+      tx.data,
+    );
     expect(decoded[0]).toBe(1_900_000_000n); // amountOutMin
     expect(decoded[1].map((a: string) => a.toLowerCase())).toEqual([
       WETH_MAINNET.toLowerCase(),
@@ -113,7 +122,10 @@ describe("buildV2SwapTx", () => {
       deadlineSeconds: DEADLINE,
     });
     expect(tx.value).toBe("0");
-    const decoded = v2Iface.decodeFunctionData("swapExactTokensForETH", tx.data);
+    const decoded = v2Iface.decodeFunctionData(
+      "swapExactTokensForETH",
+      tx.data,
+    );
     expect(decoded[2].map((a: string) => a.toLowerCase())).toEqual([
       USDC.toLowerCase(),
       WETH_MAINNET.toLowerCase(),
@@ -132,7 +144,10 @@ describe("buildV2SwapTx", () => {
       deadlineSeconds: DEADLINE,
     });
     expect(tx.value).toBe((11n * 10n ** 17n).toString());
-    const decoded = v2Iface.decodeFunctionData("swapETHForExactTokens", tx.data);
+    const decoded = v2Iface.decodeFunctionData(
+      "swapETHForExactTokens",
+      tx.data,
+    );
     expect(decoded[0]).toBe(2_000_000_000n);
   });
 
@@ -150,7 +165,10 @@ describe("buildV2SwapTx", () => {
     expect(tx.to.toLowerCase()).toBe(
       UNISWAP_CLIENT_ADDRESSES[8453]!.v2Router02.toLowerCase(),
     );
-    const decoded = v2Iface.decodeFunctionData("swapExactETHForTokens", tx.data);
+    const decoded = v2Iface.decodeFunctionData(
+      "swapExactETHForTokens",
+      tx.data,
+    );
     expect(decoded[1][0].toLowerCase()).toBe(
       UNISWAP_CLIENT_ADDRESSES[8453]!.weth.toLowerCase(),
     );

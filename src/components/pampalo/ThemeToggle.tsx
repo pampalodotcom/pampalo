@@ -21,9 +21,7 @@ export function ThemeToggle({ className }: { className?: string }) {
         className,
       )}
       style={{
-        borderColor: isDark
-          ? "rgba(255, 124, 77, 0.55)"
-          : "var(--color-line)",
+        borderColor: isDark ? "rgba(255, 124, 77, 0.55)" : "var(--color-line)",
       }}
     >
       {isDark ? (

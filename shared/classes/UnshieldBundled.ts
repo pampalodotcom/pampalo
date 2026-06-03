@@ -16,10 +16,7 @@ export class UnshieldBundled {
 
   async init() {
     const api = await getBbApi();
-    this._backend = new UltraHonkBackend(
-      transferExternalCircuit.bytecode,
-      api,
-    );
+    this._backend = new UltraHonkBackend(transferExternalCircuit.bytecode, api);
   }
 
   get unshieldBundledBackend(): UltraHonkBackend {

@@ -245,7 +245,7 @@ export default defineSchema({
     deploymentId: v.id("pampaloDeployments"),
     tokenId: v.optional(v.id("supportedTokens")),
     tokenAddress: v.string(), // lowercased; canonical lookup key
-    oracle: v.string(),       // lowercased ChainlinkOracle adapter address
+    oracle: v.string(), // lowercased ChainlinkOracle adapter address
     assetDecimals: v.number(),
     enabled: v.boolean(),
     lastSyncedAt: v.number(), // ms — last on-chain reconciliation
@@ -261,16 +261,16 @@ export default defineSchema({
   // `ShieldQueued` — public on-chain anyway. See SHIELD_FLOW.md §2.3.
   shieldQueueEntries: defineTable({
     deploymentId: v.id("pampaloDeployments"),
-    pendingId: v.string(),       // decimal string of uint256 — JS Number unsafe
-    shielder: v.string(),        // lowercased
-    asset: v.string(),           // lowercased
-    amount: v.string(),          // base units, decimal string
-    leafCommitment: v.string(),  // hex
-    unlockTime: v.number(),      // unix seconds
+    pendingId: v.string(), // decimal string of uint256 — JS Number unsafe
+    shielder: v.string(), // lowercased
+    asset: v.string(), // lowercased
+    amount: v.string(), // base units, decimal string
+    leafCommitment: v.string(), // hex
+    unlockTime: v.number(), // unix seconds
     usdCentsCharged: v.number(),
     encryptedPayload: v.bytes(),
     queuedTxHash: v.string(),
-    queuedAt: v.number(),        // ms — first-seen via indexer
+    queuedAt: v.number(), // ms — first-seen via indexer
 
     state: v.union(
       v.literal("queued"),
@@ -280,8 +280,8 @@ export default defineSchema({
     ),
     // Populated on resolution. resolvedAt anchors the 72h ack window.
     resolvedTxHash: v.optional(v.string()),
-    resolvedBy: v.optional(v.string()),   // lowercased msg.sender of the resolving tx
-    resolvedAt: v.optional(v.number()),   // unix seconds — tx block timestamp
+    resolvedBy: v.optional(v.string()), // lowercased msg.sender of the resolving tx
+    resolvedAt: v.optional(v.number()), // unix seconds — tx block timestamp
     contestReason: v.optional(v.string()), // only when state == contested
   })
     .index("by_deployment_and_state", ["deploymentId", "state"])
@@ -312,9 +312,9 @@ export default defineSchema({
     deploymentId: v.id("pampaloDeployments"),
     epoch: v.number(),
     leafIndex: v.number(),
-    leafCommitment: v.string(),   // 0x + 64 hex (lowercased)
+    leafCommitment: v.string(), // 0x + 64 hex (lowercased)
     insertedTxHash: v.string(),
-    insertedAt: v.number(),       // ms — first-seen via indexer
+    insertedAt: v.number(), // ms — first-seen via indexer
   })
     .index("by_deployment_and_position", ["deploymentId", "epoch", "leafIndex"])
     .index("by_deployment_and_commitment", ["deploymentId", "leafCommitment"])
@@ -334,11 +334,11 @@ export default defineSchema({
   // covering all NotePayload sources.
   transferNotes: defineTable({
     deploymentId: v.id("pampaloDeployments"),
-    encryptedPayload: v.bytes(),  // raw ECIES blob from the event
+    encryptedPayload: v.bytes(), // raw ECIES blob from the event
     txHash: v.string(),
     blockNumber: v.number(),
-    logIndex: v.number(),         // tx-internal ordering
-    emittedAt: v.number(),        // ms — first-seen via indexer
+    logIndex: v.number(), // tx-internal ordering
+    emittedAt: v.number(), // ms — first-seen via indexer
   })
     .index("by_deployment_and_block", [
       "deploymentId",

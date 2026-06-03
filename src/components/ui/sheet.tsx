@@ -56,10 +56,8 @@ type SheetSide = "top" | "bottom" | "left" | "right";
 const sideStyles: Record<SheetSide, string> = {
   bottom:
     "inset-x-0 bottom-0 max-h-[90dvh] overflow-hidden rounded-t-3xl border-t data-open:slide-in-from-bottom data-closed:slide-out-to-bottom",
-  top:
-    "inset-x-0 top-0 max-h-[90dvh] overflow-hidden rounded-b-3xl border-b data-open:slide-in-from-top data-closed:slide-out-to-top",
-  left:
-    "inset-y-0 left-0 h-full w-[85%] max-w-sm rounded-r-3xl border-r data-open:slide-in-from-left data-closed:slide-out-to-left",
+  top: "inset-x-0 top-0 max-h-[90dvh] overflow-hidden rounded-b-3xl border-b data-open:slide-in-from-top data-closed:slide-out-to-top",
+  left: "inset-y-0 left-0 h-full w-[85%] max-w-sm rounded-r-3xl border-r data-open:slide-in-from-left data-closed:slide-out-to-left",
   right:
     "inset-y-0 right-0 h-full w-[85%] max-w-sm rounded-l-3xl border-l data-open:slide-in-from-right data-closed:slide-out-to-right",
 };

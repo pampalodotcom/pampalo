@@ -375,12 +375,8 @@ export function SwapModal({
     copy.sort((a, b) => {
       if (a.available !== b.available) return a.available ? -1 : 1;
       if (!a.available) return 0;
-      const av = BigInt(
-        (kind === "exactIn" ? a.amountOut : a.amountIn) ?? "0",
-      );
-      const bv = BigInt(
-        (kind === "exactIn" ? b.amountOut : b.amountIn) ?? "0",
-      );
+      const av = BigInt((kind === "exactIn" ? a.amountOut : a.amountIn) ?? "0");
+      const bv = BigInt((kind === "exactIn" ? b.amountOut : b.amountIn) ?? "0");
       if (kind === "exactIn") return av > bv ? -1 : av < bv ? 1 : 0;
       return av < bv ? -1 : av > bv ? 1 : 0;
     });
@@ -393,9 +389,8 @@ export function SwapModal({
   const counterAmountDisplay = (() => {
     if (!best || !tokenIn || !tokenOut) return "";
     const wei =
-      kind === "exactIn" ? best.amountOut ?? "0" : best.amountIn ?? "0";
-    const decimals =
-      kind === "exactIn" ? tokenOut.decimals : tokenIn.decimals;
+      kind === "exactIn" ? (best.amountOut ?? "0") : (best.amountIn ?? "0");
+    const decimals = kind === "exactIn" ? tokenOut.decimals : tokenIn.decimals;
     const n = weiToNumber(BigInt(wei), decimals);
     return formatAmount(n, decimals);
   })();
@@ -603,9 +598,7 @@ export function SwapModal({
               </p>
             )}
 
-            {error && (
-              <p className="text-xs text-destructive">{error}</p>
-            )}
+            {error && <p className="text-xs text-destructive">{error}</p>}
 
             <QuoteList
               quotes={sortedQuotes}
@@ -1007,7 +1000,8 @@ function QuoteList({
               ) : (
                 <ChevronRight className="size-3" />
               )}
-              Tried {failed.length} other {failed.length === 1 ? "path" : "paths"}
+              Tried {failed.length} other{" "}
+              {failed.length === 1 ? "path" : "paths"}
             </button>
             {showFailed && (
               <ul className="mt-1 flex flex-col gap-1">
@@ -1053,8 +1047,7 @@ function QuoteRow({
   const display = (() => {
     if (!quote.available || !tokenIn || !tokenOut) return null;
     const wei = kind === "exactIn" ? quote.amountOut : quote.amountIn;
-    const decimals =
-      kind === "exactIn" ? tokenOut.decimals : tokenIn.decimals;
+    const decimals = kind === "exactIn" ? tokenOut.decimals : tokenIn.decimals;
     const symbol = kind === "exactIn" ? tokenOut.symbol : tokenIn.symbol;
     if (!wei) return null;
     const n = weiToNumber(BigInt(wei), decimals);

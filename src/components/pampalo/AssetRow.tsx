@@ -263,7 +263,8 @@ export function AssetRow({
 
   // USD-weighted values for the static bar (same maths as the original
   // pre-slider AssetRow used). Only consulted when !shieldable.
-  const pubVal = asset.priceUsd !== null ? originalPub * asset.priceUsd : originalPub;
+  const pubVal =
+    asset.priceUsd !== null ? originalPub * asset.priceUsd : originalPub;
   const privVal =
     asset.priceUsd !== null ? originalPriv * asset.priceUsd : originalPriv;
 

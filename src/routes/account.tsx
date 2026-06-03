@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, KeyRound, Loader2, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
-import { AccountAvatar, shortAddress } from "@/components/pampalo/AccountAvatar";
+import {
+  AccountAvatar,
+  shortAddress,
+} from "@/components/pampalo/AccountAvatar";
 import { AddressWell } from "@/components/pampalo/AddressWell";
 import { BeachScene } from "@/components/pampalo/BeachScene";
 import { MnemonicReveal } from "@/components/pampalo/MnemonicReveal";
@@ -173,8 +176,8 @@ function AccountPage() {
             ) : (
               <div className="flex flex-col gap-3 text-[14px] text-ink-soft">
                 <p>
-                  Your wallet addresses aren’t cached on this device. Go back
-                  to the wallet and unlock to see them.
+                  Your wallet addresses aren’t cached on this device. Go back to
+                  the wallet and unlock to see them.
                 </p>
               </div>
             )}
@@ -239,4 +242,3 @@ function ReAuthButton({
     </button>
   );
 }
-

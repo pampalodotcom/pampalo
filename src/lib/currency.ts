@@ -23,7 +23,10 @@ function readPref(): DisplayCurrency {
   return DEFAULT;
 }
 
-export function useDisplayCurrency(): [DisplayCurrency, (c: DisplayCurrency) => void] {
+export function useDisplayCurrency(): [
+  DisplayCurrency,
+  (c: DisplayCurrency) => void,
+] {
   const [ccy, setCcy] = useState<DisplayCurrency>(DEFAULT);
   useEffect(() => {
     setCcy(readPref());

@@ -39,7 +39,8 @@ export const getNonce = action({
       internal.catalog.networks._networkForAction,
       { chainId: args.chainId },
     );
-    if (!network) throw new Error(`Unknown or disabled chainId ${args.chainId}`);
+    if (!network)
+      throw new Error(`Unknown or disabled chainId ${args.chainId}`);
     const url = alchemyUrl(network.alchemySubdomain);
     const addr = normalizeAddress(args.address);
     const nonceHex: string = await rpc(url, "eth_getTransactionCount", [
@@ -68,7 +69,8 @@ export const sendRawTransaction = action({
       internal.catalog.networks._networkForAction,
       { chainId: args.chainId },
     );
-    if (!network) throw new Error(`Unknown or disabled chainId ${args.chainId}`);
+    if (!network)
+      throw new Error(`Unknown or disabled chainId ${args.chainId}`);
     if (!/^0x[0-9a-fA-F]+$/.test(args.rawTx)) {
       throw new Error("rawTx must be 0x-prefixed hex");
     }
@@ -92,7 +94,8 @@ export const getTransactionStatus = action({
       internal.catalog.networks._networkForAction,
       { chainId: args.chainId },
     );
-    if (!network) throw new Error(`Unknown or disabled chainId ${args.chainId}`);
+    if (!network)
+      throw new Error(`Unknown or disabled chainId ${args.chainId}`);
     if (!/^0x[0-9a-fA-F]{64}$/.test(args.txHash)) {
       throw new Error(`Invalid txHash: ${args.txHash}`);
     }

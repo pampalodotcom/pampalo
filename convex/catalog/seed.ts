@@ -408,13 +408,25 @@ const POOLS: SeedPool[] = [
 // All four have feedDecimals = 8 and use base/quote in the shortId.
 const PRICE_FEEDS = [
   // direct: ETH → USD
-  { shortId: "eth/usd", aggregator: "0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419" },
+  {
+    shortId: "eth/usd",
+    aggregator: "0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419",
+  },
   // inverted client-side: AUD → USD ⇒ USD per AUD; reciprocal gives USD→AUD
-  { shortId: "aud/usd", aggregator: "0x77f9710e7d0a19669a13c055f62cd80d313df022" },
+  {
+    shortId: "aud/usd",
+    aggregator: "0x77f9710e7d0a19669a13c055f62cd80d313df022",
+  },
   // CAD → USD; reciprocal gives USD→CAD
-  { shortId: "cad/usd", aggregator: "0xa34317db73e77d453b1b8d04550c44d10e981c8e" },
+  {
+    shortId: "cad/usd",
+    aggregator: "0xa34317db73e77d453b1b8d04550c44d10e981c8e",
+  },
   // GBP → USD; reciprocal gives USD→GBP
-  { shortId: "gbp/usd", aggregator: "0x5c0ab2d9b5a7ed9f470386e82bb36a3613cdd4b5" },
+  {
+    shortId: "gbp/usd",
+    aggregator: "0x5c0ab2d9b5a7ed9f470386e82bb36a3613cdd4b5",
+  },
 ];
 
 // ─── One-shot seeder ─────────────────────────────────────────────────────
@@ -473,7 +485,9 @@ export const addUniswapPool = internalMutation({
 
 export const seedAll = internalMutation({
   args: {},
-  handler: async (ctx): Promise<{
+  handler: async (
+    ctx,
+  ): Promise<{
     networks: number;
     tokens: number;
     priceFeeds: number;

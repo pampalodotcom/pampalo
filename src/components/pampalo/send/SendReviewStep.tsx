@@ -10,7 +10,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../../../convex/_generated/api";
-import { signTransactionWithPasskey, withUnlockedWallet } from "@/lib/auth-flow";
+import {
+  signTransactionWithPasskey,
+  withUnlockedWallet,
+} from "@/lib/auth-flow";
 import { buildSendTx, isNativeToken } from "@/lib/send-tx";
 import type { TokenPair } from "@/components/pampalo/AssetSelect";
 import { ETH_SENTINEL } from "@/lib/eth";
@@ -104,10 +107,7 @@ export function SendReviewStep({
   // Private-mode-only resources. Both Convex queries skip until we
   // know the chain.
   const merkle = useMerkleTree(chainId, mode === "private");
-  const deployments = useQuery(
-    api.shieldQueue.store.enabledDeployments,
-    {},
-  );
+  const deployments = useQuery(api.shieldQueue.store.enabledDeployments, {});
   const gas = useQuery(
     api.prices.gas.latestForChain,
     chainId !== null ? { chainId } : "skip",
@@ -120,10 +120,8 @@ export function SendReviewStep({
     return Number(feed.answer) / 10 ** feed.feedDecimals;
   }, [prices]);
 
-  const notes = useSyncExternalStore(
-    subscribeNotes,
-    getNotesSnapshot,
-    () => getNotesSnapshot(),
+  const notes = useSyncExternalStore(subscribeNotes, getNotesSnapshot, () =>
+    getNotesSnapshot(),
   );
 
   // Token used for THIS send. Private mode is ETH-only. Public mode
@@ -553,7 +551,8 @@ export function SendReviewStep({
             </p>
             {priceForReview && amountWei !== null && sendToken !== null && (
               <p className="text-[12px] text-ink-mute font-mono">
-                ≈ ${(
+                ≈ $
+                {(
                   Number(formatUnits(amountWei, sendToken.decimals)) *
                   priceForReview
                 ).toFixed(2)}
@@ -623,9 +622,7 @@ export function SendReviewStep({
                 recipient stay hidden on-chain.
               </>
             ) : (
-              <>
-                This transfer is visible on-chain and can&apos;t be reversed.
-              </>
+              <>This transfer is visible on-chain and can&apos;t be reversed.</>
             )}
           </div>
 
@@ -741,9 +738,7 @@ function SuccessPanel({
           <CheckCircle2
             className={cn(
               "relative size-10",
-              accent === "priv"
-                ? "text-[var(--priv)]"
-                : "text-[var(--pub)]",
+              accent === "priv" ? "text-[var(--priv)]" : "text-[var(--pub)]",
             )}
             aria-hidden
           />
@@ -751,9 +746,7 @@ function SuccessPanel({
           <Send
             className={cn(
               "relative size-8",
-              accent === "priv"
-                ? "text-[var(--priv)]"
-                : "text-[var(--pub)]",
+              accent === "priv" ? "text-[var(--priv)]" : "text-[var(--pub)]",
             )}
             aria-hidden
           />

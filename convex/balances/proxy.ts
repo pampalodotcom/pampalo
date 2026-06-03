@@ -26,10 +26,14 @@ export const getNativeBalance = action({
       internal.catalog.networks._networkForAction,
       { chainId: args.chainId },
     );
-    if (!network) throw new Error(`Unknown or disabled chainId ${args.chainId}`);
+    if (!network)
+      throw new Error(`Unknown or disabled chainId ${args.chainId}`);
     const url = alchemyUrl(network.alchemySubdomain);
     const addr = normalizeAddress(args.address);
-    const balanceHex: string = await rpc(url, "eth_getBalance", [addr, "latest"]);
+    const balanceHex: string = await rpc(url, "eth_getBalance", [
+      addr,
+      "latest",
+    ]);
     return {
       chainId: args.chainId,
       address: addr,
@@ -57,7 +61,8 @@ export const getTokenBalance = action({
       internal.catalog.networks._networkForAction,
       { chainId: args.chainId },
     );
-    if (!network) throw new Error(`Unknown or disabled chainId ${args.chainId}`);
+    if (!network)
+      throw new Error(`Unknown or disabled chainId ${args.chainId}`);
     const url = alchemyUrl(network.alchemySubdomain);
     const user = normalizeAddress(args.address);
     const token = normalizeAddress(args.tokenAddress);

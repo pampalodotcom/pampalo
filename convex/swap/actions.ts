@@ -127,14 +127,20 @@ type RpcResponse<T> = {
   error?: { code: number; message: string };
 };
 
-async function rpc<T>(url: string, method: string, params: unknown[]): Promise<T> {
+async function rpc<T>(
+  url: string,
+  method: string,
+  params: unknown[],
+): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
   });
   if (!res.ok) {
-    throw new Error(`RPC HTTP ${res.status}: ${await res.text().catch(() => "")}`);
+    throw new Error(
+      `RPC HTTP ${res.status}: ${await res.text().catch(() => "")}`,
+    );
   }
   const body = (await res.json()) as RpcResponse<T>;
   if (body.error) {
@@ -157,7 +163,9 @@ async function rpcBatch<T>(
     body: JSON.stringify(calls),
   });
   if (!res.ok) {
-    throw new Error(`RPC HTTP ${res.status}: ${await res.text().catch(() => "")}`);
+    throw new Error(
+      `RPC HTTP ${res.status}: ${await res.text().catch(() => "")}`,
+    );
   }
   const body = (await res.json()) as Array<RpcResponse<T>>;
   if (!Array.isArray(body)) throw new Error("RPC response was not an array");
@@ -291,7 +299,8 @@ export const getPool = action({
       throw new Error("v3 pool lookup requires `fee`");
     }
     const book = UNISWAP_ADDRESSES[args.chainId];
-    if (!book) throw new Error(`No Uniswap address book for chain ${args.chainId}`);
+    if (!book)
+      throw new Error(`No Uniswap address book for chain ${args.chainId}`);
 
     const tokenA = resolveTokenForPool(args.tokenA, args.chainId);
     const tokenB = resolveTokenForPool(args.tokenB, args.chainId);
@@ -388,7 +397,8 @@ function decodeV2Reserves(hex: string): {
   reserve1: bigint;
   blockTimestampLast: number;
 } {
-  if (!hex || !hex.startsWith("0x")) throw new Error(`Bad reserves hex: ${hex}`);
+  if (!hex || !hex.startsWith("0x"))
+    throw new Error(`Bad reserves hex: ${hex}`);
   const data = hex.slice(2);
   if (data.length < 64 * 3) {
     throw new Error(`reserves payload too short: ${data.length} chars`);
@@ -402,9 +412,14 @@ function decodeV2Reserves(hex: string): {
 
 // V2 constant-product formula with the standard 0.3% fee.
 //   amountOut = (amountIn * 997 * reserveOut) / (reserveIn * 1000 + amountIn * 997)
-function v2GetAmountOut(amountIn: bigint, reserveIn: bigint, reserveOut: bigint): bigint {
+function v2GetAmountOut(
+  amountIn: bigint,
+  reserveIn: bigint,
+  reserveOut: bigint,
+): bigint {
   if (amountIn <= 0n) throw new Error("amountIn must be > 0");
-  if (reserveIn <= 0n || reserveOut <= 0n) throw new Error("insufficient liquidity");
+  if (reserveIn <= 0n || reserveOut <= 0n)
+    throw new Error("insufficient liquidity");
   const amountInWithFee = amountIn * 997n;
   const numerator = amountInWithFee * reserveOut;
   const denominator = reserveIn * 1000n + amountInWithFee;
@@ -413,9 +428,14 @@ function v2GetAmountOut(amountIn: bigint, reserveIn: bigint, reserveOut: bigint)
 
 // Inverse: how much input is needed for a desired output.
 //   amountIn = (reserveIn * amountOut * 1000) / ((reserveOut - amountOut) * 997) + 1
-function v2GetAmountIn(amountOut: bigint, reserveIn: bigint, reserveOut: bigint): bigint {
+function v2GetAmountIn(
+  amountOut: bigint,
+  reserveIn: bigint,
+  reserveOut: bigint,
+): bigint {
   if (amountOut <= 0n) throw new Error("amountOut must be > 0");
-  if (reserveIn <= 0n || reserveOut <= 0n) throw new Error("insufficient liquidity");
+  if (reserveIn <= 0n || reserveOut <= 0n)
+    throw new Error("insufficient liquidity");
   if (amountOut >= reserveOut) throw new Error("amountOut exceeds reserves");
   const numerator = reserveIn * amountOut * 1000n;
   const denominator = (reserveOut - amountOut) * 997n;
@@ -444,7 +464,8 @@ export const getQuote = action({
       throw new Error(`Unknown or disabled chainId ${args.chainId}`);
     }
     const book = UNISWAP_ADDRESSES[args.chainId];
-    if (!book) throw new Error(`No Uniswap address book for chain ${args.chainId}`);
+    if (!book)
+      throw new Error(`No Uniswap address book for chain ${args.chainId}`);
 
     const tokenIn = resolveTokenForPool(args.tokenIn, args.chainId);
     const tokenOut = resolveTokenForPool(args.tokenOut, args.chainId);
@@ -640,7 +661,8 @@ export const getAllQuotes = action({
       throw new Error(`Unknown or disabled chainId ${args.chainId}`);
     }
     const book = UNISWAP_ADDRESSES[args.chainId];
-    if (!book) throw new Error(`No Uniswap address book for chain ${args.chainId}`);
+    if (!book)
+      throw new Error(`No Uniswap address book for chain ${args.chainId}`);
 
     const tokenIn = resolveTokenForPool(args.tokenIn, args.chainId);
     const tokenOut = resolveTokenForPool(args.tokenOut, args.chainId);

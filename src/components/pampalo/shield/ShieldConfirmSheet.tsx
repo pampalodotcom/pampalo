@@ -17,11 +17,7 @@ import { withUnlockedWallet } from "@/lib/auth-flow";
 import { useRpcClient } from "@/lib/rpc";
 import { useIsDesktop } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { AssetMark } from "../AssetMark";
 
@@ -438,10 +434,8 @@ export function ShieldConfirmSheet({
             <div>
               <div className="text-ink-mute">Wait</div>
               <div className="mt-0.5 font-mono text-[11px] text-ink">
-                {deployment
-                  ? formatWait(deployment.shieldWaitSeconds)
-                  : "…"}{" "}
-                · finalise after
+                {deployment ? formatWait(deployment.shieldWaitSeconds) : "…"} ·
+                finalise after
               </div>
             </div>
           </div>

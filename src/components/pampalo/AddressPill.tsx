@@ -42,7 +42,7 @@ function avatarGradient(seed: string): string {
   const a = hash(seed, 0);
   const b = hash(seed, 7);
   const c = hash(seed, 13);
-  return `conic-gradient(from ${a % 360}deg at 50% 50%, var(--color-accent) 0deg, var(--color-sun) ${b % 180 + 90}deg, var(--color-sea) ${c % 180 + 200}deg, var(--color-accent) 360deg)`;
+  return `conic-gradient(from ${a % 360}deg at 50% 50%, var(--color-accent) 0deg, var(--color-sun) ${(b % 180) + 90}deg, var(--color-sea) ${(c % 180) + 200}deg, var(--color-accent) 360deg)`;
 }
 
 function hash(s: string, salt: number): number {

@@ -26,10 +26,7 @@ export function SendPickStep({
   onChainChange: (next: number) => void;
   onContinue: () => void;
 }) {
-  const deployments = useQuery(
-    api.shieldQueue.store.enabledDeployments,
-    {},
-  );
+  const deployments = useQuery(api.shieldQueue.store.enabledDeployments, {});
   const networks = useQuery(api.catalog.networks.list, {});
 
   // Private mode only lists Pampalo-deployed chains. Public mode lists
@@ -62,9 +59,7 @@ export function SendPickStep({
           <span
             className={cn(
               "font-semibold",
-              accent === "priv"
-                ? "text-[var(--priv)]"
-                : "text-[var(--pub)]",
+              accent === "priv" ? "text-[var(--priv)]" : "text-[var(--pub)]",
             )}
           >
             {accent === "priv" ? "shielded" : "public"}
@@ -101,20 +96,18 @@ export function SendPickStep({
       <p
         className={cn(
           "text-[12.5px] -mt-2",
-          accent === "priv"
-            ? "text-[var(--priv)]"
-            : "text-[var(--pub)]",
+          accent === "priv" ? "text-[var(--priv)]" : "text-[var(--pub)]",
         )}
       >
         {mode === "private" ? (
           <>
-            <MoonIcon className="inline size-3 mr-1" /> Shielded — only
-            the recipient can decrypt it.
+            <MoonIcon className="inline size-3 mr-1" /> Shielded — only the
+            recipient can decrypt it.
           </>
         ) : (
           <>
-            <SunIcon className="inline size-3 mr-1" /> Visible on-chain.
-            Anyone can see it.
+            <SunIcon className="inline size-3 mr-1" /> Visible on-chain. Anyone
+            can see it.
           </>
         )}
       </p>
@@ -234,9 +227,7 @@ function NetworkChoiceCard({
         <span
           className={cn(
             "absolute right-2.5 top-2.5 inline-flex size-5 items-center justify-center rounded-full text-white",
-            accent === "priv"
-              ? "bg-[var(--priv)]"
-              : "bg-[var(--pub)]",
+            accent === "priv" ? "bg-[var(--priv)]" : "bg-[var(--pub)]",
           )}
           aria-hidden
         >

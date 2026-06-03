@@ -168,7 +168,11 @@ export function markPushed(revision: number): void {
   if (!cache) return;
   dirty = false;
   lastSeenRevision = revision;
-  void writePrefsRecord({ data: cache, lastSeenRevision: revision, dirty: false });
+  void writePrefsRecord({
+    data: cache,
+    lastSeenRevision: revision,
+    dirty: false,
+  });
   notify();
 }
 
@@ -176,7 +180,11 @@ export function applyPulledPrefs(prefs: Prefs, revision: number): void {
   cache = { ...DEFAULT_PREFS, ...prefs };
   dirty = false;
   lastSeenRevision = revision;
-  void writePrefsRecord({ data: cache, lastSeenRevision: revision, dirty: false });
+  void writePrefsRecord({
+    data: cache,
+    lastSeenRevision: revision,
+    dirty: false,
+  });
   notify();
 }
 

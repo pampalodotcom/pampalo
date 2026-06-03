@@ -63,7 +63,11 @@ function corsHeaders(req: Request): HeadersInit {
   };
 }
 
-function jsonResponse(req: Request, body: unknown, init?: ResponseInit): Response {
+function jsonResponse(
+  req: Request,
+  body: unknown,
+  init?: ResponseInit,
+): Response {
   const headers = new Headers({
     "Content-Type": "application/json",
     ...corsHeaders(req),
@@ -72,7 +76,11 @@ function jsonResponse(req: Request, body: unknown, init?: ResponseInit): Respons
   return new Response(JSON.stringify(body), { ...init, headers });
 }
 
-function errorResponse(req: Request, status: number, message: string): Response {
+function errorResponse(
+  req: Request,
+  status: number,
+  message: string,
+): Response {
   return jsonResponse(req, { error: message }, { status });
 }
 
@@ -89,13 +97,17 @@ function readCookie(req: Request, name: string): string | null {
   return null;
 }
 
-function setCookie(name: string, value: string, opts: {
-  maxAge?: number;
-  path?: string;
-  sameSite?: "Lax" | "Strict" | "None";
-  httpOnly?: boolean;
-  secure?: boolean;
-}): string {
+function setCookie(
+  name: string,
+  value: string,
+  opts: {
+    maxAge?: number;
+    path?: string;
+    sameSite?: "Lax" | "Strict" | "None";
+    httpOnly?: boolean;
+    secure?: boolean;
+  },
+): string {
   const parts = [`${name}=${encodeURIComponent(value)}`];
   parts.push(`Path=${opts.path ?? "/"}`);
   if (opts.maxAge !== undefined) parts.push(`Max-Age=${opts.maxAge}`);
@@ -175,7 +187,8 @@ http.route({
           expectedRPID: rpIdForRequest(req),
           expectedOrigin:
             req.headers.get("Origin") ??
-            (allowedOrigins()[0] ?? "http://localhost:3000"),
+            allowedOrigins()[0] ??
+            "http://localhost:3000",
           attestation: body.attestation,
           walletPayload: {
             mnemonicCiphertext: base64UrlToArrayBuffer(wp.mnemonicCiphertext),
@@ -261,7 +274,8 @@ http.route({
           expectedRPID: rpIdForRequest(req),
           expectedOrigin:
             req.headers.get("Origin") ??
-            (allowedOrigins()[0] ?? "http://localhost:3000"),
+            allowedOrigins()[0] ??
+            "http://localhost:3000",
           assertion: body.assertion,
         },
       );
@@ -310,7 +324,9 @@ http.route({
   handler: httpAction(async (ctx, req) => {
     const token = readCookie(req, SESSION_COOKIE);
     if (token) {
-      await ctx.runMutation(internal.auth.ceremony._deleteSessionByToken, { token });
+      await ctx.runMutation(internal.auth.ceremony._deleteSessionByToken, {
+        token,
+      });
     }
     const headers = new Headers({
       "Content-Type": "application/json",
@@ -337,7 +353,9 @@ http.route({
   handler: httpAction(async (ctx, req) => {
     const token = readCookie(req, SESSION_COOKIE);
     if (!token) return errorResponse(req, 401, "no session");
-    const blob = await ctx.runQuery(internal.auth.ceremony._bootstrapBlob, { token });
+    const blob = await ctx.runQuery(internal.auth.ceremony._bootstrapBlob, {
+      token,
+    });
     if (!blob) return errorResponse(req, 401, "session invalid");
     return jsonResponse(req, {
       sessionToken: blob.sessionToken,
@@ -347,7 +365,9 @@ http.route({
       // window.location.hostname — that breaks for apex-vs-www origins.
       rpId: rpIdForRequest(req),
       wallet: {
-        mnemonicCiphertext: arrayBufferToBase64Url(blob.wallet.mnemonicCiphertext),
+        mnemonicCiphertext: arrayBufferToBase64Url(
+          blob.wallet.mnemonicCiphertext,
+        ),
         mnemonicIv: arrayBufferToBase64Url(blob.wallet.mnemonicIv),
       },
       credentials: blob.credentials.map((c) => ({

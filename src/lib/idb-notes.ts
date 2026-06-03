@@ -52,16 +52,16 @@ export type NoteState =
 
 export type StoredNote = {
   // Canonical four-tuple. `secret` is per-note unlinkable random.
-  asset: string;          // lowercased EVM address
+  asset: string; // lowercased EVM address
   assetDecimals: number;
-  amount: string;         // base units, decimal string (uint256-safe)
-  owner: string;          // Poseidon identifier (0x + 64 hex). v1: always self.
-  secret: string;         // 0x + 64 hex; never leaves the device unencrypted
+  amount: string; // base units, decimal string (uint256-safe)
+  owner: string; // Poseidon identifier (0x + 64 hex). v1: always self.
+  secret: string; // 0x + 64 hex; never leaves the device unencrypted
 
   // Where it lives in the protocol.
   networkChainId: number;
   deploymentAddress: string; // lowercased Pampalo contract address
-  leafCommitment: string;    // 0x + 64 hex; primary key in this store
+  leafCommitment: string; // 0x + 64 hex; primary key in this store
   origin: "shield" | "transferIn";
 
   // Spend lifecycle.

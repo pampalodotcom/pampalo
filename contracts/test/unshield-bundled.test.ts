@@ -1,4 +1,7 @@
-import { getShieldDetails, shieldAndExecute } from "@/helpers/functions/shield.js";
+import {
+  getShieldDetails,
+  shieldAndExecute,
+} from "@/helpers/functions/shield.js";
 import { getNoteHash } from "@/helpers/functions/get-note-hash.js";
 import { getNullifier } from "@/helpers/functions/get-nullifier.js";
 import {

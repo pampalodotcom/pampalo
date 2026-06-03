@@ -20,18 +20,19 @@ type ChainAddresses = {
   weth: string;
 };
 
-export const UNISWAP_CLIENT_ADDRESSES: Partial<Record<number, ChainAddresses>> = {
-  1: {
-    v2Router02: "0x7a250d5630B4cF539739dF2C5dacb4c659F2488D",
-    v3SwapRouter02: "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
-    weth: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-  },
-  8453: {
-    v2Router02: "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24",
-    v3SwapRouter02: "0x2626664c2603336E57B271c5C0b26F421741e481",
-    weth: "0x4200000000000000000000000000000000000006",
-  },
-};
+export const UNISWAP_CLIENT_ADDRESSES: Partial<Record<number, ChainAddresses>> =
+  {
+    1: {
+      v2Router02: "0x7a250d5630B4cF539739dF2C5dacb4c659F2488D",
+      v3SwapRouter02: "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+      weth: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    },
+    8453: {
+      v2Router02: "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24",
+      v3SwapRouter02: "0x2626664c2603336E57B271c5C0b26F421741e481",
+      weth: "0x4200000000000000000000000000000000000006",
+    },
+  };
 
 // Re-exported under the historical name to avoid churning the uniswap
 // test fixtures. New code should `import { ETH_SENTINEL } from "./eth"`.
@@ -271,14 +272,20 @@ export function buildV3SwapTx(p: V3SwapParams): SwapTx {
 // ─── Slippage helpers ───────────────────────────────────────────────────
 // Slippage in basis points (1 = 0.01%, 50 = 0.5%, 100 = 1%).
 
-export function applySlippageMin(amountOut: bigint, slippageBps: number): bigint {
+export function applySlippageMin(
+  amountOut: bigint,
+  slippageBps: number,
+): bigint {
   if (slippageBps < 0 || slippageBps > 10_000) {
     throw new Error("slippageBps out of range");
   }
   return (amountOut * BigInt(10_000 - slippageBps)) / 10_000n;
 }
 
-export function applySlippageMax(amountIn: bigint, slippageBps: number): bigint {
+export function applySlippageMax(
+  amountIn: bigint,
+  slippageBps: number,
+): bigint {
   if (slippageBps < 0 || slippageBps > 10_000) {
     throw new Error("slippageBps out of range");
   }

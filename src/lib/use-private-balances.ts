@@ -215,7 +215,10 @@ function aggregate(
   // overrides with `asset.decimals` from the catalog when rendering
   // PendingShieldsList, so the placeholder is never read for display.
   if (convexRows && deployments) {
-    const chainByDeployment = new Map<string, { chainId: number; address: string }>();
+    const chainByDeployment = new Map<
+      string,
+      { chainId: number; address: string }
+    >();
     for (const d of deployments) {
       chainByDeployment.set(d._id, {
         chainId: d.chainId,

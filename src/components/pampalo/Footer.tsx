@@ -14,26 +14,26 @@
 // (it lives below the main route content via __root.tsx, so portal-
 // rendered overlays are naturally outside it).
 
-import { Link } from '@tanstack/react-router'
-import { ExternalLink, FileText, ShieldAlert } from 'lucide-react'
-import { BrandLockup } from './BrandLockup'
-import { WarningChip } from './WarningChip'
-import { useAuth } from '@/lib/auth'
-import { cn } from '@/lib/utils'
+import { Link } from "@tanstack/react-router";
+import { ExternalLink, FileText, ShieldAlert } from "lucide-react";
+import { BrandLockup } from "./BrandLockup";
+import { WarningChip } from "./WarningChip";
+import { useAuth } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 
 // Pampalo Pty Ltd — Australian Company Number.
-const PAMPALO_ACN = 'ACN 698 162 999'
+const PAMPALO_ACN = "ACN 698 162 999";
 
-const DOCS_URL = 'https://docs.pampalo.com'
-const X_URL = 'https://x.com/pampalodotcom'
-const TERMS_URL = '/Pampalo-Terms-of-Service.pdf'
+const DOCS_URL = "https://docs.pampalo.com";
+const X_URL = "https://x.com/pampalodotcom";
+const TERMS_URL = "/Pampalo-Terms-of-Service.pdf";
 
 export function Footer() {
   // Hold the footer off the page until auth bootstrap resolves so it doesn't
   // flash behind the PageLoading overlay (or briefly below any route that
   // mounts its own loading state).
-  const { state } = useAuth()
-  if (state.status === 'loading') return null
+  const { state } = useAuth();
+  if (state.status === "loading") return null;
   // Footer-at-the-bottom is handled by the sticky-footer column in
   // __root.tsx (main has `flex-1` and absorbs leftover space). All we
   // do here is render the responsive variants. `pt-[6vh]` adds a modest
@@ -44,14 +44,14 @@ export function Footer() {
       <FooterDesktop className="hidden md:block" />
       <FooterMobile className="md:hidden" />
     </div>
-  )
+  );
 }
 
 // ─── Desktop ─────────────────────────────────────────────────────────────
 
 function FooterDesktop({ className }: { className?: string }) {
   return (
-    <footer className={cn('border-t border-line pt-7 px-8 pb-8', className)}>
+    <footer className={cn("border-t border-line pt-7 px-8 pb-8", className)}>
       <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-7">
         {/* Row 1 — brand + links */}
         <div className="flex flex-wrap items-center justify-between gap-20">
@@ -81,7 +81,7 @@ function FooterDesktop({ className }: { className?: string }) {
           <div className="flex flex-wrap items-baseline justify-between gap-x-20 gap-y-2">
             <p className="flex flex-wrap items-baseline gap-x-2">
               <span>
-                By using pampalo.com you agree to the{' '}
+                By using pampalo.com you agree to the{" "}
                 <a
                   href={TERMS_URL}
                   target="_blank"
@@ -96,7 +96,7 @@ function FooterDesktop({ className }: { className?: string }) {
                 ·
               </span>
               <span>
-                Pampalo Pty Ltd is an Australian registered company{' '}
+                Pampalo Pty Ltd is an Australian registered company{" "}
                 <span className="font-mono text-ink-faint">{PAMPALO_ACN}</span>
               </span>
             </p>
@@ -110,7 +110,7 @@ function FooterDesktop({ className }: { className?: string }) {
         <Disclaimer />
       </div>
     </footer>
-  )
+  );
 }
 
 // ─── Mobile ──────────────────────────────────────────────────────────────
@@ -118,7 +118,7 @@ function FooterDesktop({ className }: { className?: string }) {
 function FooterMobile({ className }: { className?: string }) {
   return (
     <footer
-      className={cn('border-t border-line pt-5 px-[18px] pb-7', className)}
+      className={cn("border-t border-line pt-5 px-[18px] pb-7", className)}
     >
       <div className="flex flex-col gap-5">
         <div className="flex items-center justify-between">
@@ -142,7 +142,7 @@ function FooterMobile({ className }: { className?: string }) {
 
         <div className="border-t border-dashed border-line pt-4 text-center text-[11.5px] leading-[1.5] text-ink-mute">
           <p>
-            By using pampalo.com you agree to the{' '}
+            By using pampalo.com you agree to the{" "}
             <a
               href={TERMS_URL}
               target="_blank"
@@ -162,7 +162,7 @@ function FooterMobile({ className }: { className?: string }) {
         </div>
       </div>
     </footer>
-  )
+  );
 }
 
 // ─── Sub-bits ────────────────────────────────────────────────────────────
@@ -173,22 +173,22 @@ function FooterLink({
   children,
   ...rest
 }: {
-  href: string
-  external?: boolean
-  children: React.ReactNode
-} & Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href' | 'children'>) {
+  href: string;
+  external?: boolean;
+  children: React.ReactNode;
+} & Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "href" | "children">) {
   return (
     <a
       href={href}
-      target={external ? '_blank' : undefined}
-      rel={external ? 'noopener noreferrer' : undefined}
+      target={external ? "_blank" : undefined}
+      rel={external ? "noopener noreferrer" : undefined}
       className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-ink-soft transition-colors hover:text-ink"
       {...rest}
     >
       {children}
       {external && <ExternalLink className="size-2.5 opacity-50" />}
     </a>
-  )
+  );
 }
 
 // Internal router variant — same visual treatment as FooterLink but
@@ -198,8 +198,8 @@ function FooterInternalLink({
   to,
   children,
 }: {
-  to: string
-  children: React.ReactNode
+  to: string;
+  children: React.ReactNode;
 }) {
   return (
     <Link
@@ -208,7 +208,7 @@ function FooterInternalLink({
     >
       {children}
     </Link>
-  )
+  );
 }
 
 function XLogo({ size = 12 }: { size?: number }) {
@@ -222,7 +222,7 @@ function XLogo({ size = 12 }: { size?: number }) {
     >
       <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" />
     </svg>
-  )
+  );
 }
 
 function Disclaimer({ short = false }: { short?: boolean }) {
@@ -231,14 +231,14 @@ function Disclaimer({ short = false }: { short?: boolean }) {
       role="status"
       className="flex items-start gap-2.5 rounded-[10px] border px-3.5 py-3 text-[11px] leading-[1.55]"
       style={{
-        background: 'var(--color-warn-bg)',
-        borderColor: 'var(--color-warn-bd)',
-        color: 'var(--color-warn-fg)',
+        background: "var(--color-warn-bg)",
+        borderColor: "var(--color-warn-bd)",
+        color: "var(--color-warn-fg)",
       }}
     >
       <WarnTriangle className="mt-0.5 size-3.5 shrink-0" />
       <span>
-        <strong className="font-bold">Pampalo is experimental.</strong>{' '}
+        <strong className="font-bold">Pampalo is experimental.</strong>{" "}
         {short ? (
           <>Use only funds you can afford to lose.</>
         ) : (
@@ -250,7 +250,7 @@ function Disclaimer({ short = false }: { short?: boolean }) {
         )}
       </span>
     </div>
-  )
+  );
 }
 
 // Same hand-drawn triangle as WarningChip so the chip and disclaimer
@@ -279,5 +279,5 @@ function WarnTriangle({ className }: { className?: string }) {
       />
       <circle cx="8" cy="11.4" r="0.85" fill="#faf6ea" />
     </svg>
-  )
+  );
 }

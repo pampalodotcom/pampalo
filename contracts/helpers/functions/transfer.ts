@@ -49,9 +49,11 @@ export const transfer = async (
 ) => {
   const payload = encodeEncryptedPayload(encryptedNotes ?? []);
 
-  return await pampalo
-    .connect(runner)
-    .getFunction("transfer")(proof.proof, proof.publicInputs, payload);
+  return await pampalo.connect(runner).getFunction("transfer")(
+    proof.proof,
+    proof.publicInputs,
+    payload,
+  );
 };
 
 export const encodeEncryptedPayload = (
@@ -147,7 +149,9 @@ export const unshieldBundled = async (
 ) => {
   const payload = encodeEncryptedPayload(encryptedNotes ?? []);
 
-  return await pampalo
-    .connect(runner)
-    .getFunction("unshieldBundled")(proof.proof, proof.publicInputs, payload);
+  return await pampalo.connect(runner).getFunction("unshieldBundled")(
+    proof.proof,
+    proof.publicInputs,
+    payload,
+  );
 };

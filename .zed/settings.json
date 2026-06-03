@@ -1,0 +1,15 @@
+{
+  // Format on save with Prettier so saves match the repo's prettier.config.js
+  // (singleQuote: true, semi: false, trailingComma: "all"). Zed's "prettier"
+  // formatter auto-discovers that config file — it does NOT use Prettier's
+  // built-in defaults. Per-language so Noir keeps its own LSP formatter.
+  "languages": {
+    "TypeScript": { "formatter": "prettier", "format_on_save": "on" },
+    "TSX": { "formatter": "prettier", "format_on_save": "on" },
+    "JavaScript": { "formatter": "prettier", "format_on_save": "on" },
+    "JSON": { "formatter": "prettier", "format_on_save": "on" },
+    "JSONC": { "formatter": "prettier", "format_on_save": "on" },
+    "CSS": { "formatter": "prettier", "format_on_save": "on" },
+    "Noir": { "format_on_save": "on" }
+  }
+}

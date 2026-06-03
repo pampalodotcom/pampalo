@@ -55,7 +55,9 @@ export function SyncIndicator() {
       type="button"
       onClick={onTap}
       disabled={syncing}
-      aria-label={syncing ? "Syncing preferences" : "Sync preferences from another device"}
+      aria-label={
+        syncing ? "Syncing preferences" : "Sync preferences from another device"
+      }
       title={syncing ? "Syncing…" : "Sync Preferences"}
       className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-paper-lo border border-line size-7 sm:size-auto sm:px-2.5 sm:py-1 justify-center text-[11px] font-medium text-ink-soft hover:text-ink hover:bg-paper disabled:opacity-60"
     >

@@ -94,7 +94,9 @@ beforeEach(() => {
         }
         return { jsonrpc: "2.0", id: req.id, result: handler(cp) };
       };
-      const payload = Array.isArray(body) ? body.map(handleOne) : handleOne(body);
+      const payload = Array.isArray(body)
+        ? body.map(handleOne)
+        : handleOne(body);
       return new Response(JSON.stringify(payload), {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -334,8 +336,7 @@ describe("uniswap.getQuote (v2)", () => {
     // Replicate the constant-product formula with the same precision.
     const amountInWithFee = amountIn * 997n;
     const expected =
-      (amountInWithFee * reserveWETH) /
-      (reserveUSDC * 1000n + amountInWithFee);
+      (amountInWithFee * reserveWETH) / (reserveUSDC * 1000n + amountInWithFee);
 
     expect(result.amountIn).toBe(amountIn.toString());
     expect(result.amountOut).toBe(expected.toString());
@@ -366,8 +367,7 @@ describe("uniswap.getQuote (v2)", () => {
     });
 
     const expected =
-      (reserveUSDC * amountOut * 1000n) /
-        ((reserveWETH - amountOut) * 997n) +
+      (reserveUSDC * amountOut * 1000n) / ((reserveWETH - amountOut) * 997n) +
       1n;
     expect(result.amountOut).toBe(amountOut.toString());
     expect(result.amountIn).toBe(expected.toString());
@@ -396,8 +396,7 @@ describe("uniswap.getQuote (v2)", () => {
 
     const amountInWithFee = amountIn * 997n;
     const expected =
-      (amountInWithFee * reserveUSDC) /
-      (reserveWETH * 1000n + amountInWithFee);
+      (amountInWithFee * reserveUSDC) / (reserveWETH * 1000n + amountInWithFee);
     expect(result.amountOut).toBe(expected.toString());
   });
 });
@@ -412,16 +411,23 @@ describe("uniswap.getQuote (v3)", () => {
 
     // Mock the quoter to return different amountOut per fee tier.
     // 500 → 1 ETH (best); 3000 → 0.5 ETH; 10000 → 0.3 ETH.
-    setHandler(V3_QUOTER, SELECTORS.V3_QUOTER_EXACT_INPUT_SINGLE, ({ data }) => {
-      const fee = feeFromQuoterCalldata(data);
-      const amount =
-        fee === 500
-          ? 1n * 10n ** 18n
-          : fee === 3000
-            ? 5n * 10n ** 17n
-            : 3n * 10n ** 17n;
-      return quoterResult(amount, 79228162514264337593543950336n /* placeholder */);
-    });
+    setHandler(
+      V3_QUOTER,
+      SELECTORS.V3_QUOTER_EXACT_INPUT_SINGLE,
+      ({ data }) => {
+        const fee = feeFromQuoterCalldata(data);
+        const amount =
+          fee === 500
+            ? 1n * 10n ** 18n
+            : fee === 3000
+              ? 5n * 10n ** 17n
+              : 3n * 10n ** 17n;
+        return quoterResult(
+          amount,
+          79228162514264337593543950336n /* placeholder */,
+        );
+      },
+    );
 
     const amountIn = 2000n * 10n ** 6n;
     const result = await t.action(api.swap.actions.getQuote, {
@@ -448,16 +454,20 @@ describe("uniswap.getQuote (v3)", () => {
     await seedV3UsdcWethAll(t);
 
     // 500 → needs 2100 USDC; 3000 → 2000 USDC (best, cheapest input); 10000 → 2500 USDC.
-    setHandler(V3_QUOTER, SELECTORS.V3_QUOTER_EXACT_OUTPUT_SINGLE, ({ data }) => {
-      const fee = feeFromQuoterCalldata(data);
-      const amount =
-        fee === 500
-          ? 2100n * 10n ** 6n
-          : fee === 3000
-            ? 2000n * 10n ** 6n
-            : 2500n * 10n ** 6n;
-      return quoterResult(amount);
-    });
+    setHandler(
+      V3_QUOTER,
+      SELECTORS.V3_QUOTER_EXACT_OUTPUT_SINGLE,
+      ({ data }) => {
+        const fee = feeFromQuoterCalldata(data);
+        const amount =
+          fee === 500
+            ? 2100n * 10n ** 6n
+            : fee === 3000
+              ? 2000n * 10n ** 6n
+              : 2500n * 10n ** 6n;
+        return quoterResult(amount);
+      },
+    );
 
     const desiredOut = 1n * 10n ** 18n; // 1 ETH
     const result = await t.action(api.swap.actions.getQuote, {
@@ -480,11 +490,15 @@ describe("uniswap.getQuote (v3)", () => {
     await seedMainnet(t);
     await seedV3UsdcWethAll(t);
 
-    setHandler(V3_QUOTER, SELECTORS.V3_QUOTER_EXACT_INPUT_SINGLE, ({ data }) => {
-      expect(tokenInFromQuoterCalldata(data)).toBe(WETH);
-      expect(tokenOutFromQuoterCalldata(data)).toBe(USDC);
-      return quoterResult(1000n * 10n ** 6n);
-    });
+    setHandler(
+      V3_QUOTER,
+      SELECTORS.V3_QUOTER_EXACT_INPUT_SINGLE,
+      ({ data }) => {
+        expect(tokenInFromQuoterCalldata(data)).toBe(WETH);
+        expect(tokenOutFromQuoterCalldata(data)).toBe(USDC);
+        return quoterResult(1000n * 10n ** 6n);
+      },
+    );
 
     const result = await t.action(api.swap.actions.getQuote, {
       chainId: 1,
@@ -545,16 +559,20 @@ describe("uniswap.getAllQuotes", () => {
     setHandler(USDC_WETH_V2_POOL, SELECTORS.V2_PAIR_GET_RESERVES, () =>
       reservesResult(reserveUSDC, reserveWETH),
     );
-    setHandler(V3_QUOTER, SELECTORS.V3_QUOTER_EXACT_INPUT_SINGLE, ({ data }) => {
-      const fee = feeFromQuoterCalldata(data);
-      const amount =
-        fee === 500
-          ? 6n * 10n ** 17n
-          : fee === 3000
-            ? 5n * 10n ** 17n
-            : 4n * 10n ** 17n;
-      return quoterResult(amount);
-    });
+    setHandler(
+      V3_QUOTER,
+      SELECTORS.V3_QUOTER_EXACT_INPUT_SINGLE,
+      ({ data }) => {
+        const fee = feeFromQuoterCalldata(data);
+        const amount =
+          fee === 500
+            ? 6n * 10n ** 17n
+            : fee === 3000
+              ? 5n * 10n ** 17n
+              : 4n * 10n ** 17n;
+        return quoterResult(amount);
+      },
+    );
 
     const amountIn = 2000n * 10n ** 6n;
     const result = await t.action(api.swap.actions.getAllQuotes, {
@@ -578,8 +596,7 @@ describe("uniswap.getAllQuotes", () => {
     // V2 amountOut should match the constant-product formula.
     const amountInWithFee = amountIn * 997n;
     const v2Expected =
-      (amountInWithFee * reserveWETH) /
-      (reserveUSDC * 1000n + amountInWithFee);
+      (amountInWithFee * reserveWETH) / (reserveUSDC * 1000n + amountInWithFee);
     expect(byKey["v2:"].amountOut).toBe(v2Expected.toString());
   });
 

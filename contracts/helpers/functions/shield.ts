@@ -51,8 +51,6 @@ export const shieldAndExecute = async (
 ): Promise<bigint> => {
   const id = (await pampalo.nextPendingId()) as bigint;
   await (await shieldCall()).wait();
-  await pampalo
-    .connect(runner)
-    .getFunction("executeShieldImmediate")(id);
+  await pampalo.connect(runner).getFunction("executeShieldImmediate")(id);
   return id;
 };

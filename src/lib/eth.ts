@@ -10,8 +10,7 @@
  * `Pampalo.ETH_ADDRESS` constant. Stored lowercased — every comparison
  * site should lowercase its input before checking equality.
  */
-export const ETH_SENTINEL =
-  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+export const ETH_SENTINEL = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 
 export function isNativeAsset(address: string): boolean {
   return address.toLowerCase() === ETH_SENTINEL;

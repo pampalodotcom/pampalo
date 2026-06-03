@@ -65,13 +65,19 @@ export interface RpcClient {
    *  action, 'direct' when calls go straight to the user's RPC URL. */
   readonly source: "proxy" | "direct";
 
-  getNativeBalance: (chainId: number, address: string) => Promise<NativeBalance>;
+  getNativeBalance: (
+    chainId: number,
+    address: string,
+  ) => Promise<NativeBalance>;
   getTokenBalance: (token: TokenRef, address: string) => Promise<TokenBalance>;
 
   // Send-flow methods. Per ADR 0004 each is atomic and leaks no more
   // than the balance methods above.
   getNonce: (chainId: number, address: string) => Promise<Nonce>;
-  sendRawTransaction: (chainId: number, rawTx: string) => Promise<BroadcastResult>;
+  sendRawTransaction: (
+    chainId: number,
+    rawTx: string,
+  ) => Promise<BroadcastResult>;
   getTransactionStatus: (chainId: number, txHash: string) => Promise<TxStatus>;
 }
 
@@ -143,7 +149,11 @@ function leftPad32(hexNo0x: string): string {
   return "0".repeat(64 - hexNo0x.length) + hexNo0x;
 }
 
-async function jsonRpc<T>(url: string, method: string, params: unknown[]): Promise<T> {
+async function jsonRpc<T>(
+  url: string,
+  method: string,
+  params: unknown[],
+): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -154,7 +164,8 @@ async function jsonRpc<T>(url: string, method: string, params: unknown[]): Promi
     result?: T;
     error?: { code: number; message: string };
   };
-  if (body.error) throw new Error(`RPC error ${body.error.code}: ${body.error.message}`);
+  if (body.error)
+    throw new Error(`RPC error ${body.error.code}: ${body.error.message}`);
   if (body.result === undefined) throw new Error("RPC returned no result");
   return body.result;
 }
@@ -180,10 +191,16 @@ export class DirectRpcClient implements RpcClient {
     return c;
   }
 
-  async getNativeBalance(chainId: number, address: string): Promise<NativeBalance> {
+  async getNativeBalance(
+    chainId: number,
+    address: string,
+  ): Promise<NativeBalance> {
     const c = this.cfg(chainId);
     const addr = normalizeAddress(address);
-    const balanceHex = await jsonRpc<string>(c.url, "eth_getBalance", [addr, "latest"]);
+    const balanceHex = await jsonRpc<string>(c.url, "eth_getBalance", [
+      addr,
+      "latest",
+    ]);
     return {
       chainId,
       address: addr,
@@ -195,7 +212,10 @@ export class DirectRpcClient implements RpcClient {
     };
   }
 
-  async getTokenBalance(token: TokenRef, address: string): Promise<TokenBalance> {
+  async getTokenBalance(
+    token: TokenRef,
+    address: string,
+  ): Promise<TokenBalance> {
     const c = this.cfg(token.chainId);
     const user = normalizeAddress(address);
     const tok = normalizeAddress(token.tokenAddress);
@@ -230,7 +250,10 @@ export class DirectRpcClient implements RpcClient {
     };
   }
 
-  async sendRawTransaction(chainId: number, rawTx: string): Promise<BroadcastResult> {
+  async sendRawTransaction(
+    chainId: number,
+    rawTx: string,
+  ): Promise<BroadcastResult> {
     const c = this.cfg(chainId);
     if (!/^0x[0-9a-fA-F]+$/.test(rawTx)) {
       throw new Error("rawTx must be 0x-prefixed hex");
@@ -241,7 +264,10 @@ export class DirectRpcClient implements RpcClient {
     return { chainId, txHash };
   }
 
-  async getTransactionStatus(chainId: number, txHash: string): Promise<TxStatus> {
+  async getTransactionStatus(
+    chainId: number,
+    txHash: string,
+  ): Promise<TxStatus> {
     const c = this.cfg(chainId);
     if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
       throw new Error(`Invalid txHash: ${txHash}`);

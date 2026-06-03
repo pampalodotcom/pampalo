@@ -19,11 +19,15 @@ export type PrefsRecord<T> = {
   dirty: boolean;
 };
 
-export async function readPrefsRecord<T>(): Promise<PrefsRecord<T> | undefined> {
+export async function readPrefsRecord<T>(): Promise<
+  PrefsRecord<T> | undefined
+> {
   return await get<PrefsRecord<T>>(KEY);
 }
 
-export async function writePrefsRecord<T>(record: PrefsRecord<T>): Promise<void> {
+export async function writePrefsRecord<T>(
+  record: PrefsRecord<T>,
+): Promise<void> {
   await set(KEY, record);
 }
 
