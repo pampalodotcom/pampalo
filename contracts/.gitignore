@@ -4,7 +4,8 @@ dist
 # Hardhat
 cache
 artifacts
-typechain-types
+# TypeChain bindings — regenerated on every `hardhat compile`
+types/
 ignition/deployments
 
 # Env

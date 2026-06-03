@@ -73,6 +73,22 @@ export default defineConfig({
   },
 
   networks: {
+    // In-process mainnet fork for the pampalo.eth username tests. Forks
+    // real ENS + NameWrapper + the Chainlink ETH/USD feed so the registrar
+    // is exercised against production bytecode/state. Selected explicitly
+    // in test/pampalo.eth.test.ts via `network.connect('mainnetFork')`; the
+    // rest of the suite keeps using the default keyless network. Pin
+    // FORK_BLOCK for determinism + RPC caching; omitted => recent block.
+    mainnetFork: {
+      type: 'edr-simulated',
+      chainId: 1,
+      forking: {
+        url: alchemyUrl('eth-mainnet'),
+        ...(process.env.FORK_BLOCK
+          ? { blockNumber: Number(process.env.FORK_BLOCK) }
+          : {}),
+      },
+    },
     // Mainnet + Base + Sepolia mirror the chains the wallet half of
     // this project supports (see convex/uniswap.ts UNISWAP_ADDRESSES
     // and convex/seed.ts NETWORKS). Subdomains match convex's

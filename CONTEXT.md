@@ -314,10 +314,33 @@ breaking the EOA-anonymity property the relayer otherwise provides.
 The UX always surfaces this with an explicit confirm dialog before
 proceeding; never silent.
 
+### Naming / directory (Ethereum L1 / ENS)
+
+**Pampalo username**:
+`name.pampalo.eth` — an opt-in, paid ENS subname (NameWrapper-wrapped,
+deployed on Ethereum **L1** because that is where the ENS registry and
+NameWrapper live) that publicly resolves to a recipient's **Envelope
+key** and **Poseidon identifier** via a custom Pampalo resolver. A
+human-readable receiving handle: a sender types `alice.pampalo.eth`
+instead of pasting two hex blobs, then has exactly what's needed to
+ECIES-encrypt a note secret and set the note `owner`. Deliberately does
+**not** publish the **EVM address** (the resolver's `addr()` is left
+unset) — it is a private-money receiving handle, not a public-payment
+one. Records are written atomically at registration and are mutable by
+the current subname-NFT owner. Minting price and an address-allowlist
+discount root are tuned by `FINANCE_MANAGER_ROLE`; the Safe holds
+`DEFAULT_ADMIN_ROLE`. See ADR 0012.
+_Avoid_: bare "username" or "ENS name" (the user may hold unrelated
+ENS names); "envelope address" / "poseidon key" (the canonical nouns
+are **Envelope key** and **Poseidon identifier**).
+
 ## Relationships
 
 - A **mnemonic** deterministically produces one **EVM address**, one
   **envelope key**, and one **Poseidon identifier**.
+- A **Pampalo username** publishes a mnemonic's **Envelope key** and
+  **Poseidon identifier**; the same mnemonic's **EVM address** is
+  deliberately withheld from the directory.
 - A **wallet** has exactly one **mnemonic** and one or more **credentials**.
 - Each **credential** carries its own wrapped **DEK**; the wallet's
   **mnemonic** is encrypted once with the **DEK**.
@@ -328,4 +351,9 @@ proceeding; never silent.
 
 - "Address" is overloaded — the user has three: **EVM address** (public,
   on-chain handle), **Envelope key** (ECIES recipient), **Poseidon
-  identifier** (ZK-note recipient). Always say which.
+  identifier** (ZK-note recipient). Always say which. A **Pampalo
+  username** resolves to the latter two and never the **EVM address**.
+- "envelope address" / "poseidon key" were used for the values a
+  **Pampalo username** returns — resolved: the canonical nouns are
+  **Envelope key** (a secp256k1 public key, not an address) and
+  **Poseidon identifier** (an identifier, not a key).
