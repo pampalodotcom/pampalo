@@ -10,10 +10,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { deriveAddresses, type DerivedAddresses } from "@/lib/derive-addresses";
-import {
-  parseRecoveryPhrase,
-  type ParseResult,
-} from "@/lib/recovery-phrase";
+import { parseRecoveryPhrase, type ParseResult } from "@/lib/recovery-phrase";
 import { PrfNotSupportedError, recoverAccount } from "@/lib/auth-flow";
 import { cn } from "@/lib/utils";
 import { PrimaryButton } from "./PrimaryButton";
@@ -131,7 +128,9 @@ export function RecoverAccount({ onBack, onRecovered, onPrfMissing }: Props) {
           type="button"
           onClick={() => setRevealed((r) => !r)}
           disabled={busy}
-          aria-label={revealed ? "Hide recovery phrase" : "Show recovery phrase"}
+          aria-label={
+            revealed ? "Hide recovery phrase" : "Show recovery phrase"
+          }
           title={revealed ? "Hide" : "Show"}
           className={cn(
             "absolute right-2 top-2 inline-flex size-7 items-center justify-center",
@@ -175,9 +174,9 @@ export function RecoverAccount({ onBack, onRecovered, onPrfMissing }: Props) {
           consequence of the "fresh wallet row per recovery" reality
           (ADR 0003). Kept short on purpose. */}
       <p className="rounded-xl bg-paper-lo border border-line px-3 py-2 text-[12.5px] text-ink-soft">
-        Heads up: this enrols a new passkey on this device. Your saved
-        app preferences (currency, default chain) won’t carry over from
-        your other device.
+        Heads up: this enrols a new passkey on this device. Your saved app
+        preferences (currency, default chain) won’t carry over from your other
+        device.
       </p>
 
       <div className="flex flex-col gap-2.5">

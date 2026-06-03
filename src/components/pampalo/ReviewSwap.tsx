@@ -149,8 +149,7 @@ export function ReviewSwap({
   })();
   // Total cost falls back to just the pay-side USD when gas isn't
   // available yet — better than rendering "—" for the headline number.
-  const totalCostUsd =
-    payUsd !== null ? payUsd + (selectedGasUsd ?? 0) : null;
+  const totalCostUsd = payUsd !== null ? payUsd + (selectedGasUsd ?? 0) : null;
 
   // ── Slippage-floor / ceiling ────────────────────────────────────────
   // The Uniswap Router enforces `amountOutMinimum` (exactIn) or
@@ -346,9 +345,7 @@ function SideSummary({
           </span>
           <span className="mt-0.5 inline-flex items-center gap-1.5 text-[11px] text-ink-mute">
             {slug && <NetworkChip network={slug} />}
-            {usd !== null && (
-              <span className="font-mono">≈ {fmtUsd(usd)}</span>
-            )}
+            {usd !== null && <span className="font-mono">≈ {fmtUsd(usd)}</span>}
           </span>
         </div>
       </div>

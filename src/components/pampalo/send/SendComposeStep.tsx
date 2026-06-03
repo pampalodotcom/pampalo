@@ -97,9 +97,7 @@ export function SendComposeStep({
   // user-picked pair or the chain's native ETH as a default.
   const ethDefault = useMemo<TokenPair | null>(() => {
     if (chainId === null) return null;
-    return (
-      pairs.find((p) => p.address.toLowerCase() === ETH_SENTINEL) ?? null
-    );
+    return pairs.find((p) => p.address.toLowerCase() === ETH_SENTINEL) ?? null;
   }, [pairs, chainId]);
   const activeToken: TokenPair | null = useMemo(() => {
     if (mode === "private") {
@@ -135,9 +133,7 @@ export function SendComposeStep({
     if (!activeToken) return null;
     if (!activeToken.priceFeedShortId) return 1; // USDC / AUDD stables
     if (!prices) return null;
-    const feed = prices.find(
-      (p) => p.shortId === activeToken.priceFeedShortId,
-    );
+    const feed = prices.find((p) => p.shortId === activeToken.priceFeedShortId);
     if (!feed) return null;
     return Number(feed.answer) / 10 ** feed.feedDecimals;
   }, [activeToken, prices]);
@@ -188,10 +184,8 @@ export function SendComposeStep({
         },
     activeToken !== null && mode === "public" ? evmAddress : null,
   );
-  const notes = useSyncExternalStore(
-    subscribeNotes,
-    getNotesSnapshot,
-    () => getNotesSnapshot(),
+  const notes = useSyncExternalStore(subscribeNotes, getNotesSnapshot, () =>
+    getNotesSnapshot(),
   );
   const privSpendableWei = useMemo<bigint>(() => {
     if (mode !== "private" || chainId === null) return 0n;
@@ -212,7 +206,7 @@ export function SendComposeStep({
   const balanceWei =
     mode === "private"
       ? privSpendableWei
-      : pubBalance.data?.balanceWei ?? null;
+      : (pubBalance.data?.balanceWei ?? null);
   const tokenDecimals = activeToken?.decimals ?? 18;
   const balanceLabel =
     balanceWei !== null ? formatUnits(balanceWei, tokenDecimals) : null;
@@ -262,10 +256,7 @@ export function SendComposeStep({
         HEX_UNCOMPRESSED_PUBKEY.test(recipient.envelope));
 
   const reviewDisabled =
-    !amountValid ||
-    !recipientValid ||
-    chainId === null ||
-    activeToken === null;
+    !amountValid || !recipientValid || chainId === null || activeToken === null;
 
   return (
     <div className="flex flex-col gap-5 px-5 pt-2 pb-5 sm:px-6 sm:pt-3 sm:pb-6">
@@ -321,7 +312,7 @@ export function SendComposeStep({
             )}
           />
           <span className="shrink-0 text-[16px] font-medium text-ink-mute/70">
-            {inputUnit === "usd" ? "USD" : activeToken?.symbol ?? "ETH"}
+            {inputUnit === "usd" ? "USD" : (activeToken?.symbol ?? "ETH")}
           </span>
           {mode === "public" && pairs.length > 1 ? (
             <div className="relative">
@@ -376,7 +367,7 @@ export function SendComposeStep({
                 className="shrink-0 text-[10.5px] font-medium text-ink-mute underline-offset-2 hover:text-ink hover:underline"
               >
                 View in{" "}
-                {inputUnit === "token" ? "USD" : activeToken?.symbol ?? "ETH"}
+                {inputUnit === "token" ? "USD" : (activeToken?.symbol ?? "ETH")}
               </button>
             )}
           </div>
@@ -395,12 +386,8 @@ export function SendComposeStep({
           />
         ) : (
           <PrivateRecipient
-            poseidon={
-              recipient?.kind === "private" ? recipient.poseidon : ""
-            }
-            envelope={
-              recipient?.kind === "private" ? recipient.envelope : ""
-            }
+            poseidon={recipient?.kind === "private" ? recipient.poseidon : ""}
+            envelope={recipient?.kind === "private" ? recipient.envelope : ""}
             onChange={(p, e) =>
               onRecipientChange({ kind: "private", poseidon: p, envelope: e })
             }
@@ -485,9 +472,7 @@ function PublicRecipient({
         className={cn(
           "w-full bg-card border rounded-xl px-3 py-2.5",
           "font-mono text-[13px] text-ink outline-none",
-          valid
-            ? "border-[var(--pub)]"
-            : "border-line focus:border-ink-mute",
+          valid ? "border-[var(--pub)]" : "border-line focus:border-ink-mute",
         )}
       />
       <p className="mt-2 text-[11.5px] text-ink-mute">

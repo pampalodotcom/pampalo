@@ -123,9 +123,13 @@ async function main() {
     );
   }
 
-  console.log(`▸ Network        : ${net.name || "unknown"} (chainId ${chainId})`);
+  console.log(
+    `▸ Network        : ${net.name || "unknown"} (chainId ${chainId})`,
+  );
   console.log(`▸ Deployer       : ${deployer.address}`);
-  console.log(`▸ Deployer ETH   : ${(await provider.getBalance(deployer.address)).toString()}`);
+  console.log(
+    `▸ Deployer ETH   : ${(await provider.getBalance(deployer.address)).toString()}`,
+  );
   console.log("");
 
   // ── 1. Token mocks ──────────────────────────────────────────────────
@@ -157,10 +161,18 @@ async function main() {
   } = await connection.ignition.deploy(PampaloModule);
   const pampaloAddress = await pampalo.getAddress();
   console.log(`  Pampalo                  : ${pampaloAddress}`);
-  console.log(`  DepositVerifier          : ${await depositVerifier.getAddress()}`);
-  console.log(`  TransferVerifier         : ${await transferVerifier.getAddress()}`);
-  console.log(`  WithdrawVerifier         : ${await withdrawVerifier.getAddress()}`);
-  console.log(`  TransferExternalVerifier : ${await transferExternalVerifier.getAddress()}`);
+  console.log(
+    `  DepositVerifier          : ${await depositVerifier.getAddress()}`,
+  );
+  console.log(
+    `  TransferVerifier         : ${await transferVerifier.getAddress()}`,
+  );
+  console.log(
+    `  WithdrawVerifier         : ${await withdrawVerifier.getAddress()}`,
+  );
+  console.log(
+    `  TransferExternalVerifier : ${await transferExternalVerifier.getAddress()}`,
+  );
   await waitForNonce(provider, deployer.address, nonceBeforePampalo + 1);
   await sleep(STEP_SLEEP_MS);
 
@@ -221,8 +233,18 @@ async function main() {
   // ── 6. Register supported assets ────────────────────────────────────
   console.log("\n[6/7] Registering supported assets...");
   const launchSet = [
-    { name: "USDC", address: usdcAddress, oracle: usdcOracleAddress, decimals: 6 },
-    { name: "ETH", address: ETH_ADDRESS, oracle: ethOracleAddress, decimals: 18 },
+    {
+      name: "USDC",
+      address: usdcAddress,
+      oracle: usdcOracleAddress,
+      decimals: 6,
+    },
+    {
+      name: "ETH",
+      address: ETH_ADDRESS,
+      oracle: ethOracleAddress,
+      decimals: 18,
+    },
   ];
 
   for (const a of launchSet) {

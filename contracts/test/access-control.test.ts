@@ -22,9 +22,9 @@ describe("access control", () => {
 
   it("constructor grants deployer DEFAULT_ADMIN + all three operational roles", async () => {
     const deployer = Signers[0];
-    expect(await pampalo.hasRole(DEFAULT_ADMIN_ROLE, deployer.address)).to.equal(
-      true,
-    );
+    expect(
+      await pampalo.hasRole(DEFAULT_ADMIN_ROLE, deployer.address),
+    ).to.equal(true);
     expect(
       await pampalo.hasRole(VIGILANT_CITIZEN_ROLE, deployer.address),
     ).to.equal(true);
@@ -82,10 +82,9 @@ describe("access control", () => {
     const members = new Set<string>();
     for (let i = 0; i < Number(count); i++) {
       members.add(
-        ((await pampalo.getRoleMember(
-          VIGILANT_CITIZEN_ROLE,
-          i,
-        )) as string).toLowerCase(),
+        (
+          (await pampalo.getRoleMember(VIGILANT_CITIZEN_ROLE, i)) as string
+        ).toLowerCase(),
       );
     }
     expect(members.has(Signers[0].address.toLowerCase())).to.equal(true);

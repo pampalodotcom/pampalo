@@ -122,97 +122,99 @@ export function BalanceCard({
           )}
         </div>
         <div className="flex flex-col items-end gap-1">
-        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-          {onSend && (
-            <button
-              type="button"
-              onClick={onSend}
-              className={cn(
-                "inline-flex items-center justify-center gap-1.5",
-                "h-[28px] px-3 rounded-full",
-                "border border-line bg-paper-lo text-ink",
-                "text-[12px] font-semibold",
-                "transition-colors hover:bg-[var(--pub-soft)] hover:text-[var(--pub)]",
-                "focus-visible:outline-none focus-visible:ring-3",
-                "focus-visible:ring-[var(--pub-soft-2)]",
-              )}
-            >
-              <Send className="size-3.5" />
-              Send
-            </button>
-          )}
-          {onSwap && (
-            <button
-              type="button"
-              onClick={onSwap}
-              className={cn(
-                "inline-flex items-center justify-center gap-1.5",
-                "h-[28px] px-3 rounded-full",
-                "border border-line bg-paper-lo text-ink",
-                "text-[12px] font-semibold",
-                "transition-colors hover:bg-[var(--pub-soft)] hover:text-[var(--pub)]",
-                "focus-visible:outline-none focus-visible:ring-3",
-                "focus-visible:ring-[var(--pub-soft-2)]",
-              )}
-            >
-              <ArrowLeftRight className="size-3.5" />
-              Swap
-            </button>
-          )}
-          {onSync && (
-            <button
-              type="button"
-              onClick={onSync}
-              disabled={syncing}
-              aria-label={syncing ? "Syncing notes" : "Sync notes from Convex"}
-              className={cn(
-                "inline-flex items-center justify-center gap-1.5",
-                "h-[28px] px-3 rounded-full",
-                "border border-line bg-paper-lo text-ink",
-                "text-[12px] font-semibold",
-                "transition-colors hover:bg-[var(--priv-soft)] hover:text-[var(--priv)]",
-                "focus-visible:outline-none focus-visible:ring-3",
-                "focus-visible:ring-[var(--priv-soft-2)]",
-                "disabled:opacity-60 disabled:cursor-not-allowed",
-              )}
-            >
-              <RefreshCw
-                className={cn("size-3.5", syncing && "animate-spin")}
-              />
-              {syncShimmerActive ? (
-                <AnimatedShinyText className="text-ink mx-0 max-w-none">
-                  {syncing ? "Syncing…" : "Sync"}
-                </AnimatedShinyText>
-              ) : (
-                <span>Sync</span>
-              )}
-            </button>
-          )}
-          {/* <SyncIndicator /> — disabled: see note at top of file. */}
-        </div>
-        {syncShiny && (
-          // sm+ : nudge tucks inside the right-side column so it sits
-          // directly under the chip row. On mobile this column is only
-          // ~140px wide (the giant balance takes the rest), which
-          // wraps the phrase onto two lines — so we hide this copy
-          // below sm and render a full-width version as a sibling of
-          // the row instead.
-          <div className="hidden sm:flex items-center gap-1.5">
-            <Sparkles
-              className="size-3 text-[var(--pub-hi)] animate-twinkle"
-              aria-hidden
-            />
-            <TypingAnimation
-              words={STALE_NUDGE_PHRASES}
-              loop
-              typeSpeed={55}
-              deleteSpeed={28}
-              pauseDelay={1800}
-              cursorStyle="line"
-              className="text-[11.5px] font-medium text-[var(--pub)] leading-snug tracking-normal"
-            />
+          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+            {onSend && (
+              <button
+                type="button"
+                onClick={onSend}
+                className={cn(
+                  "inline-flex items-center justify-center gap-1.5",
+                  "h-[28px] px-3 rounded-full",
+                  "border border-line bg-paper-lo text-ink",
+                  "text-[12px] font-semibold",
+                  "transition-colors hover:bg-[var(--pub-soft)] hover:text-[var(--pub)]",
+                  "focus-visible:outline-none focus-visible:ring-3",
+                  "focus-visible:ring-[var(--pub-soft-2)]",
+                )}
+              >
+                <Send className="size-3.5" />
+                Send
+              </button>
+            )}
+            {onSwap && (
+              <button
+                type="button"
+                onClick={onSwap}
+                className={cn(
+                  "inline-flex items-center justify-center gap-1.5",
+                  "h-[28px] px-3 rounded-full",
+                  "border border-line bg-paper-lo text-ink",
+                  "text-[12px] font-semibold",
+                  "transition-colors hover:bg-[var(--pub-soft)] hover:text-[var(--pub)]",
+                  "focus-visible:outline-none focus-visible:ring-3",
+                  "focus-visible:ring-[var(--pub-soft-2)]",
+                )}
+              >
+                <ArrowLeftRight className="size-3.5" />
+                Swap
+              </button>
+            )}
+            {onSync && (
+              <button
+                type="button"
+                onClick={onSync}
+                disabled={syncing}
+                aria-label={
+                  syncing ? "Syncing notes" : "Sync notes from Convex"
+                }
+                className={cn(
+                  "inline-flex items-center justify-center gap-1.5",
+                  "h-[28px] px-3 rounded-full",
+                  "border border-line bg-paper-lo text-ink",
+                  "text-[12px] font-semibold",
+                  "transition-colors hover:bg-[var(--priv-soft)] hover:text-[var(--priv)]",
+                  "focus-visible:outline-none focus-visible:ring-3",
+                  "focus-visible:ring-[var(--priv-soft-2)]",
+                  "disabled:opacity-60 disabled:cursor-not-allowed",
+                )}
+              >
+                <RefreshCw
+                  className={cn("size-3.5", syncing && "animate-spin")}
+                />
+                {syncShimmerActive ? (
+                  <AnimatedShinyText className="text-ink mx-0 max-w-none">
+                    {syncing ? "Syncing…" : "Sync"}
+                  </AnimatedShinyText>
+                ) : (
+                  <span>Sync</span>
+                )}
+              </button>
+            )}
+            {/* <SyncIndicator /> — disabled: see note at top of file. */}
           </div>
-        )}
+          {syncShiny && (
+            // sm+ : nudge tucks inside the right-side column so it sits
+            // directly under the chip row. On mobile this column is only
+            // ~140px wide (the giant balance takes the rest), which
+            // wraps the phrase onto two lines — so we hide this copy
+            // below sm and render a full-width version as a sibling of
+            // the row instead.
+            <div className="hidden sm:flex items-center gap-1.5">
+              <Sparkles
+                className="size-3 text-[var(--pub-hi)] animate-twinkle"
+                aria-hidden
+              />
+              <TypingAnimation
+                words={STALE_NUDGE_PHRASES}
+                loop
+                typeSpeed={55}
+                deleteSpeed={28}
+                pauseDelay={1800}
+                cursorStyle="line"
+                className="text-[11.5px] font-medium text-[var(--pub)] leading-snug tracking-normal"
+              />
+            </div>
+          )}
         </div>
       </div>
 

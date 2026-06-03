@@ -48,7 +48,11 @@ const PAL = {
   },
 };
 
-export function BeachScene({ height = 420, className, theme = "light" }: Props) {
+export function BeachScene({
+  height = 420,
+  className,
+  theme = "light",
+}: Props) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const themeTargetRef = useRef<number>(theme === "dark" ? 1 : 0);
 
@@ -327,11 +331,7 @@ export function BeachScene({ height = 420, className, theme = "light" }: Props) 
     // ─── Resize observer ────────────────────────────────────────────────
     const positionUmbrella = (w: number) => {
       const aspect = w / height;
-      const tWide = THREE.MathUtils.clamp(
-        (aspect - 0.55) / (1.8 - 0.55),
-        0,
-        1,
-      );
+      const tWide = THREE.MathUtils.clamp((aspect - 0.55) / (1.8 - 0.55), 0, 1);
       umbrella.group.position.x = THREE.MathUtils.lerp(0.4, 3.4, tWide);
       umbrella.group.position.z = THREE.MathUtils.lerp(5.2, 4.8, tWide);
       umbrella.group.scale.setScalar(THREE.MathUtils.lerp(0.78, 0.95, tWide));

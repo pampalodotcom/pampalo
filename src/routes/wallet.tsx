@@ -136,7 +136,6 @@ function Wallet() {
             />
           </section>
         )}
-
       </div>
     </main>
   );
@@ -164,7 +163,10 @@ type PriceRow = {
 };
 
 /** USD per whole unit of the token, or null if the feed hasn't loaded. */
-function usdPriceFor(token: Token, prices: PriceRow[] | undefined): number | null {
+function usdPriceFor(
+  token: Token,
+  prices: PriceRow[] | undefined,
+): number | null {
   if (!token.priceFeedShortId) {
     // Stables (USDC) — treated as $1. Real stable depeg detection would
     // live elsewhere; for the dashboard, $1 is the right default.
@@ -196,7 +198,10 @@ function Dashboard({
   // Forced empty when the network filter is "all": multi-chain rows
   // can't decide which deployment to shield through, so we only expose
   // the slider once the user has picked a specific network.
-  const shieldablePairsRaw = useQuery(api.shieldQueue.store.shieldablePairs, {});
+  const shieldablePairsRaw = useQuery(
+    api.shieldQueue.store.shieldablePairs,
+    {},
+  );
   const [testnetsEnabled] = useTestnetsEnabled();
 
   const [filter, setFilter] = useState<NetworkFilter>("all");
@@ -362,9 +367,7 @@ function Dashboard({
   );
   const tokens = useMemo(
     () =>
-      tokensRaw?.filter(
-        (t) => testnetsEnabled || !isTestnetChainId(t.chainId),
-      ),
+      tokensRaw?.filter((t) => testnetsEnabled || !isTestnetChainId(t.chainId)),
     [tokensRaw, testnetsEnabled],
   );
 
@@ -428,8 +431,8 @@ function Dashboard({
               Your assets
             </h2>
             <p className="text-[12px] text-ink-mute">
-              Each balance is split between what’s visible on-chain and
-              what’s shielded.
+              Each balance is split between what’s visible on-chain and what’s
+              shielded.
             </p>
           </div>
           <NetworkFilterTabs
@@ -584,12 +587,7 @@ function BalanceCardConnected({
   }, [staleSync]);
   if (!tokens) {
     return (
-      <BalanceCard
-        totalUsd={null}
-        publicUsd={null}
-        privateUsd={null}
-        loading
-      />
+      <BalanceCard totalUsd={null} publicUsd={null} privateUsd={null} loading />
     );
   }
   // Same hook-count protection as AssetGroupRow below: BalanceCardWithBalances
@@ -636,10 +634,7 @@ function BalanceCardConnected({
         envelope={envelope}
         poseidon={poseidon}
       />
-      <ReceiveSheet
-        open={receiveOpen}
-        onOpenChange={setReceiveOpen}
-      />
+      <ReceiveSheet open={receiveOpen} onOpenChange={setReceiveOpen} />
     </>
   );
 }
@@ -737,9 +732,7 @@ function BalanceCardWithBalances({
   // dropped out of the catalogue.
   for (const b of privateBuckets) {
     const token = tokens.find(
-      (t) =>
-        t.chainId === b.chainId &&
-        t.address.toLowerCase() === b.asset,
+      (t) => t.chainId === b.chainId && t.address.toLowerCase() === b.asset,
     );
     if (!token) continue;
     const price = usdPriceFor(token, prices ?? undefined);
@@ -908,9 +901,7 @@ function AssetGroupRow({
     const remainingUsd = Number(budget.remainingUsdCents) / 100;
     const maxShieldable = (remainingUsd / priceUsd) * 0.99;
     const originalPub =
-      sumWei("pub") !== null
-        ? Number(sumWei("pub")!) / 10 ** decimals
-        : 0;
+      sumWei("pub") !== null ? Number(sumWei("pub")!) / 10 ** decimals : 0;
     minPub = Math.max(0, originalPub - maxShieldable);
   }
 
@@ -932,9 +923,7 @@ function AssetGroupRow({
         // Finalise CTA wiring lands in a follow-up — for now we
         // just point the user at /sentry where Sponsor finalise
         // already works for any unlocked shield.
-        toast(
-          "Finalise on /sentry for now — wallet-side CTA lands next.",
-        );
+        toast("Finalise on /sentry for now — wallet-side CTA lands next.");
         console.log("[finalise]", note);
       }}
       onMove={(payload) => {

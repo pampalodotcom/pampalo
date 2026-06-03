@@ -1,17 +1,17 @@
-import { createRouter } from '@tanstack/react-router'
-import { QueryClient } from '@tanstack/react-query'
-import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
-import { ConvexQueryClient } from '@convex-dev/react-query'
-import { ConvexProvider } from 'convex/react'
-import { routeTree } from './routeTree.gen'
-import { setConvexClient } from './lib/convex-client'
+import { createRouter } from "@tanstack/react-router";
+import { QueryClient } from "@tanstack/react-query";
+import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
+import { ConvexQueryClient } from "@convex-dev/react-query";
+import { ConvexProvider } from "convex/react";
+import { routeTree } from "./routeTree.gen";
+import { setConvexClient } from "./lib/convex-client";
 
 export function getRouter() {
-  const CONVEX_URL = (import.meta as any).env.VITE_CONVEX_URL!
+  const CONVEX_URL = (import.meta as any).env.VITE_CONVEX_URL!;
   if (!CONVEX_URL) {
-    console.error('missing envar VITE_CONVEX_URL')
+    console.error("missing envar VITE_CONVEX_URL");
   }
-  const convexQueryClient = new ConvexQueryClient(CONVEX_URL)
+  const convexQueryClient = new ConvexQueryClient(CONVEX_URL);
 
   const queryClient: QueryClient = new QueryClient({
     defaultOptions: {
@@ -20,13 +20,13 @@ export function getRouter() {
         queryFn: convexQueryClient.queryFn(),
       },
     },
-  })
-  convexQueryClient.connect(queryClient)
-  setConvexClient(convexQueryClient.convexClient)
+  });
+  convexQueryClient.connect(queryClient);
+  setConvexClient(convexQueryClient.convexClient);
 
   const router = createRouter({
     routeTree,
-    defaultPreload: 'intent',
+    defaultPreload: "intent",
     context: { queryClient },
     scrollRestoration: true,
     Wrap: ({ children }) => (
@@ -34,8 +34,8 @@ export function getRouter() {
         {children}
       </ConvexProvider>
     ),
-  })
-  setupRouterSsrQueryIntegration({ router, queryClient })
+  });
+  setupRouterSsrQueryIntegration({ router, queryClient });
 
-  return router
+  return router;
 }

@@ -213,10 +213,7 @@ export function SplitSlider({
         touchAction: "none",
       }}
     >
-      <div
-        className="split-slider-bar-wrap"
-        style={{ height }}
-      >
+      <div className="split-slider-bar-wrap" style={{ height }}>
         <SplitBar
           publicValue={safePub}
           privateValue={priv}

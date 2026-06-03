@@ -78,7 +78,13 @@ describe("supported assets", () => {
 
     await usdcDeployment.approve(await pampalo.getAddress(), assetAmount);
     await expect(
-      pampalo.shield(assetId, assetAmount, proof.proof, proof.publicInputs, "0x"),
+      pampalo.shield(
+        assetId,
+        assetAmount,
+        proof.proof,
+        proof.publicInputs,
+        "0x",
+      ),
     ).to.be.revertedWith("asset not supported");
 
     // Re-enable for the rest of the suite
@@ -99,7 +105,13 @@ describe("supported assets", () => {
     await usdcOracle.setStale(true);
     await usdcDeployment.approve(await pampalo.getAddress(), assetAmount);
     await expect(
-      pampalo.shield(assetId, assetAmount, proof.proof, proof.publicInputs, "0x"),
+      pampalo.shield(
+        assetId,
+        assetAmount,
+        proof.proof,
+        proof.publicInputs,
+        "0x",
+      ),
     ).to.be.revertedWith("MockOracle: stale price");
     await usdcOracle.setStale(false);
   });

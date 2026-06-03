@@ -44,7 +44,13 @@ describe("monthly caps", () => {
 
     const { assetId, proof, amount } = await buildShield();
     await usdcDeployment.approve(await pampalo.getAddress(), amount);
-    await pampalo.shield(assetId, amount, proof.proof, proof.publicInputs, "0x");
+    await pampalo.shield(
+      assetId,
+      amount,
+      proof.proof,
+      proof.publicInputs,
+      "0x",
+    );
 
     const after = await pampalo.shieldUsage(Signers[0].address);
     // 5 USDC * 100 cents/USDC = 500 cents
@@ -59,7 +65,13 @@ describe("monthly caps", () => {
     await usdcDeployment.approve(await pampalo.getAddress(), amount);
 
     const id_ = (await pampalo.nextPendingId()) as bigint;
-    await pampalo.shield(assetId, amount, proof.proof, proof.publicInputs, "0x");
+    await pampalo.shield(
+      assetId,
+      amount,
+      proof.proof,
+      proof.publicInputs,
+      "0x",
+    );
 
     // Charged
     const mid = await pampalo.shieldUsage(Signers[0].address);

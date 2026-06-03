@@ -148,8 +148,13 @@ export const refreshPrices = internalAction({
     }
 
     if (results.length === 0) return { fetched: feeds.length, written: 0 };
-    const { appended, dedupedHistory }: { appended: number; dedupedHistory: number } =
-      await ctx.runMutation(internal.prices.feeds._writeRefresh, { results });
+    const {
+      appended,
+      dedupedHistory,
+    }: { appended: number; dedupedHistory: number } = await ctx.runMutation(
+      internal.prices.feeds._writeRefresh,
+      { results },
+    );
     return {
       fetched: feeds.length,
       written: results.length,
@@ -218,7 +223,11 @@ export const refreshGas = internalAction({
           const gasPriceWei = BigInt(gasPriceResp.result).toString();
           let baseFeeWei: string | undefined;
           let priorityFeeWei: string | undefined;
-          if (feeHistoryResp && !feeHistoryResp.error && feeHistoryResp.result) {
+          if (
+            feeHistoryResp &&
+            !feeHistoryResp.error &&
+            feeHistoryResp.result
+          ) {
             const fh = feeHistoryResp.result;
             // baseFeePerGas has length = blocks+1 — index 0 is "latest base fee".
             const bf = fh.baseFeePerGas?.[0];
@@ -240,8 +249,13 @@ export const refreshGas = internalAction({
     );
 
     if (results.length === 0) return { fetched: networks.length, written: 0 };
-    const { appended, dedupedHistory }: { appended: number; dedupedHistory: number } =
-      await ctx.runMutation(internal.prices.gas._writeRefresh, { results });
+    const {
+      appended,
+      dedupedHistory,
+    }: { appended: number; dedupedHistory: number } = await ctx.runMutation(
+      internal.prices.gas._writeRefresh,
+      { results },
+    );
     return {
       fetched: networks.length,
       written: results.length,
@@ -258,7 +272,9 @@ export const refreshPricesNow = internalAction({
   args: {},
   handler: async (ctx): Promise<unknown> =>
     // skipShadow so manual runs don't spawn a self-scheduling chain.
-    await ctx.runAction(internal.prices.refresh.refreshPrices, { skipShadow: true }),
+    await ctx.runAction(internal.prices.refresh.refreshPrices, {
+      skipShadow: true,
+    }),
 });
 
 export const refreshGasNow = internalAction({

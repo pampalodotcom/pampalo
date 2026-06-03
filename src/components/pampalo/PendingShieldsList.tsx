@@ -109,10 +109,7 @@ export function PendingShieldsList({
               )}
             >
               <span className="inline-flex items-center gap-2 text-[12px] text-ink">
-                <Sparkles
-                  className="size-3.5 text-[var(--priv)]"
-                  aria-hidden
-                />
+                <Sparkles className="size-3.5 text-[var(--priv)]" aria-hidden />
                 <span className="font-mono font-semibold">
                   {fmtAmount(n.amount, decimals, dp)} {symbol}
                 </span>

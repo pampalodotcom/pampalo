@@ -52,9 +52,7 @@ export function useShieldQueueSync(evmAddress: string | null): void {
   }, [rows]);
 }
 
-async function reconcile(
-  rows: Doc<"shieldQueueEntries">[],
-): Promise<void> {
+async function reconcile(rows: Doc<"shieldQueueEntries">[]): Promise<void> {
   for (const row of rows) {
     const existing = await findNote(row.leafCommitment);
     if (!existing) {
@@ -64,9 +62,7 @@ async function reconcile(
     }
 
     const targetIdbState = convexStateToIdb(row.state);
-    if (
-      ADVANCEMENT_RANK[targetIdbState] <= ADVANCEMENT_RANK[existing.state]
-    ) {
+    if (ADVANCEMENT_RANK[targetIdbState] <= ADVANCEMENT_RANK[existing.state]) {
       // Forward-only — no retraction, no redundant write. Includes the
       // common case where IDB already mirrors Convex exactly.
       // Still patch identity fields if Convex has a more accurate
@@ -82,8 +78,7 @@ async function reconcile(
         patch.unlockTime = row.unlockTime;
       }
       if (
-        existing.queuedTxHash?.toLowerCase() !==
-        row.queuedTxHash.toLowerCase()
+        existing.queuedTxHash?.toLowerCase() !== row.queuedTxHash.toLowerCase()
       ) {
         patch.queuedTxHash = row.queuedTxHash;
       }

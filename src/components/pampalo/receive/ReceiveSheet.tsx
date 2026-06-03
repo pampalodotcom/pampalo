@@ -3,11 +3,7 @@ import { QrCode } from "lucide-react";
 import { VisuallyHidden } from "radix-ui";
 import { useIsDesktop } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { NetworkChoice } from "../deposit/NetworkCard";
 import { ReceivePickStep } from "./ReceivePickStep";
@@ -66,10 +62,7 @@ export function ReceiveSheet({ open, onOpenChange }: Props) {
           }}
         />
       ) : network ? (
-        <ReceiveQRStep
-          network={network}
-          onBack={() => setStep("pick")}
-        />
+        <ReceiveQRStep network={network} onBack={() => setStep("pick")} />
       ) : null}
     </div>
   );

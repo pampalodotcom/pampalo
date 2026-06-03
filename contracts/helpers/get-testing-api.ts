@@ -45,9 +45,8 @@ export const getTestingAPI = async () => {
   await pampalo.setPoseidon(poseidon2Address);
 
   // Oracles + supported-asset registration
-  const MockOracleFactory = await connection.ethers.getContractFactory(
-    "MockOracle",
-  );
+  const MockOracleFactory =
+    await connection.ethers.getContractFactory("MockOracle");
   const usdcOracle = (await MockOracleFactory.deploy(
     100n,
   )) as unknown as ethers.Contract;
@@ -62,7 +61,11 @@ export const getTestingAPI = async () => {
     await usdcOracle.getAddress(),
     6,
   );
-  await pampalo.addSupportedAsset(ETH_ADDRESS, await ethOracle.getAddress(), 18);
+  await pampalo.addSupportedAsset(
+    ETH_ADDRESS,
+    await ethOracle.getAddress(),
+    18,
+  );
 
   const {
     shieldNoir,

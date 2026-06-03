@@ -56,9 +56,7 @@ export async function listTransactionsForChain(
   return all.filter((t) => t.chainId === chainId);
 }
 
-export async function appendTransaction(
-  tx: StoredTransaction,
-): Promise<void> {
+export async function appendTransaction(tx: StoredTransaction): Promise<void> {
   const rec = await read();
   // Dedupe by composite key. A re-submit of the same hash on the same
   // chain replaces the existing row so submittedAt advances.

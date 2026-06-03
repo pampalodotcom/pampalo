@@ -1,10 +1,10 @@
-import { getShieldDetails, shieldAndExecute } from "@/helpers/functions/shield.js";
+import {
+  getShieldDetails,
+  shieldAndExecute,
+} from "@/helpers/functions/shield.js";
 import { getNoteHash } from "@/helpers/functions/get-note-hash.js";
 import { getNullifier } from "@/helpers/functions/get-nullifier.js";
-import {
-  getTransferDetails,
-  transfer,
-} from "@/helpers/functions/transfer.js";
+import { getTransferDetails, transfer } from "@/helpers/functions/transfer.js";
 import { getTestingAPI } from "@/helpers/get-testing-api.js";
 import {
   createInputNote,

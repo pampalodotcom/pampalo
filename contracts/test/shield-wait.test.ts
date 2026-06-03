@@ -62,9 +62,7 @@ describe("shield wait queue", () => {
     );
     await expect(tx).to.emit(pampalo, "ShieldQueued");
 
-    const usdcBalanceAfter = await usdcDeployment.balanceOf(
-      Signers[0].address,
-    );
+    const usdcBalanceAfter = await usdcDeployment.balanceOf(Signers[0].address);
     expect(usdcBalanceAfter).to.equal(usdcBalanceBefore - assetAmount);
 
     // Leaf NOT yet inserted — root unchanged
@@ -172,9 +170,8 @@ describe("shield wait queue", () => {
     );
 
     const stranger = Signers[3];
-    await expect(
-      pampalo.connect(stranger).contestShield(id_, "ofac listed"),
-    ).to.be.rejected;
+    await expect(pampalo.connect(stranger).contestShield(id_, "ofac listed")).to
+      .be.rejected;
 
     // Grant the citizen role and contest
     await pampalo.grantRole(VIGILANT_CITIZEN_ROLE, stranger.address);
