@@ -67,9 +67,7 @@ const PAGE_SIZE = 50;
 const REFRESH_THROTTLE_MS = 5000;
 
 type ShieldQueueEntry = Doc<"shieldQueueEntries">;
-type Deployment = NonNullable<
-  ReturnType<typeof useDeploymentsList>
->[number];
+type Deployment = NonNullable<ReturnType<typeof useDeploymentsList>>[number];
 
 function useDeploymentsList() {
   return useQuery(api.shieldQueue.store.enabledDeployments, {});
@@ -125,8 +123,9 @@ function Sentry() {
   };
 
   // Sheet payloads — null when closed.
-  const [contestPayload, setContestPayload] =
-    useState<ContestPayload | null>(null);
+  const [contestPayload, setContestPayload] = useState<ContestPayload | null>(
+    null,
+  );
   const [actionPayload, setActionPayload] =
     useState<ActionConfirmPayload | null>(null);
 
@@ -163,9 +162,7 @@ function Sentry() {
 
   // Manual refresh — calls the existing one-shot indexer action.
   // 5s client-side throttle so a stuck user can't hammer the cron.
-  const refresh = useAction(
-    api.shieldQueue.refresh.refreshShieldQueueNow,
-  );
+  const refresh = useAction(api.shieldQueue.refresh.refreshShieldQueueNow);
   const [refreshing, setRefreshing] = useState(false);
   const lastRefreshAtRef = useRef<number | null>(null);
 
@@ -239,9 +236,8 @@ function Sentry() {
               </h1>
             </div>
             <p className="mt-1 text-[12.5px] text-ink-mute">
-              Pending shields across every Pampalo deployment. Vigilant
-              citizens contest; anyone can sponsor a finalise after the
-              wait expires.
+              Pending shields across every Pampalo deployment. Vigilant citizens
+              contest; anyone can sponsor a finalise after the wait expires.
             </p>
           </div>
 
@@ -268,8 +264,8 @@ function Sentry() {
               "text-[12.5px] text-ink-soft",
             )}
           >
-            Viewing as a guest. Sign in with your passkey to contest,
-            sponsor, or fast-track shields.
+            Viewing as a guest. Sign in with your passkey to contest, sponsor,
+            or fast-track shields.
           </div>
         )}
 
@@ -292,12 +288,8 @@ function Sentry() {
           authed={auth.state.status === "authenticated"}
           rolesByChainId={rolesByChainId}
           onContest={(row) => setContestPayload({ row })}
-          onSponsor={(row) =>
-            setActionPayload({ kind: "sponsor", row })
-          }
-          onFastTrack={(row) =>
-            setActionPayload({ kind: "fastTrack", row })
-          }
+          onSponsor={(row) => setActionPayload({ kind: "sponsor", row })}
+          onFastTrack={(row) => setActionPayload({ kind: "fastTrack", row })}
         />
 
         {/* Invisible role probes — one per enabled deployment. They
@@ -356,12 +348,11 @@ function Sentry() {
             </span>
           )}
 
-          {paginated.status === "Exhausted" &&
-            paginated.results.length > 0 && (
-              <span className="text-[12px] text-ink-mute">
-                Showing all {paginated.results.length} queued shields.
-              </span>
-            )}
+          {paginated.status === "Exhausted" && paginated.results.length > 0 && (
+            <span className="text-[12px] text-ink-mute">
+              Showing all {paginated.results.length} queued shields.
+            </span>
+          )}
         </div>
       </section>
 
@@ -605,9 +596,8 @@ function QueueEmpty() {
         No shields in the queue right now.
       </h2>
       <p className="mx-auto mt-2 max-w-md text-[12.5px] text-ink-mute">
-        Anything submitted to a Pampalo deployment will appear here
-        within 30 seconds of confirming on-chain. The page updates
-        automatically.
+        Anything submitted to a Pampalo deployment will appear here within 30
+        seconds of confirming on-chain. The page updates automatically.
       </p>
     </div>
   );
@@ -675,12 +665,11 @@ function QueueTable({
         <TableBody>
           {results.map((row) => {
             const dep = deploymentChainById.get(row.deploymentId);
-            const token =
-              dep
-                ? tokenByChainAsset.get(
-                    `${dep.chainId}:${row.asset.toLowerCase()}`,
-                  )
-                : undefined;
+            const token = dep
+              ? tokenByChainAsset.get(
+                  `${dep.chainId}:${row.asset.toLowerCase()}`,
+                )
+              : undefined;
             return (
               <TableRow
                 key={row._id}
@@ -764,12 +753,9 @@ function QueueCards({
     <ul className="flex flex-col gap-3">
       {results.map((row) => {
         const dep = deploymentChainById.get(row.deploymentId);
-        const token =
-          dep
-            ? tokenByChainAsset.get(
-                `${dep.chainId}:${row.asset.toLowerCase()}`,
-              )
-            : undefined;
+        const token = dep
+          ? tokenByChainAsset.get(`${dep.chainId}:${row.asset.toLowerCase()}`)
+          : undefined;
         return (
           <li key={row._id}>
             <div className="rounded-2xl card-cream p-4">
@@ -787,11 +773,7 @@ function QueueCards({
                   </div>
                 </div>
                 <div className="text-right">
-                  <AmountCell
-                    amount={row.amount}
-                    token={token}
-                    alignRight
-                  />
+                  <AmountCell amount={row.amount} token={token} alignRight />
                 </div>
               </div>
               <div className="mt-3 flex items-center justify-between text-[11.5px] text-ink-mute">
@@ -1050,9 +1032,7 @@ function RowActions({
   // hint so the row doesn't look broken.
   if (!showContest && !showFastTrack && !showSponsor) {
     return (
-      <span className="text-[11px] text-ink-mute">
-        No role on this chain
-      </span>
+      <span className="text-[11px] text-ink-mute">No role on this chain</span>
     );
   }
 

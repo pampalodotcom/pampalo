@@ -163,7 +163,9 @@ export const addAsset = internalMutation({
     const existing = await ctx.db
       .query("pampaloAssets")
       .withIndex("by_deployment_and_token", (q) =>
-        q.eq("deploymentId", args.deploymentId).eq("tokenAddress", tokenAddress),
+        q
+          .eq("deploymentId", args.deploymentId)
+          .eq("tokenAddress", tokenAddress),
       )
       .unique();
 
@@ -187,7 +189,9 @@ export const addAsset = internalMutation({
 
 export const seedAll = internalMutation({
   args: {},
-  handler: async (ctx): Promise<{
+  handler: async (
+    ctx,
+  ): Promise<{
     deployments: number;
     assets: number;
   }> => {
@@ -254,9 +258,7 @@ export const seedAll = internalMutation({
         const existingAsset = await ctx.db
           .query("pampaloAssets")
           .withIndex("by_deployment_and_token", (q) =>
-            q
-              .eq("deploymentId", deploymentId)
-              .eq("tokenAddress", tokenAddress),
+            q.eq("deploymentId", deploymentId).eq("tokenAddress", tokenAddress),
           )
           .unique();
 

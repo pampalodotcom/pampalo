@@ -2,7 +2,10 @@ import { useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Copy, Loader2, Share2 } from "lucide-react";
 import { toast } from "sonner";
-import { AccountAvatar, shortAddress } from "@/components/pampalo/AccountAvatar";
+import {
+  AccountAvatar,
+  shortAddress,
+} from "@/components/pampalo/AccountAvatar";
 import { AddressWell } from "@/components/pampalo/AddressWell";
 import { BeachScene } from "@/components/pampalo/BeachScene";
 import { QRCanvas } from "@/components/pampalo/deposit/QRCanvas";
@@ -120,7 +123,7 @@ function SharePage() {
     // Fallback for desktop / browsers without share API: copy the
     // current URL and tell the user.
     void copy(shareUrl);
-    toast("Link copied — paste it wherever you want to share.");
+    toast("Link copied - paste it wherever you want to share.");
   };
 
   const hasAnyAddress = Boolean(
@@ -211,9 +214,7 @@ function SharePage() {
                   label="Private"
                   hint="Poseidon2 (ZK identity)"
                   value={search.poseidon}
-                  className={
-                    search.evm || search.envelope ? "mt-3" : undefined
-                  }
+                  className={search.evm || search.envelope ? "mt-3" : undefined}
                 />
               )}
 

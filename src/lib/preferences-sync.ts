@@ -23,6 +23,7 @@ import {
   getLastSeenRevision,
   isDirty,
   markPushed,
+  mergePrefs,
   type Prefs,
 } from "./preferences";
 import { runGetForPrf } from "./passkey";
@@ -43,27 +44,33 @@ export async function pullDuringCeremony(
   dek: CryptoKey,
   sessionToken: string,
 ): Promise<void> {
-  // v1 conflict policy: if local has unsync'd changes, do NOT overwrite
-  // with upstream. The subsequent push wins. See CLIENT_SIDE_FIRST.md.
-  if (isDirty()) return;
-
   const convex = getConvexClient();
   if (!convex) return;
 
-  const row = await convex.query(api.preferences.mutations.getEncryptedPreferences, {
-    sessionToken,
-  });
+  const row = await convex.query(
+    api.preferences.mutations.getEncryptedPreferences,
+    {
+      sessionToken,
+    },
+  );
   if (!row) return;
 
   const lastSeen = getLastSeenRevision();
   if (lastSeen !== null && row.revision <= lastSeen) return;
 
-  const prefs = await decryptJsonWithDek<Prefs>(
+  const upstream = await decryptJsonWithDek<Prefs>(
     dek,
     coerceToBuffer(row.ciphertext),
     coerceToBuffer(row.iv),
   );
-  applyPulledPrefs(prefs, row.revision);
+
+  // Conflict policy: field-aware merge (mergePrefs). When local is dirty
+  // its values win per-field (current device wins LWW), except monotonic
+  // fields which always take max. `upstream` becomes the dirty-diff
+  // baseline: if the merge still differs from it, the record stays dirty
+  // and the caller's subsequent push converges both sides.
+  const merged = mergePrefs(upstream, getCurrentPrefsSnapshot(), isDirty());
+  applyPulledPrefs(merged, row.revision, upstream);
 }
 
 export async function pushDuringCeremony(
@@ -106,9 +113,14 @@ export async function syncOnTxSign(
   dek: CryptoKey,
   sessionToken: string,
 ): Promise<void> {
-  if (!isDirty()) return;
   try {
-    await pushDuringCeremony(dek, sessionToken);
+    // Pull-merge first so a tx ceremony also freshens this device (the
+    // revision guard makes the no-change case one cheap query), then
+    // push any local diff.
+    await pullDuringCeremony(dek, sessionToken);
+    if (isDirty()) {
+      await pushDuringCeremony(dek, sessionToken);
+    }
   } catch (e) {
     console.warn("preferences-sync: tx-sign sync failed", e);
   }
@@ -149,26 +161,12 @@ export async function syncExplicit(): Promise<void> {
   const dekKey = await importDekBytes(new Uint8Array(dekBytes), false);
 
   try {
-    // Force a pull even when dirty — explicit sync is the moment the user
-    // signals "merge with upstream now." Push afterwards persists their
-    // local view (LWW with current-device winning).
-    const convex = getConvexClient();
-    if (convex) {
-      const row = await convex.query(api.preferences.mutations.getEncryptedPreferences, {
-        sessionToken,
-      });
-      if (row) {
-        const upstream = await decryptJsonWithDek<Prefs>(
-          dekKey,
-          coerceToBuffer(row.ciphertext),
-          coerceToBuffer(row.iv),
-        );
-        applyPulledPrefs(
-          isDirty() ? { ...upstream, ...getCurrentPrefsSnapshot() } : upstream,
-          row.revision,
-        );
-      }
-    }
+    // pullDuringCeremony merges upstream + local (field-aware, local wins
+    // LWW when dirty) and keeps the dirty flag set across the merge, so
+    // the push below persists the merged view upstream. (The previous
+    // inline version cleared dirty during the pull and then skipped the
+    // push — merged local changes never reached the server.)
+    await pullDuringCeremony(dekKey, sessionToken);
     if (isDirty()) {
       await pushDuringCeremony(dekKey, sessionToken);
     }

@@ -44,9 +44,10 @@ describe("parseRecoveryPhrase", () => {
   });
 
   test("wrong count (too many)", () => {
-    expect(
-      parseRecoveryPhrase(`${ABANDON_PHRASE} extra extra`),
-    ).toEqual({ status: "wrong-count", count: 14 });
+    expect(parseRecoveryPhrase(`${ABANDON_PHRASE} extra extra`)).toEqual({
+      status: "wrong-count",
+      count: 14,
+    });
   });
 
   test("invalid-word names the offending token", () => {

@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Search, X } from "lucide-react";
-import { usePrivateBalance, usePublicBalance, weiToNumber } from "@/lib/balances";
+import {
+  usePrivateBalance,
+  usePublicBalance,
+  weiToNumber,
+} from "@/lib/balances";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 import { AssetMark } from "./AssetMark";

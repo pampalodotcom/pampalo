@@ -26,10 +26,7 @@ export function txUrl(chainId: number, txHash: string): string | null {
 }
 
 /** Full URL to an address page on the chain's explorer, or null. */
-export function addressUrl(
-  chainId: number,
-  address: string,
-): string | null {
+export function addressUrl(chainId: number, address: string): string | null {
   const base = explorerBase(chainId);
   if (!base) return null;
   return `${base}/address/${address}`;

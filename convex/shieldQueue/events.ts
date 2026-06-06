@@ -55,7 +55,7 @@ export type RawLog = {
   address: string;
   topics: string[];
   data: string;
-  blockNumber: string;     // hex
+  blockNumber: string; // hex
   blockHash: string;
   transactionHash: string;
   transactionIndex: string;
@@ -82,12 +82,12 @@ function uint256FromTopic(topic: string): string {
 
 export type DecodedShieldQueued = {
   kind: "ShieldQueued";
-  pendingId: string;           // decimal
-  shielder: string;            // lowercased
-  asset: string;               // lowercased
-  amount: string;              // decimal
-  leafCommitment: string;      // 0x… 32-byte hex (lowercased)
-  unlockTime: number;          // unix seconds — uint64 fits in JS number
+  pendingId: string; // decimal
+  shielder: string; // lowercased
+  asset: string; // lowercased
+  amount: string; // decimal
+  leafCommitment: string; // 0x… 32-byte hex (lowercased)
+  unlockTime: number; // unix seconds — uint64 fits in JS number
   encryptedPayload: ArrayBuffer; // raw ECIES bytes
 };
 
@@ -99,13 +99,13 @@ export type DecodedShieldExecuted = {
 export type DecodedShieldCancelled = {
   kind: "ShieldCancelled";
   pendingId: string;
-  by: string;                  // lowercased
+  by: string; // lowercased
 };
 
 export type DecodedShieldContested = {
   kind: "ShieldContested";
   pendingId: string;
-  by: string;                  // lowercased
+  by: string; // lowercased
   reason: string;
 };
 
@@ -122,9 +122,9 @@ export type DecodedAssetDisabled = {
 
 export type DecodedLeafInserted = {
   kind: "LeafInserted";
-  epoch: number;              // tree index (which sub-tree this leaf lives in)
-  leafIndex: number;          // position within that epoch's tree
-  leafCommitment: string;     // 0x + 64 hex (lowercased)
+  epoch: number; // tree index (which sub-tree this leaf lives in)
+  leafIndex: number; // position within that epoch's tree
+  leafCommitment: string; // 0x + 64 hex (lowercased)
 };
 
 export type DecodedNotePayload = {

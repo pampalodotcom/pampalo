@@ -1,17 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { AlertTriangle, ArrowLeft, Fingerprint, Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
-import { BeachScene } from '@/components/pampalo/BeachScene'
-import { MnemonicReveal } from '@/components/pampalo/MnemonicReveal'
-import { PageLoading } from '@/components/pampalo/PageLoading'
-import { PrimaryButton } from '@/components/pampalo/PrimaryButton'
-import { RecoverAccount } from '@/components/pampalo/RecoverAccount'
-import { SecondaryButton } from '@/components/pampalo/SecondaryButton'
-import { ThemeToggle } from '@/components/pampalo/ThemeToggle'
-import { WarningChip } from '@/components/pampalo/WarningChip'
-import { useAuth } from '@/lib/auth'
-import { useTheme } from '@/lib/theme'
+import { useEffect, useRef, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { AlertTriangle, ArrowLeft, Fingerprint, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { BeachScene } from "@/components/pampalo/BeachScene";
+import { PageLoading } from "@/components/pampalo/PageLoading";
+import { PrimaryButton } from "@/components/pampalo/PrimaryButton";
+import { RecoverAccount } from "@/components/pampalo/RecoverAccount";
+import { SecondaryButton } from "@/components/pampalo/SecondaryButton";
+import { ThemeToggle } from "@/components/pampalo/ThemeToggle";
+import { WarningChip } from "@/components/pampalo/WarningChip";
+import { useAuth } from "@/lib/auth";
+import { useTheme } from "@/lib/theme";
 import {
   completeConditionalSignIn,
   finalizeNewWallet,
@@ -19,12 +18,11 @@ import {
   registerNewWallet,
   signInWithExistingPasskey,
   UnknownCredentialError,
-  type NewWalletDraft,
-} from '@/lib/auth-flow'
-import { isConditionalUIAvailable, startConditionalGet } from '@/lib/passkey'
-import { postJson } from '@/lib/http'
+} from "@/lib/auth-flow";
+import { isConditionalUIAvailable, startConditionalGet } from "@/lib/passkey";
+import { postJson } from "@/lib/http";
 
-export const Route = createFileRoute('/')({ component: Landing })
+export const Route = createFileRoute("/")({ component: Landing });
 
 // The landing hero is the tallest BeachScene in the app (other routes use
 // 220–280). A flat 420px suits the iPhone-16 mockup the layout targets
@@ -33,184 +31,173 @@ export const Route = createFileRoute('/')({ component: Landing })
 // only -mt-10 (40px) of the card overlaps it, so the hero reads as a huge
 // gap above the card. Clamp to ~46% of the viewport height, capped at 420
 // so tall screens are unchanged.
-const HERO_MAX_HEIGHT = 420
+const HERO_MAX_HEIGHT = 420;
 const heroHeightFor = (viewportHeight: number) =>
-  Math.min(HERO_MAX_HEIGHT, Math.round(viewportHeight * 0.4))
+  Math.min(HERO_MAX_HEIGHT, Math.round(viewportHeight * 0.4));
 
 function useHeroHeight(): number {
   // Start at the cap so SSR and the first client paint agree (no hydration
   // mismatch); the effect clamps to the real viewport right after mount.
-  const [height, setHeight] = useState(HERO_MAX_HEIGHT)
+  const [height, setHeight] = useState(HERO_MAX_HEIGHT);
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const recompute = () => {
-      const next = heroHeightFor(window.innerHeight)
+      const next = heroHeightFor(window.innerHeight);
       // Sub-threshold jitter (the address bar nudging innerHeight on scroll)
       // shouldn't tear down + rebuild the three.js scene, which keys on
       // height. Only commit changes worth a rebuild.
-      setHeight((prev) => (Math.abs(prev - next) > 24 ? next : prev))
-    }
+      setHeight((prev) => (Math.abs(prev - next) > 24 ? next : prev));
+    };
     const onResize = () => {
-      if (timer) clearTimeout(timer)
-      timer = setTimeout(recompute, 200)
-    }
-    recompute()
-    window.addEventListener('resize', onResize)
-    window.addEventListener('orientationchange', onResize)
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(recompute, 200);
+    };
+    recompute();
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
     return () => {
-      if (timer) clearTimeout(timer)
-      window.removeEventListener('resize', onResize)
-      window.removeEventListener('orientationchange', onResize)
-    }
-  }, [])
+      if (timer) clearTimeout(timer);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
+  }, []);
 
-  return height
+  return height;
 }
 
-type HelpKind = 'prf-not-supported' | 'unknown-credential'
+type HelpKind = "prf-not-supported" | "unknown-credential";
 
 type LocalUiState =
-  | { kind: 'idle' }
+  | { kind: "idle" }
   // Cold-start "I already have a wallet" reveal — Sign In tapped on the
   // unknown-device shell, showing the two child options.
-  | { kind: 'signin-choice' }
-  | { kind: 'registering' }
-  | { kind: 'signing-in' }
-  | { kind: 'reveal'; draft: NewWalletDraft }
-  | { kind: 'recovering' }
-  | { kind: 'help'; help: HelpKind }
-  | { kind: 'transitioning' }
+  | { kind: "signin-choice" }
+  | { kind: "registering" }
+  | { kind: "signing-in" }
+  | { kind: "recovering" }
+  | { kind: "help"; help: HelpKind }
+  | { kind: "transitioning" };
 
 function Landing() {
-  const navigate = useNavigate()
-  const auth = useAuth()
-  const { theme } = useTheme()
-  const heroHeight = useHeroHeight()
-  const [ui, setUi] = useState<LocalUiState>({ kind: 'idle' })
-  const conditionalAbortRef = useRef<AbortController | null>(null)
+  const navigate = useNavigate();
+  const auth = useAuth();
+  const { theme } = useTheme();
+  const heroHeight = useHeroHeight();
+  const [ui, setUi] = useState<LocalUiState>({ kind: "idle" });
+  const conditionalAbortRef = useRef<AbortController | null>(null);
 
   // Already authenticated → bounce to /wallet.
   useEffect(() => {
-    if (auth.state.status === 'authenticated') {
-      setUi({ kind: 'transitioning' })
-      void navigate({ to: '/wallet' })
+    if (auth.state.status === "authenticated") {
+      setUi({ kind: "transitioning" });
+      void navigate({ to: "/wallet" });
     }
-  }, [auth.state.status, navigate])
+  }, [auth.state.status, navigate]);
 
   // Conditional-mediation autofill ceremony, AUTH.md §6.5. Best-effort.
   useEffect(() => {
-    if (auth.state.status !== 'anonymous') return
-    const lifecycle = new AbortController()
-    ;(async () => {
+    if (auth.state.status !== "anonymous") return;
+    const lifecycle = new AbortController();
+    (async () => {
       try {
-        if (!(await isConditionalUIAvailable())) return
+        if (!(await isConditionalUIAvailable())) return;
         const start = await postJson<
           Record<string, never>,
           { challenge: string; rpId: string }
-        >('/auth/authentication/start', {})
-        if (lifecycle.signal.aborted) return
+        >("/auth/authentication/start", {});
+        if (lifecycle.signal.aborted) return;
 
-        const ceremony = new AbortController()
-        conditionalAbortRef.current = ceremony
+        const ceremony = new AbortController();
+        conditionalAbortRef.current = ceremony;
         const { assertion } = await startConditionalGet({
           challenge: start.challenge,
           rpId: start.rpId,
           signal: ceremony.signal,
-        })
+        });
         // TS narrows .aborted to false after the prior check; the lint
         // believes that, but it can flip mid-await.
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        if (lifecycle.signal.aborted) return
+        if (lifecycle.signal.aborted) return;
 
-        const outcome = await completeConditionalSignIn(assertion)
-        finalizeAddressIntoState(outcome.addresses.evm)
-        toast(`Signed in as ${shortAddress(outcome.addresses.evm)}`)
-        setUi({ kind: 'transitioning' })
-        void navigate({ to: '/wallet' })
+        const outcome = await completeConditionalSignIn(assertion);
+        finalizeAddressIntoState(outcome.addresses.evm);
+        toast(`Signed in as ${shortAddress(outcome.addresses.evm)}`);
+        setUi({ kind: "transitioning" });
+        void navigate({ to: "/wallet" });
       } catch (e) {
-        if (e instanceof DOMException && e.name === 'AbortError') return
+        if (e instanceof DOMException && e.name === "AbortError") return;
         // Conditional ceremony silently no-ops on most failures (no creds, etc).
       }
-    })()
+    })();
     return () => {
-      lifecycle.abort()
-      conditionalAbortRef.current?.abort()
-      conditionalAbortRef.current = null
-    }
+      lifecycle.abort();
+      conditionalAbortRef.current?.abort();
+      conditionalAbortRef.current = null;
+    };
     // The conditional ceremony only needs to be re-armed when auth status
     // changes (e.g. after sign-out). React-hooks/exhaustive-deps isn't part
     // of the local config but the disable comment is harmless.
-  }, [auth.state.status])
+  }, [auth.state.status]);
 
   function finalizeAddressIntoState(_address: string) {
-    auth.refreshAddress()
+    auth.refreshAddress();
   }
 
   async function onSignIn() {
-    conditionalAbortRef.current?.abort()
-    setUi({ kind: 'signing-in' })
+    conditionalAbortRef.current?.abort();
+    setUi({ kind: "signing-in" });
     try {
-      const outcome = await signInWithExistingPasskey()
-      finalizeAddressIntoState(outcome.addresses.evm)
-      toast(`Signed in as ${shortAddress(outcome.addresses.evm)}`)
-      setUi({ kind: 'transitioning' })
-      void navigate({ to: '/wallet' })
+      const outcome = await signInWithExistingPasskey();
+      finalizeAddressIntoState(outcome.addresses.evm);
+      toast(`Signed in as ${shortAddress(outcome.addresses.evm)}`);
+      setUi({ kind: "transitioning" });
+      void navigate({ to: "/wallet" });
     } catch (e) {
       if (e instanceof PrfNotSupportedError) {
-        setUi({ kind: 'help', help: 'prf-not-supported' })
-        return
+        setUi({ kind: "help", help: "prf-not-supported" });
+        return;
       }
       if (e instanceof UnknownCredentialError) {
-        setUi({ kind: 'help', help: 'unknown-credential' })
-        return
+        setUi({ kind: "help", help: "unknown-credential" });
+        return;
       }
-      const msg = e instanceof Error ? e.message : 'Sign-in failed.'
-      if (msg.toLowerCase().includes('not allowed')) {
-        toast('No passkeys available on this device.')
+      const msg = e instanceof Error ? e.message : "Sign-in failed.";
+      if (msg.toLowerCase().includes("not allowed")) {
+        toast("No passkeys available on this device.");
       } else {
-        toast.error(msg)
+        toast.error(msg);
       }
-      setUi({ kind: 'idle' })
+      setUi({ kind: "idle" });
     }
   }
 
   async function onCreate() {
-    conditionalAbortRef.current?.abort()
-    setUi({ kind: 'registering' })
+    conditionalAbortRef.current?.abort();
+    setUi({ kind: "registering" });
     try {
-      const draft = await registerNewWallet()
-      setUi({ kind: 'reveal', draft })
+      const draft = await registerNewWallet();
+      // ADR 0013: signup never displays the recovery phrase — finalize and
+      // go straight to the wallet. The PageLayout backup banner nudges the
+      // user toward the Account-page export flow from there.
+      // TODO review this again
+      finalizeNewWallet(draft);
+      finalizeAddressIntoState(draft.addresses.evm);
+      setUi({ kind: "transitioning" });
+      void navigate({ to: "/wallet" });
     } catch (e) {
       if (e instanceof PrfNotSupportedError) {
-        setUi({ kind: 'help', help: 'prf-not-supported' })
-        return
+        setUi({ kind: "help", help: "prf-not-supported" });
+        return;
       }
-      const msg = e instanceof Error ? e.message : 'Wallet creation failed.'
-      toast.error(msg)
-      setUi({ kind: 'idle' })
+      const msg = e instanceof Error ? e.message : "Wallet creation failed.";
+      toast.error(msg);
+      setUi({ kind: "idle" });
     }
   }
 
-  function onMnemonicConfirmed() {
-    if (ui.kind !== 'reveal') return
-    const draft = ui.draft
-    finalizeNewWallet(draft)
-    finalizeAddressIntoState(draft.addresses.evm)
-    setUi({ kind: 'transitioning' })
-    void navigate({ to: '/wallet' })
-  }
-
-  function onMnemonicSkipped() {
-    if (ui.kind !== 'reveal') return
-    finalizeNewWallet(ui.draft)
-    finalizeAddressIntoState(ui.draft.addresses.evm)
-    setUi({ kind: 'transitioning' })
-    void navigate({ to: '/wallet' })
-  }
-
   const knownDevice =
-    auth.state.status === 'anonymous' ? auth.state.knownDevice : false
+    auth.state.status === "anonymous" ? auth.state.knownDevice : false;
 
   return (
     <main className="phone-shell flex flex-1 flex-col">
@@ -230,28 +217,21 @@ function Landing() {
       <div className="phone-column flex flex-1 flex-col">
         {/* Hero card overlaps the scene's bottom fade */}
         <section className="relative z-10 -mt-10 mx-[8vw] mb-8 rise-in rounded-3xl card-cream px-5 pt-6 pb-5 sm:mx-4">
-          {ui.kind === 'reveal' ? (
-            <MnemonicReveal
-              mnemonic={ui.draft.mnemonic}
-              address={ui.draft.addresses.evm}
-              onConfirmed={onMnemonicConfirmed}
-              onSkip={onMnemonicSkipped}
-            />
-          ) : ui.kind === 'help' ? (
+          {ui.kind === "help" ? (
             <PasskeyHelp
               kind={ui.help}
-              onBack={() => setUi({ kind: 'idle' })}
+              onBack={() => setUi({ kind: "idle" })}
             />
-          ) : ui.kind === 'recovering' ? (
+          ) : ui.kind === "recovering" ? (
             <RecoverAccount
-              onBack={() => setUi({ kind: 'signin-choice' })}
+              onBack={() => setUi({ kind: "signin-choice" })}
               onRecovered={() => {
-                auth.refreshAddress()
-                setUi({ kind: 'transitioning' })
-                void navigate({ to: '/wallet' })
+                auth.refreshAddress();
+                setUi({ kind: "transitioning" });
+                void navigate({ to: "/wallet" });
               }}
               onPrfMissing={() =>
-                setUi({ kind: 'help', help: 'prf-not-supported' })
+                setUi({ kind: "help", help: "prf-not-supported" })
               }
             />
           ) : (
@@ -263,12 +243,12 @@ function Landing() {
                 Money.
               </h1>
               <p className="mb-5 text-[14.5px] leading-relaxed text-ink-soft">
-                Pampalo uses passkey PRF (Pseudo-Random Function) to encrypt
-                and decrypt all application data.
+                Pampalo uses passkey PRF (Pseudo-Random Function) to encrypt and
+                decrypt all application data.
               </p>
               <p className="mb-5 text-[14.5px] leading-relaxed text-ink-soft">
                 Any data stored in the database is encrypted with (pass)keys
-                that you control.{' '}
+                that you control.{" "}
                 <a
                   href="https://docs.pampalo.com"
                   target="_blank"
@@ -280,7 +260,7 @@ function Landing() {
               </p>
 
               <div className="flex flex-col gap-3">
-                {auth.state.status === 'loading' ? (
+                {auth.state.status === "loading" ? (
                   // Hold a neutral loading state until the cookie bootstrap
                   // resolves; otherwise the button label snaps from
                   // "Get started" to "Sign in with Passkey" on mount.
@@ -290,7 +270,7 @@ function Landing() {
                   </PrimaryButton>
                 ) : knownDevice ? (
                   <PrimaryButton onClick={onSignIn} disabled={busy(ui)}>
-                    {ui.kind === 'signing-in' ? (
+                    {ui.kind === "signing-in" ? (
                       <>
                         <Loader2 className="size-[18px] animate-spin" />
                         Signing in with Passkey…
@@ -302,8 +282,7 @@ function Landing() {
                       </>
                     )}
                   </PrimaryButton>
-                ) : ui.kind === 'signin-choice' ||
-                  ui.kind === 'signing-in' ? (
+                ) : ui.kind === "signin-choice" || ui.kind === "signing-in" ? (
                   // Two-button reveal: the user already tapped Sign In on
                   // the unknown-device shell, now they pick between the
                   // passkey path and the recovery-phrase path. See CONTEXT.md
@@ -314,7 +293,7 @@ function Landing() {
                   // back to "Get started" mid-ceremony.
                   <>
                     <PrimaryButton onClick={onSignIn} disabled={busy(ui)}>
-                      {ui.kind === 'signing-in' ? (
+                      {ui.kind === "signing-in" ? (
                         <>
                           <Loader2 className="size-[18px] animate-spin" />
                           Signing in with Passkey…
@@ -327,14 +306,14 @@ function Landing() {
                       )}
                     </PrimaryButton>
                     <SecondaryButton
-                      onClick={() => setUi({ kind: 'recovering' })}
+                      onClick={() => setUi({ kind: "recovering" })}
                       disabled={busy(ui)}
                     >
                       Recover account
                     </SecondaryButton>
                     <button
                       type="button"
-                      onClick={() => setUi({ kind: 'idle' })}
+                      onClick={() => setUi({ kind: "idle" })}
                       disabled={busy(ui)}
                       className="self-center text-[13px] font-medium text-ink-mute underline underline-offset-2 hover:text-ink-soft disabled:opacity-50"
                     >
@@ -344,7 +323,7 @@ function Landing() {
                 ) : (
                   <>
                     <PrimaryButton onClick={onCreate} disabled={busy(ui)}>
-                      {ui.kind === 'registering' ? (
+                      {ui.kind === "registering" ? (
                         <>
                           <Loader2 className="size-[18px] animate-spin" />
                           Registering passkey…
@@ -363,7 +342,7 @@ function Landing() {
                         account} pair — Recover is the path for users whose
                         passkey isn't here at all. */}
                     <SecondaryButton
-                      onClick={() => setUi({ kind: 'signin-choice' })}
+                      onClick={() => setUi({ kind: "signin-choice" })}
                       disabled={busy(ui)}
                     >
                       Sign in
@@ -378,7 +357,6 @@ function Landing() {
             </>
           )}
         </section>
-
       </div>
 
       {/* Anchor for conditional mediation autofill on browsers that need it. */}
@@ -390,45 +368,39 @@ function Landing() {
         className="sr-only"
       />
 
-      {ui.kind === 'transitioning' && <PageLoading />}
+      {ui.kind === "transitioning" && <PageLoading />}
     </main>
-  )
+  );
 }
 
 function busy(ui: LocalUiState): boolean {
-  return ui.kind === 'registering' || ui.kind === 'signing-in'
+  return ui.kind === "registering" || ui.kind === "signing-in";
 }
 
-function PasskeyHelp({
-  kind,
-  onBack,
-}: {
-  kind: HelpKind
-  onBack: () => void
-}) {
-  const isPrf = kind === 'prf-not-supported'
+function PasskeyHelp({ kind, onBack }: { kind: HelpKind; onBack: () => void }) {
+  const isPrf = kind === "prf-not-supported";
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2 text-warn-fg">
         <AlertTriangle className="size-4" />
-        <p className="eyebrow" style={{ color: 'var(--color-warn-fg)' }}>
+        <p className="eyebrow" style={{ color: "var(--color-warn-fg)" }}>
           Passkey can’t be used
         </p>
       </div>
 
       <h2 className="font-serif text-[26px] font-bold leading-tight text-ink">
         {isPrf
-          ? 'Your passkey provider isn’t supported (yet)'
-          : 'That passkey isn’t linked to a Pampalo wallet'}
+          ? "Your passkey provider isn’t supported (yet)"
+          : "That passkey isn’t linked to a Pampalo wallet"}
       </h2>
 
       <p className="text-[14px] leading-relaxed text-ink-soft">
         {isPrf ? (
           <>
-            Pampalo encrypts your wallet with a feature called the WebAuthn{' '}
-            <em>PRF extension</em>. Apple Passwords (iCloud Keychain) and
-            Google Password Manager support it. 1Password is still rolling
-            out support and isn’t reliable yet — so we can’t use it.
+            Pampalo encrypts your wallet with a feature called the WebAuthn{" "}
+            <em>PRF extension</em>. Apple Passwords (iCloud Keychain) and Google
+            Password Manager support it. 1Password is still rolling out support
+            and isn’t reliable yet - so we can’t use it.
           </>
         ) : (
           <>
@@ -447,8 +419,8 @@ function PasskeyHelp({
           </p>
           <ol className="ml-4 list-decimal space-y-1.5 text-[13px] leading-relaxed text-ink-soft">
             <li>
-              Open <strong>Settings → General → AutoFill &amp; Passwords</strong>
-              .
+              Open{" "}
+              <strong>Settings → General → AutoFill &amp; Passwords</strong>.
             </li>
             <li>
               Make sure <strong>Passwords</strong> (Apple) is enabled.
@@ -464,10 +436,10 @@ function PasskeyHelp({
         Back
       </SecondaryButton>
     </div>
-  )
+  );
 }
 
 function shortAddress(addr: string): string {
-  if (!addr || addr.length < 10) return addr
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`
+  if (!addr || addr.length < 10) return addr;
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }

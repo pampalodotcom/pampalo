@@ -24,10 +24,7 @@ export function ReceivePickStep({
   onContinue: () => void;
 }) {
   const [testnetsEnabled] = useTestnetsEnabled();
-  const deployments = useQuery(
-    api.shieldQueue.store.receivableDeployments,
-    {},
-  );
+  const deployments = useQuery(api.shieldQueue.store.receivableDeployments, {});
 
   const choices: NetworkChoice[] = (deployments ?? [])
     .filter((d) => testnetsEnabled || !isTestnetChainId(d.chainId))
@@ -64,8 +61,8 @@ export function ReceivePickStep({
         ) : choices.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-line bg-paper-lo px-5 py-7 text-center">
             <p className="text-[13px] text-ink-mute">
-              No Pampalo-enabled networks available. Enable testnets in
-              Account → Settings if you&apos;re developing locally.
+              No Pampalo-enabled networks available. Enable testnets in Account
+              → Settings if you&apos;re developing locally.
             </p>
           </div>
         ) : (

@@ -179,7 +179,8 @@ export function AccountModal({
                 Show testnets
               </span>
               <span className="text-[12px] text-ink-mute">
-                Reveals Sepolia, Arbitrum Sepolia + Base Sepolia in the asset list.
+                Reveals Sepolia, Arbitrum Sepolia + Base Sepolia in the asset
+                list.
               </span>
             </span>
             <Toggle

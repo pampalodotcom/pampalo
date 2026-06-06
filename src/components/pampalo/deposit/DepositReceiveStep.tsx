@@ -105,7 +105,7 @@ export function DepositReceiveStep({
       await navigator.clipboard.writeText(url);
       toast("Share link copied to clipboard.");
     } catch {
-      toast.error("Couldn't share — copy the address manually.");
+      toast.error("Couldn't share - copy the address manually.");
     }
   };
 
@@ -221,8 +221,9 @@ export function DepositReceiveStep({
       <div className="flex items-start gap-2.5 rounded-2xl bg-[color-mix(in_oklab,var(--pub-soft)_60%,transparent)] px-4 py-3">
         <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--pub)]" />
         <p className="text-[12.5px] leading-relaxed text-ink">
-          Only send assets on <span className="font-semibold">{network.name}</span>.
-          Funds sent on another network may be unrecoverable.
+          Only send assets on{" "}
+          <span className="font-semibold">{network.name}</span>. Funds sent on
+          another network may be unrecoverable.
         </p>
       </div>
     </div>

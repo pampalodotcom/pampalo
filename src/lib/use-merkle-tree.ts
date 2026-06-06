@@ -57,9 +57,7 @@ export function useMerkleTree(
     setBuilding(true);
     void (async () => {
       try {
-        const mod = await import(
-          "@pampalo/shared/classes/PoseidonMerkleTree"
-        );
+        const mod = await import("@pampalo/shared/classes/PoseidonMerkleTree");
         const next = new mod.PoseidonMerkleTree(TREE_HEIGHT);
         // initializeDefaultNodes is fire-and-forget inside the
         // constructor; its body is sync under poseidon2Hash so by the

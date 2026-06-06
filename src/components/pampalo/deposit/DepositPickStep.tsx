@@ -73,8 +73,8 @@ export function DepositPickStep({
           Choose a network
         </h2>
         <p className="text-[13px] text-ink-mute">
-          Deposit funds into your{" "}
-          {mode === "public" ? "public" : "shielded"} balance.
+          Deposit funds into your {mode === "public" ? "public" : "shielded"}{" "}
+          balance.
         </p>
       </div>
 
@@ -96,14 +96,8 @@ export function DepositPickStep({
 
         {loading ? (
           <div className="grid grid-cols-2 gap-3" aria-busy>
-            <span
-              className="skel"
-              style={{ height: 132, borderRadius: 16 }}
-            />
-            <span
-              className="skel"
-              style={{ height: 132, borderRadius: 16 }}
-            />
+            <span className="skel" style={{ height: 132, borderRadius: 16 }} />
+            <span className="skel" style={{ height: 132, borderRadius: 16 }} />
           </div>
         ) : choices.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-line bg-paper-lo px-5 py-7 text-center">

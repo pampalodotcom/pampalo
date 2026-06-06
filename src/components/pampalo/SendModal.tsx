@@ -15,10 +15,7 @@ import {
   signTransactionWithPasskey,
   PrfNotSupportedError,
 } from "@/lib/auth-flow";
-import {
-  usePublicBalance,
-  weiToNumber,
-} from "@/lib/balances";
+import { usePublicBalance, weiToNumber } from "@/lib/balances";
 import { appendTransaction } from "@/lib/idb-transactions";
 import { useRpcClient } from "@/lib/rpc";
 import { buildSendTx, isNativeToken, normalizeRecipient } from "@/lib/send-tx";
@@ -455,9 +452,7 @@ export function SendModal({
         // the default focus so users see the form first; tap the input
         // to bring the keyboard up. Desktop / fine-pointer users keep
         // the default behavior so they can start typing straight away.
-        onOpenAutoFocus={
-          hasFinePointer ? undefined : (e) => e.preventDefault()
-        }
+        onOpenAutoFocus={hasFinePointer ? undefined : (e) => e.preventDefault()}
       >
         <DialogHeader>
           <DialogTitle className="text-base font-bold">
@@ -710,12 +705,14 @@ function ReviewPane({
   const selectedGasUsd = (() => {
     if (!gasPriceWei || gasUnits === null || ethUsdPrice === null) return null;
     const scaled =
-      (BigInt(gasPriceWei) * BigInt(Math.round(GAS_TIER_MULTIPLIER[tier] * 100))) /
+      (BigInt(gasPriceWei) *
+        BigInt(Math.round(GAS_TIER_MULTIPLIER[tier] * 100))) /
       100n;
     const totalGwei = (gasUnits * scaled) / 1_000_000_000n;
     return (Number(totalGwei) / 1e9) * ethUsdPrice;
   })();
-  const totalUsd = amountUsd !== null ? amountUsd + (selectedGasUsd ?? 0) : null;
+  const totalUsd =
+    amountUsd !== null ? amountUsd + (selectedGasUsd ?? 0) : null;
   const slug = networkSlugForChainId(token.chainId);
 
   return (
@@ -943,7 +940,9 @@ function TrackingPane({
             </span>
             <span className="mt-0.5 inline-flex items-center gap-1.5 text-[11px] text-ink-mute">
               {slug && <NetworkChip network={slug} />}
-              {usd !== null && <span className="font-mono">≈ {fmtUsd(usd)}</span>}
+              {usd !== null && (
+                <span className="font-mono">≈ {fmtUsd(usd)}</span>
+              )}
             </span>
           </div>
         </div>
@@ -1014,7 +1013,7 @@ function StatusBanner({ status }: { status: TrackingStatus }) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-[13px] text-ink">
         <Loader2 className="size-4 animate-spin text-muted-foreground" />
-        <span className="flex-1">Mined — waiting for confirmations.</span>
+        <span className="flex-1">Mined - waiting for confirmations.</span>
         <span className="font-mono text-[11px] text-ink-mute">
           {status.confirmations}/{CONFIRMATIONS_THRESHOLD}
         </span>
@@ -1032,7 +1031,7 @@ function StatusBanner({ status }: { status: TrackingStatus }) {
   return (
     <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-[13px] text-ink">
       <Clock className="size-4 animate-pulse text-muted-foreground" />
-      <span className="flex-1">Submitted — waiting for a block.</span>
+      <span className="flex-1">Submitted - waiting for a block.</span>
     </div>
   );
 }

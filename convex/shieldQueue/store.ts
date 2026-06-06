@@ -1,11 +1,7 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
-import {
-  internalMutation,
-  internalQuery,
-  query,
-} from "../_generated/server";
+import { internalMutation, internalQuery, query } from "../_generated/server";
 import { lowerAddress } from "../lib/normalize";
 
 // Internal queries + mutations called by the indexer (`refresh.ts`) and
@@ -56,9 +52,7 @@ export type IndexerDeployment = {
 export const _enabledDeployments = internalQuery({
   args: {},
   handler: async (ctx): Promise<IndexerDeployment[]> => {
-    const deployments = await ctx.db
-      .query("pampaloDeployments")
-      .collect();
+    const deployments = await ctx.db.query("pampaloDeployments").collect();
     const out: IndexerDeployment[] = [];
     for (const d of deployments) {
       if (!d.enabled) continue;
@@ -111,9 +105,7 @@ export const _upsertShieldQueueEntry = internalMutation({
     const existing = await ctx.db
       .query("shieldQueueEntries")
       .withIndex("by_deployment_and_pendingId", (q) =>
-        q
-          .eq("deploymentId", args.deploymentId)
-          .eq("pendingId", args.pendingId),
+        q.eq("deploymentId", args.deploymentId).eq("pendingId", args.pendingId),
       )
       .unique();
     if (existing) {
@@ -155,9 +147,7 @@ export const _resolveShieldQueueEntry = internalMutation({
     const existing = await ctx.db
       .query("shieldQueueEntries")
       .withIndex("by_deployment_and_pendingId", (q) =>
-        q
-          .eq("deploymentId", args.deploymentId)
-          .eq("pendingId", args.pendingId),
+        q.eq("deploymentId", args.deploymentId).eq("pendingId", args.pendingId),
       )
       .unique();
     if (!existing) {
@@ -419,9 +409,7 @@ export const _upsertAsset = internalMutation({
     const token = await ctx.db
       .query("supportedTokens")
       .withIndex("by_networkId_and_address", (q) =>
-        q
-          .eq("networkId", deployment.networkId)
-          .eq("address", tokenAddress),
+        q.eq("networkId", deployment.networkId).eq("address", tokenAddress),
       )
       .unique();
 
@@ -738,9 +726,7 @@ export const shieldablePairs = query({
     for (const [deploymentId, chainId] of chainByDeployment) {
       const assets = await ctx.db
         .query("pampaloAssets")
-        .withIndex("by_deployment", (q) =>
-          q.eq("deploymentId", deploymentId),
-        )
+        .withIndex("by_deployment", (q) => q.eq("deploymentId", deploymentId))
         .collect();
       for (const a of assets) {
         if (!a.enabled) continue;

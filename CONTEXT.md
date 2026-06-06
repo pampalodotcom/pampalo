@@ -95,6 +95,26 @@ The 12-word BIP39 phrase from which the EVM address, envelope key, and
 Poseidon identifier are derived. Never persisted; lives in memory only
 for the duration of a sign/unlock operation.
 
+**Recovery phrase**:
+The user-facing name for the **mnemonic** — the term used in all UI copy
+("Back up your recovery phrase", "Export recovery phrase") and in the
+**Recover account** flow. Same 12 words; "mnemonic" stays the
+internal / encryption-layer term.
+_Avoid_: "account phrase", "account secret", "seed phrase", and
+especially "private key" (it is not one — keys are derived from it).
+
+**Backed up**:
+A wallet is backed up once the user has completed an export of the
+**recovery phrase** — a passkey ceremony followed by an explicit Copy or
+Download. Signup does not display the phrase or gate on backup: the
+synced passkey is the primary recovery mechanism and the recovery phrase
+is the escape hatch. Until backed up, the wallet home shows a nudge
+banner (session-dismissable, CTA opens the export flow). Recorded as
+`mnemonicBackedUpAt` inside the encrypted preferences blob — never as a
+plaintext server column (a behaviour timestamp; the privacy invariant
+forbids it). Monotonic: preference-sync merges take
+`max(upstream, local)`, so a stale device can never un-back-up a wallet.
+
 **DEK** (Data Encryption Key):
 A 32-byte random AES-GCM-256 key generated at wallet creation. Encrypts
 the mnemonic once. Re-wrapped under each registered passkey's KEK.
@@ -169,6 +189,23 @@ deployment's on-chain `Pampalo.supportedAssets` mapping with
 with its cached oracle adapter address. Rows are write-once + flip
 `enabled`, never deleted, so the audit / Sentry view can show "this
 asset was disabled at …".
+
+**Total balance**:
+The dashboard's headline figure — public + private holdings summed in
+USD across **mainnet** chains only. Testnet value never blends into it
+(nor into its public/private chips or split bar), even when the
+testnets preference is on.
+
+**Testnet balance**:
+USD value of holdings on testnet chains, public + private combined
+into one figure. Priced with the same feeds as the mainnet twins, so
+the number is meaningful — but it is play money and is displayed as
+its own "$X.XX Testnet" secondary headline beneath the **Total
+balance**, only while the testnets preference is on. Loads
+independently: a stalled testnet RPC or feed never delays the mainnet
+headline, and vice versa. Shows `$0.00` honestly in both directions —
+an all-testnet account reads "$0.00" big with its testnet value
+beneath.
 
 ### On-chain protocol (the smart-contract layer)
 
@@ -314,10 +351,33 @@ breaking the EOA-anonymity property the relayer otherwise provides.
 The UX always surfaces this with an explicit confirm dialog before
 proceeding; never silent.
 
+### Naming / directory (Ethereum L1 / ENS)
+
+**Pampalo username**:
+`name.pampalo.eth` — an opt-in, paid ENS subname (NameWrapper-wrapped,
+deployed on Ethereum **L1** because that is where the ENS registry and
+NameWrapper live) that publicly resolves to a recipient's **Envelope
+key** and **Poseidon identifier** via a custom Pampalo resolver. A
+human-readable receiving handle: a sender types `alice.pampalo.eth`
+instead of pasting two hex blobs, then has exactly what's needed to
+ECIES-encrypt a note secret and set the note `owner`. Deliberately does
+**not** publish the **EVM address** (the resolver's `addr()` is left
+unset) — it is a private-money receiving handle, not a public-payment
+one. Records are written atomically at registration and are mutable by
+the current subname-NFT owner. Minting price and an address-allowlist
+discount root are tuned by `FINANCE_MANAGER_ROLE`; the Safe holds
+`DEFAULT_ADMIN_ROLE`. See ADR 0012.
+_Avoid_: bare "username" or "ENS name" (the user may hold unrelated
+ENS names); "envelope address" / "poseidon key" (the canonical nouns
+are **Envelope key** and **Poseidon identifier**).
+
 ## Relationships
 
 - A **mnemonic** deterministically produces one **EVM address**, one
   **envelope key**, and one **Poseidon identifier**.
+- A **Pampalo username** publishes a mnemonic's **Envelope key** and
+  **Poseidon identifier**; the same mnemonic's **EVM address** is
+  deliberately withheld from the directory.
 - A **wallet** has exactly one **mnemonic** and one or more **credentials**.
 - Each **credential** carries its own wrapped **DEK**; the wallet's
   **mnemonic** is encrypted once with the **DEK**.
@@ -328,4 +388,9 @@ proceeding; never silent.
 
 - "Address" is overloaded — the user has three: **EVM address** (public,
   on-chain handle), **Envelope key** (ECIES recipient), **Poseidon
-  identifier** (ZK-note recipient). Always say which.
+  identifier** (ZK-note recipient). Always say which. A **Pampalo
+  username** resolves to the latter two and never the **EVM address**.
+- "envelope address" / "poseidon key" were used for the values a
+  **Pampalo username** returns — resolved: the canonical nouns are
+  **Envelope key** (a secp256k1 public key, not an address) and
+  **Poseidon identifier** (an identifier, not a key).

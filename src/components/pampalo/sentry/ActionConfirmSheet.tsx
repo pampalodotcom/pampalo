@@ -1,13 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Interface } from "ethers";
 import { useQuery } from "convex/react";
-import {
-  CheckCircle2,
-  Clock3,
-  ExternalLink,
-  Loader2,
-  Zap,
-} from "lucide-react";
+import { CheckCircle2, Clock3, ExternalLink, Loader2, Zap } from "lucide-react";
 import { VisuallyHidden } from "radix-ui";
 import { toast } from "sonner";
 import { api } from "../../../../convex/_generated/api";
@@ -17,11 +11,7 @@ import { txUrl } from "@/lib/explorer";
 import { useRpcClient } from "@/lib/rpc";
 import { useIsDesktop } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 // Shared confirm sheet for /sentry's parameter-less actions:
@@ -104,9 +94,7 @@ export function ActionConfirmSheet({
 
   const deployment = useMemo(() => {
     if (!payload) return null;
-    return (
-      deployments.find((d) => d._id === payload.row.deploymentId) ?? null
-    );
+    return deployments.find((d) => d._id === payload.row.deploymentId) ?? null;
   }, [deployments, payload]);
 
   const gas = useQuery(
@@ -167,7 +155,7 @@ export function ActionConfirmSheet({
   const onConfirm = async () => {
     if (!payload || !deployment || !evmAddress) return;
     if (!gas?.gasPriceWei) {
-      setError("Gas price not loaded yet — try again in a moment.");
+      setError("Gas price not loaded yet - try again in a moment.");
       return;
     }
     setError(null);
@@ -237,8 +225,8 @@ export function ActionConfirmSheet({
     if (phase !== "submitted") return;
     toast.success(
       isFastTrack
-        ? "Fast-tracked — inserting into the merkle tree…"
-        : "Sponsored — awaiting confirmation…",
+        ? "Fast-tracked - inserting into the merkle tree…"
+        : "Sponsored - awaiting confirmation…",
     );
   }, [phase, isFastTrack]);
   useEffect(() => {
@@ -520,7 +508,9 @@ function SuccessPanel({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <h3 className="font-serif text-[20px] font-bold text-ink">{headline}</h3>
+        <h3 className="font-serif text-[20px] font-bold text-ink">
+          {headline}
+        </h3>
         <p className="text-[13px] text-ink-mute max-w-[340px]">{subcopy}</p>
       </div>
 

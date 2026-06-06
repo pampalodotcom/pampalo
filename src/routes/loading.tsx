@@ -1,8 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { PageLoading } from '@/components/pampalo/PageLoading'
+import { createFileRoute } from "@tanstack/react-router";
+import { PageLoading } from "@/components/pampalo/PageLoading";
 
-export const Route = createFileRoute('/loading')({ component: Loading })
+export const Route = createFileRoute("/loading")({ component: Loading });
 
 function Loading() {
-  return <PageLoading />
+  return <PageLoading />;
 }

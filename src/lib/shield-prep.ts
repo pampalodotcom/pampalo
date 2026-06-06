@@ -35,10 +35,7 @@ export function buildErc20Approve(
 ): { to: string; data: string; value: string } {
   return {
     to: tokenAddress.toLowerCase(),
-    data: ERC20_APPROVE_IFACE.encodeFunctionData("approve", [
-      spender,
-      amount,
-    ]),
+    data: ERC20_APPROVE_IFACE.encodeFunctionData("approve", [spender, amount]),
     value: "0",
   };
 }
@@ -65,11 +62,11 @@ export type PreparedShieldNativeTx = {
 
   // Surfaced so the caller (a) can populate IDB optimistically once the
   // ShieldQueued receipt lands and (b) can show the leaf in a dev panel.
-  leafCommitment: string;          // 0x + 64 hex
-  secret: string;                  // decimal string
-  encryptedPayload: string;        // 0x hex (ECIES ciphertext)
+  leafCommitment: string; // 0x + 64 hex
+  secret: string; // decimal string
+  encryptedPayload: string; // 0x hex (ECIES ciphertext)
   publicInputs: readonly string[]; // 0x… hex; sized 3 (hash, asset_id, asset_amount)
-  proofBytes: string;              // 0x hex (UltraHonk proof)
+  proofBytes: string; // 0x hex (UltraHonk proof)
 };
 
 // ─── Background prefetch / warmup ────────────────────────────────────────
@@ -174,7 +171,9 @@ export async function prepareShieldNative(
   type ShieldCtor = new () => {
     init: () => Promise<void>;
     shieldNoir: {
-      execute: (witness: Record<string, string>) => Promise<{ witness: Uint8Array }>;
+      execute: (
+        witness: Record<string, string>,
+      ) => Promise<{ witness: Uint8Array }>;
     };
     shieldBackend: {
       generateProof: (
@@ -325,7 +324,9 @@ export async function prepareShieldErc20(
   type ShieldCtor = new () => {
     init: () => Promise<void>;
     shieldNoir: {
-      execute: (witness: Record<string, string>) => Promise<{ witness: Uint8Array }>;
+      execute: (
+        witness: Record<string, string>,
+      ) => Promise<{ witness: Uint8Array }>;
     };
     shieldBackend: {
       generateProof: (

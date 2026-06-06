@@ -11,11 +11,7 @@ import { signTransactionWithPasskey } from "@/lib/auth-flow";
 import { useRpcClient } from "@/lib/rpc";
 import { useIsDesktop } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { Deployment } from "./ActionConfirmSheet";
 
@@ -69,9 +65,7 @@ export function ContestSheet({
 
   const deployment = useMemo(() => {
     if (!payload) return null;
-    return (
-      deployments.find((d) => d._id === payload.row.deploymentId) ?? null
-    );
+    return deployments.find((d) => d._id === payload.row.deploymentId) ?? null;
   }, [deployments, payload]);
 
   const gas = useQuery(
@@ -159,15 +153,12 @@ export function ContestSheet({
       while (!cancelRef.current) {
         if (Date.now() - startedAt > RECEIPT_TIMEOUT_MS) {
           toast(
-            "Contest submitted. Still waiting on the receipt — close this and check the explorer if it doesn't land soon.",
+            "Contest submitted. Still waiting on the receipt - close this and check the explorer if it doesn't land soon.",
           );
           return;
         }
         try {
-          const res = await rpc.getTransactionStatus(
-            deployment.chainId,
-            hash,
-          );
+          const res = await rpc.getTransactionStatus(deployment.chainId, hash);
           if (cancelRef.current) return;
           if (res.status === false) {
             setError("Contest transaction reverted on-chain.");
@@ -176,9 +167,7 @@ export function ContestSheet({
           }
           if (res.status === true && res.confirmations >= 1) {
             setPhase("confirmed");
-            toast.success(
-              "Shield contested. The shielder has been refunded.",
-            );
+            toast.success("Shield contested. The shielder has been refunded.");
             return;
           }
         } catch {
@@ -429,8 +418,8 @@ function StatusLine({
         <div className="min-w-0 flex-1">
           <div className="font-semibold">Contest confirmed on-chain</div>
           <div className="mt-0.5 text-[11.5px] text-ink-mute">
-            The shielder has been refunded and your reason is now part of
-            the public record.
+            The shielder has been refunded and your reason is now part of the
+            public record.
           </div>
           {explorer && (
             <a

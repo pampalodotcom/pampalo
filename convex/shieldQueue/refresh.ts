@@ -1,10 +1,6 @@
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import {
-  action,
-  internalAction,
-  type ActionCtx,
-} from "../_generated/server";
+import { action, internalAction, type ActionCtx } from "../_generated/server";
 import { alchemyUrl, rpc } from "../lib/alchemy";
 import { ALL_TOPICS, decodeLog, type RawLog } from "./events";
 import type { IndexerDeployment } from "./store";
@@ -133,10 +129,7 @@ async function indexOneDeployment(
   // cursor so a mid-loop failure doesn't lose forward progress.
   let cursor = fromBlock;
   while (cursor <= trailingHead) {
-    const toBlock = Math.min(
-      trailingHead,
-      cursor + MAX_BLOCKS_PER_CALL - 1,
-    );
+    const toBlock = Math.min(trailingHead, cursor + MAX_BLOCKS_PER_CALL - 1);
 
     const logs = await rpc<RawLog[]>(url, "eth_getLogs", [
       {
@@ -204,9 +197,7 @@ async function indexOneDeployment(
                       : "contested",
                 resolvedTxHash: log.transactionHash,
                 resolvedBy:
-                  decoded.kind === "ShieldExecuted"
-                    ? txMeta.from
-                    : decoded.by,
+                  decoded.kind === "ShieldExecuted" ? txMeta.from : decoded.by,
                 resolvedAt: txMeta.blockTime,
                 contestReason:
                   decoded.kind === "ShieldContested"
@@ -218,43 +209,34 @@ async function indexOneDeployment(
           }
 
           case "AssetSupported": {
-            await ctx.runMutation(
-              internal.shieldQueue.store._upsertAsset,
-              {
-                deploymentId: d._id,
-                tokenAddress: decoded.asset,
-                oracle: decoded.oracle,
-                enabled: true,
-              },
-            );
+            await ctx.runMutation(internal.shieldQueue.store._upsertAsset, {
+              deploymentId: d._id,
+              tokenAddress: decoded.asset,
+              oracle: decoded.oracle,
+              enabled: true,
+            });
             break;
           }
 
           case "AssetDisabled": {
-            await ctx.runMutation(
-              internal.shieldQueue.store._upsertAsset,
-              {
-                deploymentId: d._id,
-                tokenAddress: decoded.asset,
-                // oracle gets preserved on disable in store._upsertAsset
-                oracle: "0x0000000000000000000000000000000000000000",
-                enabled: false,
-              },
-            );
+            await ctx.runMutation(internal.shieldQueue.store._upsertAsset, {
+              deploymentId: d._id,
+              tokenAddress: decoded.asset,
+              // oracle gets preserved on disable in store._upsertAsset
+              oracle: "0x0000000000000000000000000000000000000000",
+              enabled: false,
+            });
             break;
           }
 
           case "LeafInserted": {
-            await ctx.runMutation(
-              internal.shieldQueue.store._upsertLeaf,
-              {
-                deploymentId: d._id,
-                epoch: decoded.epoch,
-                leafIndex: decoded.leafIndex,
-                leafCommitment: decoded.leafCommitment,
-                insertedTxHash: log.transactionHash,
-              },
-            );
+            await ctx.runMutation(internal.shieldQueue.store._upsertLeaf, {
+              deploymentId: d._id,
+              epoch: decoded.epoch,
+              leafIndex: decoded.leafIndex,
+              leafCommitment: decoded.leafCommitment,
+              insertedTxHash: log.transactionHash,
+            });
             break;
           }
 
@@ -309,9 +291,11 @@ async function getTxMeta(
   const cached = cache.get(txHash);
   if (cached) return cached;
 
-  const tx = await rpc<{ from: string } | null>(url, "eth_getTransactionByHash", [
-    txHash,
-  ]);
+  const tx = await rpc<{ from: string } | null>(
+    url,
+    "eth_getTransactionByHash",
+    [txHash],
+  );
   if (!tx) {
     throw new Error(`eth_getTransactionByHash returned null for ${txHash}`);
   }

@@ -1,9 +1,10 @@
-import { ArrowLeftRight, RefreshCw, Send, Sparkles } from "lucide-react";
+import { ArrowLeftRight, RefreshCw, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AnimatedShinyText } from "@/components/ui/animated-shiny-text";
 import { TypingAnimation } from "@/components/ui/typing-animation";
 import { DepositButton } from "./deposit/DepositButton";
 import { ReceiveButton } from "./receive/ReceiveButton";
+import { SendButton } from "./send/SendButton";
 import { SplitBar } from "./SplitBar";
 import { SunIcon, MoonIcon } from "./SunMoonIcons";
 
@@ -15,23 +16,27 @@ const STALE_NUDGE_PHRASES = [
   "there could be some new things to sync",
   "sync time? or not aha",
 ];
-// SyncIndicator (the "Sync Preferences" chip) is intentionally hidden
-// for now — the underlying preferences-sync module has known bugs
-// that need a rework before it should be user-visible. The hook +
-// component still exist so it can be reintroduced cleanly later.
+// Preferences sync (the old "Sync Preferences" chip) moved out of this
+// card entirely — it's now the app-wide sync banner in PageLayout.
 
 type Props = {
-  /** Total USD (public + private). null while loading. */
+  /** Total USD (public + private), mainnet chains only. null while
+   *  loading. Testnet value is deliberately excluded — play money never
+   *  blends into the real headline (or the chips / split bar below). */
   totalUsd: number | null;
   publicUsd: number | null;
   privateUsd: number | null;
+  /** Combined (public + private) USD value of testnet holdings.
+   *  undefined → testnets are off; render nothing.
+   *  null → testnets are on but the sum is still loading; render a
+   *  small skeleton so a slow testnet RPC never holds up the headline.
+   *  number → render the "$X.XX Testnet" secondary headline. */
+  testnetUsd?: number | null;
   loading?: boolean;
   className?: string;
   /** Optional: render a top-right Swap button that calls this on click. */
   onSwap?: () => void;
-  /** Optional: render a top-right Send button. Rendered to the left of
-   *  Swap so the visual order matches the verb order most users expect:
-   *  Send → Swap. */
+  /** Optional: render the full-width Send CTA beneath Receive. */
   onSend?: () => void;
   /** Optional: render a Sync button that re-decrypts shield-queue notes
    *  from Convex. Stacks below Send/Swap on mobile. */
@@ -68,6 +73,7 @@ export function BalanceCard({
   totalUsd,
   publicUsd,
   privateUsd,
+  testnetUsd,
   loading,
   className,
   onSwap,
@@ -107,133 +113,148 @@ export function BalanceCard({
             the balance down and leaving a gap under the eyebrow. */}
         <div className="flex min-w-0 flex-col gap-3.5">
           <p className="eyebrow">Total Balance</p>
-          {isLoading ? (
-            <span
-              className="skel"
-              style={{ width: "60%", height: 48, borderRadius: 12 }}
-            />
-          ) : (
-            <h1
-              className="font-serif font-bold leading-[0.95] tracking-[-0.02em] text-[44px] sm:text-[52px] text-ink"
-              style={{ margin: 0 }}
-            >
-              {formatUsd(total)}
-            </h1>
-          )}
+          {/* Headline + (optional) testnet secondary headline share a
+              tighter gap than the column's 3.5 so they read as one
+              block. The two lines load independently: a stalled testnet
+              RPC shows a small skeleton here without ever holding the
+              mainnet headline at skeleton (and vice versa). */}
+          <div className="flex min-w-0 flex-col gap-1.5">
+            {isLoading ? (
+              <span
+                className="skel"
+                style={{ width: "60%", height: 48, borderRadius: 12 }}
+              />
+            ) : (
+              <h1
+                className="font-serif font-bold leading-[0.95] tracking-[-0.02em] text-[44px] sm:text-[52px] text-ink"
+                style={{ margin: 0 }}
+              >
+                {formatUsd(total)}
+              </h1>
+            )}
+            {testnetUsd !== undefined &&
+              (testnetUsd === null ? (
+                <span
+                  className="skel"
+                  style={{ width: 110, height: 22, borderRadius: 8 }}
+                />
+              ) : (
+                <p
+                  className="font-serif font-bold leading-none tracking-[-0.01em] text-[20px] sm:text-[24px] text-ink-mute"
+                  style={{ margin: 0 }}
+                >
+                  {formatUsd(testnetUsd)} Testnet
+                </p>
+              ))}
+          </div>
         </div>
         <div className="flex flex-col items-end gap-1">
-        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-          {onSend && (
-            <button
-              type="button"
-              onClick={onSend}
-              className={cn(
-                "inline-flex items-center justify-center gap-1.5",
-                "h-[28px] px-3 rounded-full",
-                "border border-line bg-paper-lo text-ink",
-                "text-[12px] font-semibold",
-                "transition-colors hover:bg-[var(--pub-soft)] hover:text-[var(--pub)]",
-                "focus-visible:outline-none focus-visible:ring-3",
-                "focus-visible:ring-[var(--pub-soft-2)]",
-              )}
-            >
-              <Send className="size-3.5" />
-              Send
-            </button>
-          )}
-          {onSwap && (
-            <button
-              type="button"
-              onClick={onSwap}
-              className={cn(
-                "inline-flex items-center justify-center gap-1.5",
-                "h-[28px] px-3 rounded-full",
-                "border border-line bg-paper-lo text-ink",
-                "text-[12px] font-semibold",
-                "transition-colors hover:bg-[var(--pub-soft)] hover:text-[var(--pub)]",
-                "focus-visible:outline-none focus-visible:ring-3",
-                "focus-visible:ring-[var(--pub-soft-2)]",
-              )}
-            >
-              <ArrowLeftRight className="size-3.5" />
-              Swap
-            </button>
-          )}
-          {onSync && (
-            <button
-              type="button"
-              onClick={onSync}
-              disabled={syncing}
-              aria-label={syncing ? "Syncing notes" : "Sync notes from Convex"}
-              className={cn(
-                "inline-flex items-center justify-center gap-1.5",
-                "h-[28px] px-3 rounded-full",
-                "border border-line bg-paper-lo text-ink",
-                "text-[12px] font-semibold",
-                "transition-colors hover:bg-[var(--priv-soft)] hover:text-[var(--priv)]",
-                "focus-visible:outline-none focus-visible:ring-3",
-                "focus-visible:ring-[var(--priv-soft-2)]",
-                "disabled:opacity-60 disabled:cursor-not-allowed",
-              )}
-            >
-              <RefreshCw
-                className={cn("size-3.5", syncing && "animate-spin")}
-              />
-              {syncShimmerActive ? (
-                <AnimatedShinyText className="text-ink mx-0 max-w-none">
-                  {syncing ? "Syncing…" : "Sync"}
-                </AnimatedShinyText>
-              ) : (
-                <span>Sync</span>
-              )}
-            </button>
-          )}
-          {/* <SyncIndicator /> — disabled: see note at top of file. */}
-        </div>
-        {syncShiny && (
-          // sm+ : nudge tucks inside the right-side column so it sits
-          // directly under the chip row. On mobile this column is only
-          // ~140px wide (the giant balance takes the rest), which
-          // wraps the phrase onto two lines — so we hide this copy
-          // below sm and render a full-width version as a sibling of
-          // the row instead.
-          <div className="hidden sm:flex items-center gap-1.5">
-            <Sparkles
-              className="size-3 text-[var(--pub-hi)] animate-twinkle"
-              aria-hidden
-            />
-            <TypingAnimation
-              words={STALE_NUDGE_PHRASES}
-              loop
-              typeSpeed={55}
-              deleteSpeed={28}
-              pauseDelay={1800}
-              cursorStyle="line"
-              className="text-[11.5px] font-medium text-[var(--pub)] leading-snug tracking-normal"
-            />
+          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+            {onSwap && (
+              <button
+                type="button"
+                onClick={onSwap}
+                className={cn(
+                  "inline-flex items-center justify-center gap-1.5",
+                  "h-[28px] px-3 rounded-full",
+                  "border border-line bg-paper-lo text-ink",
+                  "text-[12px] font-semibold",
+                  "transition-colors hover:bg-[var(--pub-soft)] hover:text-[var(--pub)]",
+                  "focus-visible:outline-none focus-visible:ring-3",
+                  "focus-visible:ring-[var(--pub-soft-2)]",
+                )}
+              >
+                <ArrowLeftRight className="size-3.5" />
+                Swap
+              </button>
+            )}
+            {onSync && (
+              <button
+                type="button"
+                onClick={onSync}
+                disabled={syncing}
+                aria-label={
+                  syncing ? "Syncing notes" : "Sync notes from Convex"
+                }
+                className={cn(
+                  "inline-flex items-center justify-center gap-1.5",
+                  "h-[28px] px-3 rounded-full",
+                  "border border-line bg-paper-lo text-ink",
+                  "text-[12px] font-semibold",
+                  "transition-colors hover:bg-[var(--priv-soft)] hover:text-[var(--priv)]",
+                  "focus-visible:outline-none focus-visible:ring-3",
+                  "focus-visible:ring-[var(--priv-soft-2)]",
+                  "disabled:opacity-60 disabled:cursor-not-allowed",
+                )}
+              >
+                <RefreshCw
+                  className={cn("size-3.5", syncing && "animate-spin")}
+                />
+                {syncShimmerActive ? (
+                  <AnimatedShinyText className="text-ink mx-0 max-w-none">
+                    {syncing ? "Syncing…" : "Sync"}
+                  </AnimatedShinyText>
+                ) : (
+                  <span>Sync</span>
+                )}
+              </button>
+            )}
           </div>
-        )}
+          {/* sm+ : nudge tucks inside the right-side column so it sits
+              directly under the chip row. On mobile this column is only
+              ~140px wide (the giant balance takes the rest), which
+              wraps the phrase onto two lines — so we hide this copy
+              below sm and render a full-width version as a sibling of
+              the row instead. The container always renders with a fixed
+              min-height so the card doesn't reflow when the nudge
+              appears/disappears. */}
+          {onSync && (
+            <div className="hidden min-h-[17px] items-center gap-1.5 sm:flex">
+              {syncShiny && (
+                <>
+                  <Sparkles
+                    className="size-3 text-[var(--pub-hi)] animate-twinkle"
+                    aria-hidden
+                  />
+                  <TypingAnimation
+                    words={STALE_NUDGE_PHRASES}
+                    loop
+                    typeSpeed={55}
+                    deleteSpeed={28}
+                    pauseDelay={1800}
+                    cursorStyle="line"
+                    className="text-[11.5px] font-medium text-[var(--pub)] leading-snug tracking-normal"
+                  />
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {syncShiny && (
-        // Mobile-only nudge — full card width with justify-end so it
-        // still reads as "attached to the Sync button above" while
-        // having room for the longest phrase on a single line.
-        <div className="-mt-2 flex items-center justify-end gap-1.5 sm:hidden">
-          <Sparkles
-            className="size-3 text-[var(--pub-hi)] animate-twinkle"
-            aria-hidden
-          />
-          <TypingAnimation
-            words={STALE_NUDGE_PHRASES}
-            loop
-            typeSpeed={55}
-            deleteSpeed={28}
-            pauseDelay={1800}
-            cursorStyle="line"
-            className="text-[11.5px] font-medium text-[var(--pub)] leading-snug tracking-normal whitespace-nowrap"
-          />
+      {/* Mobile-only nudge — full card width with justify-end so it
+          still reads as "attached to the Sync button above" while
+          having room for the longest phrase on a single line. Height is
+          reserved whether or not the text is animating. */}
+      {onSync && (
+        <div className="-mt-2 flex min-h-[17px] items-center justify-end gap-1.5 sm:hidden">
+          {syncShiny && (
+            <>
+              <Sparkles
+                className="size-3 text-[var(--pub-hi)] animate-twinkle"
+                aria-hidden
+              />
+              <TypingAnimation
+                words={STALE_NUDGE_PHRASES}
+                loop
+                typeSpeed={55}
+                deleteSpeed={28}
+                pauseDelay={1800}
+                cursorStyle="line"
+                className="text-[11.5px] font-medium text-[var(--pub)] leading-snug tracking-normal whitespace-nowrap"
+              />
+            </>
+          )}
         </div>
       )}
 
@@ -263,14 +284,14 @@ export function BalanceCard({
 
       <SplitBar publicValue={pub} privateValue={priv} height={8} />
 
-      {(onDeposit || onReceive) && (
-        // Primary CTA row. When both are present we render them
-        // side-by-side at full-width-each so they share the same
-        // prominence. When only one is wired up it falls through to a
-        // single full-width button (legacy single-CTA layout).
+      {(onDeposit || onReceive || onSend) && (
+        // Primary CTA stack: Deposit → Receive → Send. Side-by-side at
+        // full-width-each on sm+ so they share the same prominence;
+        // stacked on mobile. Any subset falls through gracefully.
         <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:gap-2">
           {onDeposit && <DepositButton onClick={onDeposit} />}
           {onReceive && <ReceiveButton onClick={onReceive} />}
+          {onSend && <SendButton onClick={onSend} />}
         </div>
       )}
     </section>

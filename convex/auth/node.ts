@@ -26,9 +26,12 @@ export const verifyAndCompleteRegistration = internalAction({
     }),
   },
   handler: async (ctx, args) => {
-    const pending = await ctx.runQuery(internal.auth.ceremony._findPendingRegistration, {
-      userIdBytes: args.userIdBytes,
-    });
+    const pending = await ctx.runQuery(
+      internal.auth.ceremony._findPendingRegistration,
+      {
+        userIdBytes: args.userIdBytes,
+      },
+    );
     if (!pending) throw new Error("registration ceremony expired or unknown");
 
     const expectedChallenge = bufferToBase64Url(pending.challenge);
@@ -162,5 +165,8 @@ function bufferToBase64Url(buf: ArrayBuffer): string {
 }
 
 function bufferFromUint8(u: Uint8Array): ArrayBuffer {
-  return u.buffer.slice(u.byteOffset, u.byteOffset + u.byteLength) as ArrayBuffer;
+  return u.buffer.slice(
+    u.byteOffset,
+    u.byteOffset + u.byteLength,
+  ) as ArrayBuffer;
 }

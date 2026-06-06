@@ -82,21 +82,21 @@ export type UnshieldInput = {
 export type PreparedUnshieldTx = {
   to: string;
   data: string;
-  value: string;          // decimal wei — always "0" for unshieldBundled
+  value: string; // decimal wei — always "0" for unshieldBundled
   chainId: number;
 
-  proofBytes: string;                 // 0x hex
-  publicInputs: readonly string[];    // 0x… hex; 25 slots at NOTE_COUNT=3
-  payload: readonly string[];         // 3 entries; "0x" for exit/empty
+  proofBytes: string; // 0x hex
+  publicInputs: readonly string[]; // 0x… hex; 25 slots at NOTE_COUNT=3
+  payload: readonly string[]; // 3 entries; "0x" for exit/empty
 
   /** Self-change output, if any. Caller writes this into IDB
    *  optimistically on broadcast accept. Undefined when the exit
    *  consumes the entire input. */
   changeOutput?: {
-    secret: string;        // decimal string
-    owner: string;         // 0x + 64 hex
-    asset: string;         // lowercased
-    amount: string;        // base units, decimal string
+    secret: string; // decimal string
+    owner: string; // 0x + 64 hex
+    asset: string; // lowercased
+    amount: string; // base units, decimal string
     leafCommitment: string; // 0x + 64 hex
     encryptedPayload: string; // 0x hex (ECIES blob)
   };
@@ -105,8 +105,8 @@ export type PreparedUnshieldTx = {
   /** Echo of the exit so the confirm UI can show recipient + amount. */
   exit: {
     asset: string;
-    amount: string;        // base units, decimal string
-    address: string;       // lowercased 0x…
+    amount: string; // base units, decimal string
+    address: string; // lowercased 0x…
   };
 };
 
@@ -331,8 +331,7 @@ export async function prepareUnshield(
       changeOwnerBig,
       changeSecret,
     ]);
-    const changeLeafHex =
-      "0x" + changeLeaf.toString(16).padStart(64, "0");
+    const changeLeafHex = "0x" + changeLeaf.toString(16).padStart(64, "0");
 
     circuitOutputs.push({
       owner: changeOwnerBig.toString(),

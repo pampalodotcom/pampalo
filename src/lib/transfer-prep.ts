@@ -99,19 +99,19 @@ export type PreparedTransferTx = {
   value: string; // decimal wei — always "0" for transfer
   chainId: number;
 
-  proofBytes: string;               // 0x hex (UltraHonk proof)
-  publicInputs: readonly string[];  // 0x… hex; sized 7
-  payload: readonly string[];       // 3 entries; empty slots are "0x"
+  proofBytes: string; // 0x hex (UltraHonk proof)
+  publicInputs: readonly string[]; // 0x… hex; sized 7
+  payload: readonly string[]; // 3 entries; empty slots are "0x"
 
   /** Per-output bookkeeping the caller can drop into IDB optimistically
    *  on broadcast accept. `change` outputs (owner === selfPoseidon)
    *  become spendable notes immediately on confirm; recipient outputs
    *  belong to the recipient and are NOT inserted into this wallet's IDB. */
   outputs: Array<{
-    secret: string;        // decimal string
-    owner: string;         // 0x + 64 hex
-    asset: string;         // lowercased
-    amount: string;        // base units, decimal string
+    secret: string; // decimal string
+    owner: string; // 0x + 64 hex
+    asset: string; // lowercased
+    amount: string; // base units, decimal string
     leafCommitment: string; // 0x + 64 hex
     encryptedPayload: string; // 0x hex (ECIES blob)
   }>;
@@ -289,7 +289,7 @@ export async function prepareTransfer(
     owner_secret: string;
     secret: string;
     leaf_index: string;
-    path: string[];        // length HEIGHT - 1 = 11
+    path: string[]; // length HEIGHT - 1 = 11
     path_indices: string[]; // length HEIGHT - 1 = 11
   };
   type CircuitOutputNote = {

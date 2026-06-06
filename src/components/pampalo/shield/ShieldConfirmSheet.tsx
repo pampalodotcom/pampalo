@@ -17,11 +17,7 @@ import { withUnlockedWallet } from "@/lib/auth-flow";
 import { useRpcClient } from "@/lib/rpc";
 import { useIsDesktop } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { AssetMark } from "../AssetMark";
 
@@ -419,20 +415,27 @@ export function ShieldConfirmSheet({
             </div>
             <Moon className="size-5 shrink-0 text-[var(--priv)]" aria-hidden />
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-3 text-[11.5px]">
+          <div className="mt-3 flex flex-col gap-3 text-[11.5px]">
             <div>
-              <div className="text-ink-mute">Pampalo router</div>
+              <div className="text-ink-mute">Pampalo Contract</div>
               <div className="mt-0.5 truncate font-mono text-[11px] text-ink">
                 {deployment?.pampaloAddress ?? "…"}
               </div>
             </div>
             <div>
+              <div className="text-ink-mute">
+                Recipient (Your {deployment?.networkName ?? "network"} Poseidon
+                Address)
+              </div>
+              <div className="mt-0.5 break-all font-mono text-[11px] text-ink">
+                {addresses.poseidon}
+              </div>
+            </div>
+            <div>
               <div className="text-ink-mute">Wait</div>
               <div className="mt-0.5 font-mono text-[11px] text-ink">
-                {deployment
-                  ? formatWait(deployment.shieldWaitSeconds)
-                  : "…"}{" "}
-                · finalise after
+                {deployment ? formatWait(deployment.shieldWaitSeconds) : "…"} ·
+                finalise after
               </div>
             </div>
           </div>
@@ -575,7 +578,7 @@ function StatusLine({
     return (
       <ProgressLine
         label="Awaiting passkey signature"
-        sub="Approve the passkey prompt to decrypt your mnemonic and sign locally — the signed bytes never leave this tab."
+        sub="Approve the passkey prompt to decrypt your mnemonic and sign locally - the signed bytes never leave this tab."
       />
     );
   }

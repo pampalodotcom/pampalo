@@ -25,8 +25,7 @@ export async function postJson<TReq extends object, TRes>(
     let msg: string;
     try {
       msg =
-        (JSON.parse(text) as { error?: string }).error ??
-        `HTTP ${res.status}`;
+        (JSON.parse(text) as { error?: string }).error ?? `HTTP ${res.status}`;
     } catch {
       // Non-JSON response — likely the SPA's 404 HTML. Don't leak the body
       // into a toast. The proxy is probably misconfigured or not running.

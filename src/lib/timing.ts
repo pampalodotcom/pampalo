@@ -17,9 +17,8 @@ const ENABLED = (() => {
   const fromEnv = (import.meta as { env?: Record<string, string | undefined> })
     .env?.VITE_PAMPALO_TIMING;
   // Also let users flip it from the console: `window.__pampaloTiming = true`.
-  const fromWindow = (
-    window as unknown as { __pampaloTiming?: boolean }
-  ).__pampaloTiming;
+  const fromWindow = (window as unknown as { __pampaloTiming?: boolean })
+    .__pampaloTiming;
   return Boolean(fromEnv) || Boolean(fromWindow);
 })();
 
