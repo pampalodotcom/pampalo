@@ -66,11 +66,11 @@ export async function pullDuringCeremony(
 
   // Conflict policy: field-aware merge (mergePrefs). When local is dirty
   // its values win per-field (current device wins LWW), except monotonic
-  // fields which always take max. The merged result stays dirty so the
-  // caller's subsequent push persists it upstream.
-  const localDirty = isDirty();
-  const merged = mergePrefs(upstream, getCurrentPrefsSnapshot(), localDirty);
-  applyPulledPrefs(merged, row.revision, localDirty);
+  // fields which always take max. `upstream` becomes the dirty-diff
+  // baseline: if the merge still differs from it, the record stays dirty
+  // and the caller's subsequent push converges both sides.
+  const merged = mergePrefs(upstream, getCurrentPrefsSnapshot(), isDirty());
+  applyPulledPrefs(merged, row.revision, upstream);
 }
 
 export async function pushDuringCeremony(

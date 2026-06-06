@@ -39,11 +39,29 @@ export function isTestnetChainId(chainId: number): boolean {
   return TESTNET_CHAIN_IDS.has(chainId);
 }
 
+// Field-wise comparison (normalised against defaults so an absent key and
+// an explicit default compare equal). `dirty` is derived from this diff
+// rather than from "a write happened" — toggling a pref and toggling it
+// back must read as clean, not as un-pushed work.
+export function prefsEqual(a: Prefs, b: Prefs): boolean {
+  const na = { ...DEFAULT_PREFS, ...a };
+  const nb = { ...DEFAULT_PREFS, ...b };
+  return (
+    na.showTestnets === nb.showTestnets &&
+    na.defaultChainId === nb.defaultChainId &&
+    na.displayCurrency === nb.displayCurrency &&
+    na.mnemonicBackedUpAt === nb.mnemonicBackedUpAt
+  );
+}
+
 // ─── Module-scoped store ──────────────────────────────────────────────────
 
 let cache: Prefs | null = null;
 let dirty = false;
 let lastSeenRevision: number | null = null;
+// Snapshot of the prefs as the server last held them (set on every
+// pull/push). Baseline for the dirty diff; null = never synced.
+let lastSynced: Prefs | null = null;
 let loadPromise: Promise<void> | null = null;
 
 const listeners = new Set<() => void>();
@@ -59,7 +77,11 @@ async function loadFromIdb(): Promise<void> {
     const rec = await readPrefsRecord<Prefs>();
     if (rec) {
       cache = { ...DEFAULT_PREFS, ...rec.data };
-      dirty = rec.dirty;
+      lastSynced = rec.lastSynced ?? null;
+      // Re-derive dirtiness from the diff when we have a baseline;
+      // records written before `lastSynced` existed fall back to the
+      // stored flag until their next sync establishes one.
+      dirty = lastSynced ? !prefsEqual(cache, lastSynced) : rec.dirty;
       lastSeenRevision = rec.lastSeenRevision;
       notify();
       return;
@@ -86,10 +108,12 @@ async function loadFromIdb(): Promise<void> {
     cache = migrated;
     dirty = migratedFromDefaults;
     lastSeenRevision = null;
+    lastSynced = null;
     await writePrefsRecord({
       data: migrated,
       lastSeenRevision: null,
       dirty: migratedFromDefaults,
+      lastSynced: null,
     });
     notify();
   })();
@@ -155,8 +179,12 @@ export function setPref<TKey extends keyof Prefs>(
 ): void {
   const base = cache ?? DEFAULT_PREFS;
   cache = { ...base, [key]: value };
-  dirty = true;
-  void writePrefsRecord({ data: cache, lastSeenRevision, dirty: true });
+  // Dirty = "differs from what the server holds", not "a write happened".
+  // Changing a pref and changing it back reads as clean — no sync banner.
+  // Never-synced (lastSynced null) diffs against defaults: if everything
+  // is still default there's nothing worth pushing.
+  dirty = !prefsEqual(cache, lastSynced ?? DEFAULT_PREFS);
+  void writePrefsRecord({ data: cache, lastSeenRevision, dirty, lastSynced });
   notify();
 }
 
@@ -184,29 +212,36 @@ export function markPushed(revision: number): void {
   if (!cache) return;
   dirty = false;
   lastSeenRevision = revision;
+  lastSynced = cache;
   void writePrefsRecord({
     data: cache,
     lastSeenRevision: revision,
     dirty: false,
+    lastSynced,
   });
   notify();
 }
 
-// `stillDirty` is set when the applied value is an upstream+local merge
-// whose local half hasn't been pushed yet — the caller pushes right
-// after, and markPushed() clears the flag then.
+// `serverPrefs` is what the server row actually holds (the pre-merge
+// upstream value); it becomes the new dirty-diff baseline. When the
+// applied value is an upstream+local merge that still differs from it,
+// `dirty` stays true and the caller's subsequent push (→ markPushed)
+// converges both sides. Defaults to `prefs` for the plain "applied the
+// server state verbatim" case.
 export function applyPulledPrefs(
   prefs: Prefs,
   revision: number,
-  stillDirty = false,
+  serverPrefs: Prefs = prefs,
 ): void {
   cache = { ...DEFAULT_PREFS, ...prefs };
-  dirty = stillDirty;
+  lastSynced = { ...DEFAULT_PREFS, ...serverPrefs };
+  dirty = !prefsEqual(cache, lastSynced);
   lastSeenRevision = revision;
   void writePrefsRecord({
     data: cache,
     lastSeenRevision: revision,
-    dirty: stillDirty,
+    dirty,
+    lastSynced,
   });
   notify();
 }
@@ -241,6 +276,7 @@ export function clearPrefsMemoryForSignOut(): void {
   cache = null;
   dirty = false;
   lastSeenRevision = null;
+  lastSynced = null;
   loadPromise = null;
   notify();
 }
@@ -252,6 +288,7 @@ export async function wipePrefsCompletely(): Promise<void> {
   cache = null;
   dirty = false;
   lastSeenRevision = null;
+  lastSynced = null;
   loadPromise = null;
   await clearPrefsRecord();
   notify();

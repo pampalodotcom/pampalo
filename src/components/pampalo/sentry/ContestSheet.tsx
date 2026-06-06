@@ -153,7 +153,7 @@ export function ContestSheet({
       while (!cancelRef.current) {
         if (Date.now() - startedAt > RECEIPT_TIMEOUT_MS) {
           toast(
-            "Contest submitted. Still waiting on the receipt — close this and check the explorer if it doesn't land soon.",
+            "Contest submitted. Still waiting on the receipt - close this and check the explorer if it doesn't land soon.",
           );
           return;
         }

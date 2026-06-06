@@ -20,10 +20,18 @@ const STALE_NUDGE_PHRASES = [
 // card entirely — it's now the app-wide sync banner in PageLayout.
 
 type Props = {
-  /** Total USD (public + private). null while loading. */
+  /** Total USD (public + private), mainnet chains only. null while
+   *  loading. Testnet value is deliberately excluded — play money never
+   *  blends into the real headline (or the chips / split bar below). */
   totalUsd: number | null;
   publicUsd: number | null;
   privateUsd: number | null;
+  /** Combined (public + private) USD value of testnet holdings.
+   *  undefined → testnets are off; render nothing.
+   *  null → testnets are on but the sum is still loading; render a
+   *  small skeleton so a slow testnet RPC never holds up the headline.
+   *  number → render the "$X.XX Testnet" secondary headline. */
+  testnetUsd?: number | null;
   loading?: boolean;
   className?: string;
   /** Optional: render a top-right Swap button that calls this on click. */
@@ -65,6 +73,7 @@ export function BalanceCard({
   totalUsd,
   publicUsd,
   privateUsd,
+  testnetUsd,
   loading,
   className,
   onSwap,
@@ -104,19 +113,40 @@ export function BalanceCard({
             the balance down and leaving a gap under the eyebrow. */}
         <div className="flex min-w-0 flex-col gap-3.5">
           <p className="eyebrow">Total Balance</p>
-          {isLoading ? (
-            <span
-              className="skel"
-              style={{ width: "60%", height: 48, borderRadius: 12 }}
-            />
-          ) : (
-            <h1
-              className="font-serif font-bold leading-[0.95] tracking-[-0.02em] text-[44px] sm:text-[52px] text-ink"
-              style={{ margin: 0 }}
-            >
-              {formatUsd(total)}
-            </h1>
-          )}
+          {/* Headline + (optional) testnet secondary headline share a
+              tighter gap than the column's 3.5 so they read as one
+              block. The two lines load independently: a stalled testnet
+              RPC shows a small skeleton here without ever holding the
+              mainnet headline at skeleton (and vice versa). */}
+          <div className="flex min-w-0 flex-col gap-1.5">
+            {isLoading ? (
+              <span
+                className="skel"
+                style={{ width: "60%", height: 48, borderRadius: 12 }}
+              />
+            ) : (
+              <h1
+                className="font-serif font-bold leading-[0.95] tracking-[-0.02em] text-[44px] sm:text-[52px] text-ink"
+                style={{ margin: 0 }}
+              >
+                {formatUsd(total)}
+              </h1>
+            )}
+            {testnetUsd !== undefined &&
+              (testnetUsd === null ? (
+                <span
+                  className="skel"
+                  style={{ width: 110, height: 22, borderRadius: 8 }}
+                />
+              ) : (
+                <p
+                  className="font-serif font-bold leading-none tracking-[-0.01em] text-[20px] sm:text-[24px] text-ink-mute"
+                  style={{ margin: 0 }}
+                >
+                  {formatUsd(testnetUsd)} Testnet
+                </p>
+              ))}
+          </div>
         </div>
         <div className="flex flex-col items-end gap-1">
           <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">

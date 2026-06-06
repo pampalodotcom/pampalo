@@ -577,7 +577,7 @@ function BalanceCardConnected({
       setStaleSync(false);
     } catch (e) {
       console.warn("[sync] failed", e);
-      toast.error("Sync failed — try again.");
+      toast.error("Sync failed - try again.");
     } finally {
       setSyncing(false);
     }
@@ -672,6 +672,11 @@ function BalanceCardWithBalances({
   // user demonstrably has shielded notes (the visible bug in the
   // screenshot).
   const privateBuckets = usePrivateBalances(evmAddress).perAsset;
+  // Read the preference directly (rather than inferring from whether
+  // testnet tokens survived the upstream filter) so "testnets off"
+  // reliably hides the secondary headline even if the catalog has no
+  // testnet entries yet.
+  const [testnetsEnabled] = useTestnetsEnabled();
   // Aggregate by symbol — one balance lookup per (chainId, address).
   // React allows this because the token list is stable across renders;
   // we map deterministically so hook order doesn't change.
@@ -697,21 +702,41 @@ function BalanceCardWithBalances({
     return { token: t, pub, priv };
   });
 
-  let publicUsd = 0;
-  let privateUsd = 0;
+  // Mainnet and testnet sums accumulate into separate buckets so the
+  // headline only ever shows real money — testnet holdings (valued with
+  // the same mainnet price feeds, so the number is meaningful) roll up
+  // into a single combined public+private figure rendered as the
+  // "$X.XX Testnet" secondary headline. Loading flags are tracked per
+  // bucket: a slow Sepolia RPC or missing testnet feed must never hold
+  // the mainnet headline at skeleton, and vice versa.
+  // No private-side loading flag: the legacy per-token private hook is
+  // a stub (always 0) and the IDB buckets folded in below are
+  // synchronously available, so only public balances + price feeds can
+  // hold a bucket at skeleton.
+  let publicUsd = 0; // mainnet only
+  let privateUsd = 0; // mainnet only
+  let testnetUsd = 0; // testnet, public + private combined
   let anyPubLoading = false;
-  let anyPrivLoading = false;
   let anyPriceMissing = false;
+  let anyTestnetLoading = false;
 
   for (const r of rows) {
+    const isTestnet = isTestnetChainId(r.token.chainId);
     const price = usdPriceFor(r.token, prices ?? undefined);
-    if (price === null) anyPriceMissing = true;
+    if (price === null) {
+      if (isTestnet) anyTestnetLoading = true;
+      else anyPriceMissing = true;
+    }
 
     if (r.pub.data) {
       const amt = weiToNumber(r.pub.data.balanceWei, r.token.decimals);
-      if (price !== null) publicUsd += amt * price;
+      if (price !== null) {
+        if (isTestnet) testnetUsd += amt * price;
+        else publicUsd += amt * price;
+      }
     } else if (r.pub.isLoading) {
-      anyPubLoading = true;
+      if (isTestnet) anyTestnetLoading = true;
+      else anyPubLoading = true;
     } else if (r.pub.error) {
       // Don't block totals on a single failing chain — log and treat
       // as 0 for now so the rest of the dashboard still renders.
@@ -740,15 +765,21 @@ function BalanceCardWithBalances({
     const price = usdPriceFor(token, prices ?? undefined);
     if (price === null) continue;
     const amt = weiToNumber(b.spendable, token.decimals);
-    privateUsd += amt * price;
+    if (isTestnetChainId(b.chainId)) testnetUsd += amt * price;
+    else privateUsd += amt * price;
   }
 
-  const stillLoading = anyPubLoading || anyPrivLoading || anyPriceMissing;
+  const mainLoading = anyPubLoading || anyPriceMissing;
   return (
     <BalanceCard
-      totalUsd={stillLoading ? null : publicUsd + privateUsd}
-      publicUsd={stillLoading ? null : publicUsd}
-      privateUsd={stillLoading ? null : privateUsd}
+      totalUsd={mainLoading ? null : publicUsd + privateUsd}
+      publicUsd={mainLoading ? null : publicUsd}
+      privateUsd={mainLoading ? null : privateUsd}
+      // undefined hides the line entirely (testnets off); null renders
+      // its skeleton while testnet rows/feeds are still resolving.
+      testnetUsd={
+        !testnetsEnabled ? undefined : anyTestnetLoading ? null : testnetUsd
+      }
       onSwap={onSwap}
       onSend={onSend}
       onSync={onSync}

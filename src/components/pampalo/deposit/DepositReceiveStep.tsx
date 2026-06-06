@@ -105,7 +105,7 @@ export function DepositReceiveStep({
       await navigator.clipboard.writeText(url);
       toast("Share link copied to clipboard.");
     } catch {
-      toast.error("Couldn't share — copy the address manually.");
+      toast.error("Couldn't share - copy the address manually.");
     }
   };
 

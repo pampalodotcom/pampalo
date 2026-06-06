@@ -51,7 +51,7 @@ export const Route = createRootRouteWithContext<{
       {
         property: "og:description",
         content:
-          "Passkey-encrypted private money. Your keys, your data — encrypted client-side, stored as ciphertext.",
+          "Passkey-encrypted private money. Your keys, your data - encrypted client-side, stored as ciphertext.",
       },
       { property: "og:image", content: "/og-image.png" },
       { property: "og:image:type", content: "image/png" },
@@ -67,7 +67,7 @@ export const Route = createRootRouteWithContext<{
       {
         name: "twitter:description",
         content:
-          "Passkey-encrypted private money. Your keys, your data — encrypted client-side, stored as ciphertext.",
+          "Passkey-encrypted private money. Your keys, your data - encrypted client-side, stored as ciphertext.",
       },
       { name: "twitter:image", content: "/og-image.png" },
     ],

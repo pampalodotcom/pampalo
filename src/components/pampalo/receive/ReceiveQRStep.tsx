@@ -106,7 +106,7 @@ export function ReceiveQRStep({
       await navigator.clipboard.writeText(shareUrl);
       toast("Share link copied to clipboard.");
     } catch {
-      toast.error("Couldn't share — copy an address manually.");
+      toast.error("Couldn't share - copy an address manually.");
     }
   };
 

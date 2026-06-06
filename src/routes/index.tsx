@@ -180,6 +180,7 @@ function Landing() {
       // ADR 0013: signup never displays the recovery phrase — finalize and
       // go straight to the wallet. The PageLayout backup banner nudges the
       // user toward the Account-page export flow from there.
+      // TODO review this again
       finalizeNewWallet(draft);
       finalizeAddressIntoState(draft.addresses.evm);
       setUi({ kind: "transitioning" });
@@ -399,7 +400,7 @@ function PasskeyHelp({ kind, onBack }: { kind: HelpKind; onBack: () => void }) {
             Pampalo encrypts your wallet with a feature called the WebAuthn{" "}
             <em>PRF extension</em>. Apple Passwords (iCloud Keychain) and Google
             Password Manager support it. 1Password is still rolling out support
-            and isn’t reliable yet — so we can’t use it.
+            and isn’t reliable yet - so we can’t use it.
           </>
         ) : (
           <>

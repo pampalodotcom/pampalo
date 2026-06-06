@@ -190,6 +190,23 @@ with its cached oracle adapter address. Rows are write-once + flip
 `enabled`, never deleted, so the audit / Sentry view can show "this
 asset was disabled at …".
 
+**Total balance**:
+The dashboard's headline figure — public + private holdings summed in
+USD across **mainnet** chains only. Testnet value never blends into it
+(nor into its public/private chips or split bar), even when the
+testnets preference is on.
+
+**Testnet balance**:
+USD value of holdings on testnet chains, public + private combined
+into one figure. Priced with the same feeds as the mainnet twins, so
+the number is meaningful — but it is play money and is displayed as
+its own "$X.XX Testnet" secondary headline beneath the **Total
+balance**, only while the testnets preference is on. Loads
+independently: a stalled testnet RPC or feed never delays the mainnet
+headline, and vice versa. Shows `$0.00` honestly in both directions —
+an all-testnet account reads "$0.00" big with its testnet value
+beneath.
+
 ### On-chain protocol (the smart-contract layer)
 
 **Note**:

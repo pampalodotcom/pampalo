@@ -123,7 +123,7 @@ function SharePage() {
     // Fallback for desktop / browsers without share API: copy the
     // current URL and tell the user.
     void copy(shareUrl);
-    toast("Link copied — paste it wherever you want to share.");
+    toast("Link copied - paste it wherever you want to share.");
   };
 
   const hasAnyAddress = Boolean(

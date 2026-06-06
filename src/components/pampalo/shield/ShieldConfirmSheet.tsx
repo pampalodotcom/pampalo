@@ -578,7 +578,7 @@ function StatusLine({
     return (
       <ProgressLine
         label="Awaiting passkey signature"
-        sub="Approve the passkey prompt to decrypt your mnemonic and sign locally — the signed bytes never leave this tab."
+        sub="Approve the passkey prompt to decrypt your mnemonic and sign locally - the signed bytes never leave this tab."
       />
     );
   }

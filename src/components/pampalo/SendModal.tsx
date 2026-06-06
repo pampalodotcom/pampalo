@@ -1013,7 +1013,7 @@ function StatusBanner({ status }: { status: TrackingStatus }) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-[13px] text-ink">
         <Loader2 className="size-4 animate-spin text-muted-foreground" />
-        <span className="flex-1">Mined — waiting for confirmations.</span>
+        <span className="flex-1">Mined - waiting for confirmations.</span>
         <span className="font-mono text-[11px] text-ink-mute">
           {status.confirmations}/{CONFIRMATIONS_THRESHOLD}
         </span>
@@ -1031,7 +1031,7 @@ function StatusBanner({ status }: { status: TrackingStatus }) {
   return (
     <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-[13px] text-ink">
       <Clock className="size-4 animate-pulse text-muted-foreground" />
-      <span className="flex-1">Submitted — waiting for a block.</span>
+      <span className="flex-1">Submitted - waiting for a block.</span>
     </div>
   );
 }

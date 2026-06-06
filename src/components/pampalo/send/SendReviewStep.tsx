@@ -702,7 +702,7 @@ function SuccessPanel({
     ? mode === "private"
       ? "Transfer mined. Receiver can tap Sync to discover the note."
       : "Transfer mined."
-    : "Awaiting confirmation — should land in a few seconds.";
+    : "Awaiting confirmation - should land in a few seconds.";
 
   return (
     <div className="flex flex-col items-center gap-4 px-2 pt-2 text-center">

@@ -155,7 +155,7 @@ export function ActionConfirmSheet({
   const onConfirm = async () => {
     if (!payload || !deployment || !evmAddress) return;
     if (!gas?.gasPriceWei) {
-      setError("Gas price not loaded yet — try again in a moment.");
+      setError("Gas price not loaded yet - try again in a moment.");
       return;
     }
     setError(null);
@@ -225,8 +225,8 @@ export function ActionConfirmSheet({
     if (phase !== "submitted") return;
     toast.success(
       isFastTrack
-        ? "Fast-tracked — inserting into the merkle tree…"
-        : "Sponsored — awaiting confirmation…",
+        ? "Fast-tracked - inserting into the merkle tree…"
+        : "Sponsored - awaiting confirmation…",
     );
   }, [phase, isFastTrack]);
   useEffect(() => {

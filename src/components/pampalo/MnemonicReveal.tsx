@@ -106,7 +106,7 @@ export function MnemonicReveal({ mnemonic, address, onDone }: Props) {
         setCopied(false);
       }, 60_000);
     } catch {
-      toast.error("Couldn’t copy — write it down instead.");
+      toast.error("Couldn’t copy - write it down instead.");
     }
   }
 
@@ -135,9 +135,9 @@ export function MnemonicReveal({ mnemonic, address, onDone }: Props) {
         Your recovery phrase
       </h2>
       <p className="text-[14px] leading-relaxed text-ink-soft">
-        Anyone with these 12 words can take your wallet — only display them
-        somewhere private, and never share them. They’re the only way to
-        recover your wallet if you lose access to your passkey.
+        Anyone with these 12 words can take your wallet - only display them
+        somewhere private, and never share them. They’re the only way to recover
+        your wallet if you lose access to your passkey.
       </p>
 
       <div className="relative">
@@ -209,7 +209,7 @@ export function MnemonicReveal({ mnemonic, address, onDone }: Props) {
       {revealed && !canProceed && (
         <div aria-live="polite">
           <div className="mb-1.5 flex items-center justify-between text-[11.5px] text-ink-mute">
-            <span>Take a moment — write these down somewhere safe.</span>
+            <span>Take a moment - write these down somewhere safe.</span>
             <span className="font-mono tabular-nums">
               {Math.ceil((1 - readProgress) * (READ_TIMER_MS / 1000))}s
             </span>
