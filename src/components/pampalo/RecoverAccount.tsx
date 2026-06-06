@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { deriveAddresses, type DerivedAddresses } from "@/lib/derive-addresses";
 import { parseRecoveryPhrase, type ParseResult } from "@/lib/recovery-phrase";
 import { PrfNotSupportedError, recoverAccount } from "@/lib/auth-flow";
+import { setPref } from "@/lib/preferences";
 import { cn } from "@/lib/utils";
 import { PrimaryButton } from "./PrimaryButton";
 import { SecondaryButton } from "./SecondaryButton";
@@ -70,6 +71,10 @@ export function RecoverAccount({ onBack, onRecovered, onPrfMissing }: Props) {
     setBusy(true);
     try {
       await recoverAccount(parsed.mnemonic);
+      // The user just proved possession of the recovery phrase by typing
+      // it — the fresh prefs blob (new userId, ADR 0003) shouldn't nag
+      // them to back up. ADR 0013.
+      setPref("mnemonicBackedUpAt", Date.now());
       // Don't keep the plaintext around once the ceremony succeeded.
       setText("");
       setParsed({ status: "empty" });

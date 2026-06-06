@@ -417,7 +417,7 @@ function rpIdHint(): string {
   return window.location.hostname;
 }
 
-// ─── Export Account Secret ───────────────────────────────────────────────
+// ─── Export recovery phrase ──────────────────────────────────────────────
 // Runs a passkey ceremony to derive PRF and decrypt the mnemonic, returning
 // the plaintext for one-time display. Caller is responsible for clearing
 // it from React state as soon as the user dismisses the UI.

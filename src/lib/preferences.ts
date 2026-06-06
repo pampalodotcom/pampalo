@@ -17,6 +17,11 @@ export type Prefs = {
   showTestnets: boolean;
   defaultChainId?: number;
   displayCurrency?: DisplayCurrency;
+  // When the user completed an export of the recovery phrase (Copy or
+  // Download in MnemonicReveal), or proved possession by recovering.
+  // Monotonic — see mergePrefs(). Drives the PageLayout backup banner.
+  // ADR 0013.
+  mnemonicBackedUpAt?: number;
 };
 
 const DEFAULT_PREFS: Prefs = {
@@ -114,7 +119,7 @@ export function usePreferences(): Prefs {
 }
 
 // Reactive accessor for the last-seen server revision — drives the
-// "upstream has changes" indicator in the BalanceCard.
+// "upstream has changes" side of the PageLayout sync banner.
 export function useLastSeenRevision(): number | null {
   return useSyncExternalStore(
     subscribe,
@@ -124,11 +129,22 @@ export function useLastSeenRevision(): number | null {
 }
 
 // Reactive accessor for the dirty flag — drives the "you have unpushed
-// changes" side of the BalanceCard sync indicator.
+// changes" side of the PageLayout sync banner.
 export function useIsDirty(): boolean {
   return useSyncExternalStore(
     subscribe,
     () => dirty,
+    () => false,
+  );
+}
+
+// True once the IDB record has been read (or bootstrapped). Banners that
+// key off pref values must wait for this — otherwise DEFAULT_PREFS
+// flashes a "not backed up" state at users who are.
+export function usePrefsLoaded(): boolean {
+  return useSyncExternalStore(
+    subscribe,
+    () => cache !== null,
     () => false,
   );
 }
@@ -176,16 +192,43 @@ export function markPushed(revision: number): void {
   notify();
 }
 
-export function applyPulledPrefs(prefs: Prefs, revision: number): void {
+// `stillDirty` is set when the applied value is an upstream+local merge
+// whose local half hasn't been pushed yet — the caller pushes right
+// after, and markPushed() clears the flag then.
+export function applyPulledPrefs(
+  prefs: Prefs,
+  revision: number,
+  stillDirty = false,
+): void {
   cache = { ...DEFAULT_PREFS, ...prefs };
-  dirty = false;
+  dirty = stillDirty;
   lastSeenRevision = revision;
   void writePrefsRecord({
     data: cache,
     lastSeenRevision: revision,
-    dirty: false,
+    dirty: stillDirty,
   });
   notify();
+}
+
+// Field-aware merge of upstream and local prefs. Last-write-wins (local
+// wins when dirty) is right for toggles like showTestnets, but monotonic
+// fields must never move backwards: a stale device pushing its old view
+// must not be able to "un-back-up" a wallet. ADR 0013.
+export function mergePrefs(
+  upstream: Prefs,
+  local: Prefs,
+  localDirty: boolean,
+): Prefs {
+  const merged: Prefs = localDirty
+    ? { ...upstream, ...local }
+    : { ...upstream };
+  const backedUpAt = Math.max(
+    upstream.mnemonicBackedUpAt ?? 0,
+    local.mnemonicBackedUpAt ?? 0,
+  );
+  if (backedUpAt > 0) merged.mnemonicBackedUpAt = backedUpAt;
+  return merged;
 }
 
 // Sign-out path. Drops the in-memory cache so the next sign-in reads

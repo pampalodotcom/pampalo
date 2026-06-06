@@ -15,10 +15,8 @@ const STALE_NUDGE_PHRASES = [
   "there could be some new things to sync",
   "sync time? or not aha",
 ];
-// SyncIndicator (the "Sync Preferences" chip) is intentionally hidden
-// for now — the underlying preferences-sync module has known bugs
-// that need a rework before it should be user-visible. The hook +
-// component still exist so it can be reintroduced cleanly later.
+// Preferences sync (the old "Sync Preferences" chip) moved out of this
+// card entirely — it's now the app-wide sync banner in PageLayout.
 
 type Props = {
   /** Total USD (public + private). null while loading. */
@@ -190,7 +188,6 @@ export function BalanceCard({
                 )}
               </button>
             )}
-            {/* <SyncIndicator /> — disabled: see note at top of file. */}
           </div>
           {syncShiny && (
             // sm+ : nudge tucks inside the right-side column so it sits

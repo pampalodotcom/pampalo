@@ -8,170 +8,170 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from "./routes/__root";
-import { Route as WalletRouteImport } from "./routes/wallet";
-import { Route as ShareRouteImport } from "./routes/share";
-import { Route as SentryRouteImport } from "./routes/sentry";
-import { Route as LoadingRouteImport } from "./routes/loading";
-import { Route as ClearRouteImport } from "./routes/clear";
-import { Route as AccountRouteImport } from "./routes/account";
-import { Route as IndexRouteImport } from "./routes/index";
+import { Route as rootRouteImport } from './routes/__root'
+import { Route as WalletRouteImport } from './routes/wallet'
+import { Route as ShareRouteImport } from './routes/share'
+import { Route as SentryRouteImport } from './routes/sentry'
+import { Route as LoadingRouteImport } from './routes/loading'
+import { Route as ClearRouteImport } from './routes/clear'
+import { Route as AccountRouteImport } from './routes/account'
+import { Route as IndexRouteImport } from './routes/index'
 
 const WalletRoute = WalletRouteImport.update({
-  id: "/wallet",
-  path: "/wallet",
+  id: '/wallet',
+  path: '/wallet',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const ShareRoute = ShareRouteImport.update({
-  id: "/share",
-  path: "/share",
+  id: '/share',
+  path: '/share',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const SentryRoute = SentryRouteImport.update({
-  id: "/sentry",
-  path: "/sentry",
+  id: '/sentry',
+  path: '/sentry',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const LoadingRoute = LoadingRouteImport.update({
-  id: "/loading",
-  path: "/loading",
+  id: '/loading',
+  path: '/loading',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const ClearRoute = ClearRouteImport.update({
-  id: "/clear",
-  path: "/clear",
+  id: '/clear',
+  path: '/clear',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const AccountRoute = AccountRouteImport.update({
-  id: "/account",
-  path: "/account",
+  id: '/account',
+  path: '/account',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const IndexRoute = IndexRouteImport.update({
-  id: "/",
-  path: "/",
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 
 export interface FileRoutesByFullPath {
-  "/": typeof IndexRoute;
-  "/account": typeof AccountRoute;
-  "/clear": typeof ClearRoute;
-  "/loading": typeof LoadingRoute;
-  "/sentry": typeof SentryRoute;
-  "/share": typeof ShareRoute;
-  "/wallet": typeof WalletRoute;
+  '/': typeof IndexRoute
+  '/account': typeof AccountRoute
+  '/clear': typeof ClearRoute
+  '/loading': typeof LoadingRoute
+  '/sentry': typeof SentryRoute
+  '/share': typeof ShareRoute
+  '/wallet': typeof WalletRoute
 }
 export interface FileRoutesByTo {
-  "/": typeof IndexRoute;
-  "/account": typeof AccountRoute;
-  "/clear": typeof ClearRoute;
-  "/loading": typeof LoadingRoute;
-  "/sentry": typeof SentryRoute;
-  "/share": typeof ShareRoute;
-  "/wallet": typeof WalletRoute;
+  '/': typeof IndexRoute
+  '/account': typeof AccountRoute
+  '/clear': typeof ClearRoute
+  '/loading': typeof LoadingRoute
+  '/sentry': typeof SentryRoute
+  '/share': typeof ShareRoute
+  '/wallet': typeof WalletRoute
 }
 export interface FileRoutesById {
-  __root__: typeof rootRouteImport;
-  "/": typeof IndexRoute;
-  "/account": typeof AccountRoute;
-  "/clear": typeof ClearRoute;
-  "/loading": typeof LoadingRoute;
-  "/sentry": typeof SentryRoute;
-  "/share": typeof ShareRoute;
-  "/wallet": typeof WalletRoute;
+  __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
+  '/account': typeof AccountRoute
+  '/clear': typeof ClearRoute
+  '/loading': typeof LoadingRoute
+  '/sentry': typeof SentryRoute
+  '/share': typeof ShareRoute
+  '/wallet': typeof WalletRoute
 }
 export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath;
+  fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | "/"
-    | "/account"
-    | "/clear"
-    | "/loading"
-    | "/sentry"
-    | "/share"
-    | "/wallet";
-  fileRoutesByTo: FileRoutesByTo;
+    | '/'
+    | '/account'
+    | '/clear'
+    | '/loading'
+    | '/sentry'
+    | '/share'
+    | '/wallet'
+  fileRoutesByTo: FileRoutesByTo
   to:
-    | "/"
-    | "/account"
-    | "/clear"
-    | "/loading"
-    | "/sentry"
-    | "/share"
-    | "/wallet";
+    | '/'
+    | '/account'
+    | '/clear'
+    | '/loading'
+    | '/sentry'
+    | '/share'
+    | '/wallet'
   id:
-    | "__root__"
-    | "/"
-    | "/account"
-    | "/clear"
-    | "/loading"
-    | "/sentry"
-    | "/share"
-    | "/wallet";
-  fileRoutesById: FileRoutesById;
+    | '__root__'
+    | '/'
+    | '/account'
+    | '/clear'
+    | '/loading'
+    | '/sentry'
+    | '/share'
+    | '/wallet'
+  fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute;
-  AccountRoute: typeof AccountRoute;
-  ClearRoute: typeof ClearRoute;
-  LoadingRoute: typeof LoadingRoute;
-  SentryRoute: typeof SentryRoute;
-  ShareRoute: typeof ShareRoute;
-  WalletRoute: typeof WalletRoute;
+  IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRoute
+  ClearRoute: typeof ClearRoute
+  LoadingRoute: typeof LoadingRoute
+  SentryRoute: typeof SentryRoute
+  ShareRoute: typeof ShareRoute
+  WalletRoute: typeof WalletRoute
 }
 
-declare module "@tanstack/react-router" {
+declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    "/wallet": {
-      id: "/wallet";
-      path: "/wallet";
-      fullPath: "/wallet";
-      preLoaderRoute: typeof WalletRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/share": {
-      id: "/share";
-      path: "/share";
-      fullPath: "/share";
-      preLoaderRoute: typeof ShareRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/sentry": {
-      id: "/sentry";
-      path: "/sentry";
-      fullPath: "/sentry";
-      preLoaderRoute: typeof SentryRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/loading": {
-      id: "/loading";
-      path: "/loading";
-      fullPath: "/loading";
-      preLoaderRoute: typeof LoadingRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/clear": {
-      id: "/clear";
-      path: "/clear";
-      fullPath: "/clear";
-      preLoaderRoute: typeof ClearRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/account": {
-      id: "/account";
-      path: "/account";
-      fullPath: "/account";
-      preLoaderRoute: typeof AccountRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/": {
-      id: "/";
-      path: "/";
-      fullPath: "/";
-      preLoaderRoute: typeof IndexRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
+    '/wallet': {
+      id: '/wallet'
+      path: '/wallet'
+      fullPath: '/wallet'
+      preLoaderRoute: typeof WalletRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share': {
+      id: '/share'
+      path: '/share'
+      fullPath: '/share'
+      preLoaderRoute: typeof ShareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sentry': {
+      id: '/sentry'
+      path: '/sentry'
+      fullPath: '/sentry'
+      preLoaderRoute: typeof SentryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/loading': {
+      id: '/loading'
+      path: '/loading'
+      fullPath: '/loading'
+      preLoaderRoute: typeof LoadingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/clear': {
+      id: '/clear'
+      path: '/clear'
+      fullPath: '/clear'
+      preLoaderRoute: typeof ClearRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -183,16 +183,16 @@ const rootRouteChildren: RootRouteChildren = {
   SentryRoute: SentryRoute,
   ShareRoute: ShareRoute,
   WalletRoute: WalletRoute,
-};
+}
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>();
+  ._addFileTypes<FileRouteTypes>()
 
-import type { getRouter } from "./router.tsx";
-import type { createStart } from "@tanstack/react-start";
-declare module "@tanstack/react-start" {
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
   interface Register {
-    ssr: true;
-    router: Awaited<ReturnType<typeof getRouter>>;
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
   }
 }

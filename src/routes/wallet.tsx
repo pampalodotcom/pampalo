@@ -35,6 +35,7 @@ import {
   NetworkFilterTabs,
   type NetworkFilter,
 } from "@/components/pampalo/NetworkFilterTabs";
+import { PageLayout } from "@/components/pampalo/PageLayout";
 import { PageLoading } from "@/components/pampalo/PageLoading";
 import { SendSheet } from "@/components/pampalo/send/SendSheet";
 import { SwapModal } from "@/components/pampalo/SwapModal";
@@ -86,7 +87,7 @@ function Wallet() {
   }
 
   return (
-    <main className="phone-shell flex flex-1 flex-col">
+    <PageLayout>
       {/* Full-width beach band — same vibe as the landing page. Header
           floats over it with absolute positioning so it lines up with
           the dashboard column below. */}
@@ -137,7 +138,7 @@ function Wallet() {
           </section>
         )}
       </div>
-    </main>
+    </PageLayout>
   );
 }
 

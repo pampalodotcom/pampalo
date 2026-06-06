@@ -31,9 +31,9 @@ export default defineSchema({
     // (ethers) keystore format; produced by `wallet.encrypt(passphrase)`.
     encryptedJson: v.optional(v.string()),
     createdAt: v.number(),
-    // Set when the user successfully completes the 3-word confirmation
-    // step. Absent if they skipped it ("Do it later") or haven't seen it.
-    mnemonicConfirmedAt: v.optional(v.number()),
+    // NOTE: backup status (`mnemonicBackedUpAt`) deliberately lives inside
+    // the encrypted userPreferences blob, NOT here — a plaintext behaviour
+    // timestamp on the wallet row would violate ADR 0001. See ADR 0013.
   }).index("by_userId", ["userId"]),
 
   credentials: defineTable({

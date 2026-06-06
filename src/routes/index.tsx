@@ -3,7 +3,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, ArrowLeft, Fingerprint, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { BeachScene } from "@/components/pampalo/BeachScene";
-import { MnemonicReveal } from "@/components/pampalo/MnemonicReveal";
 import { PageLoading } from "@/components/pampalo/PageLoading";
 import { PrimaryButton } from "@/components/pampalo/PrimaryButton";
 import { RecoverAccount } from "@/components/pampalo/RecoverAccount";
@@ -19,7 +18,6 @@ import {
   registerNewWallet,
   signInWithExistingPasskey,
   UnknownCredentialError,
-  type NewWalletDraft,
 } from "@/lib/auth-flow";
 import { isConditionalUIAvailable, startConditionalGet } from "@/lib/passkey";
 import { postJson } from "@/lib/http";
@@ -77,7 +75,6 @@ type LocalUiState =
   | { kind: "signin-choice" }
   | { kind: "registering" }
   | { kind: "signing-in" }
-  | { kind: "reveal"; draft: NewWalletDraft }
   | { kind: "recovering" }
   | { kind: "help"; help: HelpKind }
   | { kind: "transitioning" };
@@ -180,7 +177,13 @@ function Landing() {
     setUi({ kind: "registering" });
     try {
       const draft = await registerNewWallet();
-      setUi({ kind: "reveal", draft });
+      // ADR 0013: signup never displays the recovery phrase — finalize and
+      // go straight to the wallet. The PageLayout backup banner nudges the
+      // user toward the Account-page export flow from there.
+      finalizeNewWallet(draft);
+      finalizeAddressIntoState(draft.addresses.evm);
+      setUi({ kind: "transitioning" });
+      void navigate({ to: "/wallet" });
     } catch (e) {
       if (e instanceof PrfNotSupportedError) {
         setUi({ kind: "help", help: "prf-not-supported" });
@@ -190,23 +193,6 @@ function Landing() {
       toast.error(msg);
       setUi({ kind: "idle" });
     }
-  }
-
-  function onMnemonicConfirmed() {
-    if (ui.kind !== "reveal") return;
-    const draft = ui.draft;
-    finalizeNewWallet(draft);
-    finalizeAddressIntoState(draft.addresses.evm);
-    setUi({ kind: "transitioning" });
-    void navigate({ to: "/wallet" });
-  }
-
-  function onMnemonicSkipped() {
-    if (ui.kind !== "reveal") return;
-    finalizeNewWallet(ui.draft);
-    finalizeAddressIntoState(ui.draft.addresses.evm);
-    setUi({ kind: "transitioning" });
-    void navigate({ to: "/wallet" });
   }
 
   const knownDevice =
@@ -230,14 +216,7 @@ function Landing() {
       <div className="phone-column flex flex-1 flex-col">
         {/* Hero card overlaps the scene's bottom fade */}
         <section className="relative z-10 -mt-10 mx-[8vw] mb-8 rise-in rounded-3xl card-cream px-5 pt-6 pb-5 sm:mx-4">
-          {ui.kind === "reveal" ? (
-            <MnemonicReveal
-              mnemonic={ui.draft.mnemonic}
-              address={ui.draft.addresses.evm}
-              onConfirmed={onMnemonicConfirmed}
-              onSkip={onMnemonicSkipped}
-            />
-          ) : ui.kind === "help" ? (
+          {ui.kind === "help" ? (
             <PasskeyHelp
               kind={ui.help}
               onBack={() => setUi({ kind: "idle" })}

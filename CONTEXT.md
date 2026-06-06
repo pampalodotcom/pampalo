@@ -95,6 +95,26 @@ The 12-word BIP39 phrase from which the EVM address, envelope key, and
 Poseidon identifier are derived. Never persisted; lives in memory only
 for the duration of a sign/unlock operation.
 
+**Recovery phrase**:
+The user-facing name for the **mnemonic** — the term used in all UI copy
+("Back up your recovery phrase", "Export recovery phrase") and in the
+**Recover account** flow. Same 12 words; "mnemonic" stays the
+internal / encryption-layer term.
+_Avoid_: "account phrase", "account secret", "seed phrase", and
+especially "private key" (it is not one — keys are derived from it).
+
+**Backed up**:
+A wallet is backed up once the user has completed an export of the
+**recovery phrase** — a passkey ceremony followed by an explicit Copy or
+Download. Signup does not display the phrase or gate on backup: the
+synced passkey is the primary recovery mechanism and the recovery phrase
+is the escape hatch. Until backed up, the wallet home shows a nudge
+banner (session-dismissable, CTA opens the export flow). Recorded as
+`mnemonicBackedUpAt` inside the encrypted preferences blob — never as a
+plaintext server column (a behaviour timestamp; the privacy invariant
+forbids it). Monotonic: preference-sync merges take
+`max(upstream, local)`, so a stale device can never un-back-up a wallet.
+
 **DEK** (Data Encryption Key):
 A 32-byte random AES-GCM-256 key generated at wallet creation. Encrypts
 the mnemonic once. Re-wrapped under each registered passkey's KEK.

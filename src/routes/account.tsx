@@ -9,10 +9,13 @@ import {
 import { AddressWell } from "@/components/pampalo/AddressWell";
 import { BeachScene } from "@/components/pampalo/BeachScene";
 import { MnemonicReveal } from "@/components/pampalo/MnemonicReveal";
+import { PageLayout } from "@/components/pampalo/PageLayout";
 import { PageLoading } from "@/components/pampalo/PageLoading";
+import { PrimaryButton } from "@/components/pampalo/PrimaryButton";
 import { ThemeToggle } from "@/components/pampalo/ThemeToggle";
 import { exportMnemonic, PrfNotSupportedError } from "@/lib/auth-flow";
 import { useAuth } from "@/lib/auth";
+import { usePreferences, usePrefsLoaded } from "@/lib/preferences";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +28,11 @@ function AccountPage() {
   const [reauthing, setReauthing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportedMnemonic, setExportedMnemonic] = useState<string | null>(null);
+  const prefs = usePreferences();
+  const prefsLoaded = usePrefsLoaded();
+  // Drives the loud backup call-to-action below. Clears reactively the
+  // moment Copy/Download in MnemonicReveal sets mnemonicBackedUpAt.
+  const needsBackup = prefsLoaded && prefs.mnemonicBackedUpAt === undefined;
 
   useEffect(() => {
     if (auth.state.status === "anonymous") {
@@ -62,7 +70,7 @@ function AccountPage() {
         return;
       }
       const msg =
-        e instanceof Error ? e.message : "Couldn’t decrypt account secret.";
+        e instanceof Error ? e.message : "Couldn’t decrypt recovery phrase.";
       toast.error(msg);
     } finally {
       setExporting(false);
@@ -75,7 +83,7 @@ function AccountPage() {
   }
 
   return (
-    <main className="phone-shell flex flex-1 flex-col">
+    <PageLayout>
       <div className="relative shrink-0 w-full">
         <BeachScene height={240} theme={theme} />
         <div className="absolute inset-x-0 top-6 z-10 pointer-events-none">
@@ -101,13 +109,52 @@ function AccountPage() {
       </div>
 
       <div className="relative z-10 -mt-10 mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-[8vw] pb-12 sm:px-4">
+        {/* Loud backup call-to-action — the in-shell compact banner links
+            here. Not session-dismissable: on this page the user is one
+            tap from resolving it. ADR 0013. */}
+        {!exportedMnemonic && needsBackup && addresses && (
+          <section className="rise-in rounded-3xl card-cream px-5 py-5">
+            <div className="mb-2 flex items-center gap-2 text-warn-fg">
+              <KeyRound className="size-4" />
+              <p className="eyebrow" style={{ color: "var(--color-warn-fg)" }}>
+                Action needed
+              </p>
+            </div>
+            <h2 className="mb-2 font-serif text-[22px] font-bold leading-tight text-ink">
+              Finish setting up your account
+            </h2>
+            <p className="mb-4 text-[14px] leading-relaxed text-ink-soft">
+              Your wallet has a 12-word recovery phrase. Day to day your
+              passkey unlocks everything — but if you ever lose access to it,
+              the recovery phrase is the <em>only</em> way to get your wallet
+              back. Save it somewhere safe now; you’ll confirm with your
+              passkey first.
+            </p>
+            <PrimaryButton
+              onClick={() => void onExportSecret()}
+              disabled={exporting}
+            >
+              {exporting ? (
+                <>
+                  <Loader2 className="size-[18px] animate-spin" />
+                  Unlocking…
+                </>
+              ) : (
+                <>
+                  <KeyRound className="size-[18px]" />
+                  Back up recovery phrase
+                </>
+              )}
+            </PrimaryButton>
+          </section>
+        )}
+
         {exportedMnemonic && addresses ? (
           <section className="rise-in rounded-3xl card-cream px-5 py-5">
             <MnemonicReveal
-              mode="export"
               mnemonic={exportedMnemonic}
               address={addresses.evm}
-              onConfirmed={onExportDismiss}
+              onDone={onExportDismiss}
             />
           </section>
         ) : (
@@ -170,7 +217,7 @@ function AccountPage() {
                   ) : (
                     <KeyRound className="size-4" />
                   )}
-                  {exporting ? "Unlocking…" : "Export Account Secret"}
+                  {exporting ? "Unlocking…" : "Export recovery phrase"}
                 </button>
               </>
             ) : (
@@ -184,7 +231,7 @@ function AccountPage() {
           </section>
         )}
       </div>
-    </main>
+    </PageLayout>
   );
 }
 
