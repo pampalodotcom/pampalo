@@ -553,12 +553,13 @@ function BalanceCardConnected({
   const [syncing, setSyncing] = useState(false);
   // Staleness nudge — the Sync chip shimmers warmly and a hint line
   // appears between the action row and the balance chips while
-  // `staleSync` is true. Starts true on mount (we haven't reconciled
-  // with Convex yet in this session) and flips off after a successful
-  // sync. A timer flips it back on after STALE_TTL_MS so the user gets
-  // a fresh nudge if they hang out on the dashboard.
+  // `staleSync` is true. Starts FALSE on mount so a fresh login/signup
+  // isn't immediately nagged — the effect below arms the STALE_TTL_MS
+  // timer, so the first nudge appears 2 minutes in. A successful sync
+  // flips it off and re-arms the timer, so the user gets a fresh nudge
+  // if they hang out on the dashboard.
   const STALE_TTL_MS = 120_000;
-  const [staleSync, setStaleSync] = useState(true);
+  const [staleSync, setStaleSync] = useState(false);
   const onSync = async () => {
     if (syncing) return;
     setSyncing(true);

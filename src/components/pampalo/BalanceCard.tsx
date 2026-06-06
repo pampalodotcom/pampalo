@@ -1,9 +1,10 @@
-import { ArrowLeftRight, RefreshCw, Send, Sparkles } from "lucide-react";
+import { ArrowLeftRight, RefreshCw, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AnimatedShinyText } from "@/components/ui/animated-shiny-text";
 import { TypingAnimation } from "@/components/ui/typing-animation";
 import { DepositButton } from "./deposit/DepositButton";
 import { ReceiveButton } from "./receive/ReceiveButton";
+import { SendButton } from "./send/SendButton";
 import { SplitBar } from "./SplitBar";
 import { SunIcon, MoonIcon } from "./SunMoonIcons";
 
@@ -27,9 +28,7 @@ type Props = {
   className?: string;
   /** Optional: render a top-right Swap button that calls this on click. */
   onSwap?: () => void;
-  /** Optional: render a top-right Send button. Rendered to the left of
-   *  Swap so the visual order matches the verb order most users expect:
-   *  Send → Swap. */
+  /** Optional: render the full-width Send CTA beneath Receive. */
   onSend?: () => void;
   /** Optional: render a Sync button that re-decrypts shield-queue notes
    *  from Convex. Stacks below Send/Swap on mobile. */
@@ -121,24 +120,6 @@ export function BalanceCard({
         </div>
         <div className="flex flex-col items-end gap-1">
           <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-            {onSend && (
-              <button
-                type="button"
-                onClick={onSend}
-                className={cn(
-                  "inline-flex items-center justify-center gap-1.5",
-                  "h-[28px] px-3 rounded-full",
-                  "border border-line bg-paper-lo text-ink",
-                  "text-[12px] font-semibold",
-                  "transition-colors hover:bg-[var(--pub-soft)] hover:text-[var(--pub)]",
-                  "focus-visible:outline-none focus-visible:ring-3",
-                  "focus-visible:ring-[var(--pub-soft-2)]",
-                )}
-              >
-                <Send className="size-3.5" />
-                Send
-              </button>
-            )}
             {onSwap && (
               <button
                 type="button"
@@ -189,14 +170,46 @@ export function BalanceCard({
               </button>
             )}
           </div>
+          {/* sm+ : nudge tucks inside the right-side column so it sits
+              directly under the chip row. On mobile this column is only
+              ~140px wide (the giant balance takes the rest), which
+              wraps the phrase onto two lines — so we hide this copy
+              below sm and render a full-width version as a sibling of
+              the row instead. The container always renders with a fixed
+              min-height so the card doesn't reflow when the nudge
+              appears/disappears. */}
+          {onSync && (
+            <div className="hidden min-h-[17px] items-center gap-1.5 sm:flex">
+              {syncShiny && (
+                <>
+                  <Sparkles
+                    className="size-3 text-[var(--pub-hi)] animate-twinkle"
+                    aria-hidden
+                  />
+                  <TypingAnimation
+                    words={STALE_NUDGE_PHRASES}
+                    loop
+                    typeSpeed={55}
+                    deleteSpeed={28}
+                    pauseDelay={1800}
+                    cursorStyle="line"
+                    className="text-[11.5px] font-medium text-[var(--pub)] leading-snug tracking-normal"
+                  />
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile-only nudge — full card width with justify-end so it
+          still reads as "attached to the Sync button above" while
+          having room for the longest phrase on a single line. Height is
+          reserved whether or not the text is animating. */}
+      {onSync && (
+        <div className="-mt-2 flex min-h-[17px] items-center justify-end gap-1.5 sm:hidden">
           {syncShiny && (
-            // sm+ : nudge tucks inside the right-side column so it sits
-            // directly under the chip row. On mobile this column is only
-            // ~140px wide (the giant balance takes the rest), which
-            // wraps the phrase onto two lines — so we hide this copy
-            // below sm and render a full-width version as a sibling of
-            // the row instead.
-            <div className="hidden sm:flex items-center gap-1.5">
+            <>
               <Sparkles
                 className="size-3 text-[var(--pub-hi)] animate-twinkle"
                 aria-hidden
@@ -208,31 +221,10 @@ export function BalanceCard({
                 deleteSpeed={28}
                 pauseDelay={1800}
                 cursorStyle="line"
-                className="text-[11.5px] font-medium text-[var(--pub)] leading-snug tracking-normal"
+                className="text-[11.5px] font-medium text-[var(--pub)] leading-snug tracking-normal whitespace-nowrap"
               />
-            </div>
+            </>
           )}
-        </div>
-      </div>
-
-      {syncShiny && (
-        // Mobile-only nudge — full card width with justify-end so it
-        // still reads as "attached to the Sync button above" while
-        // having room for the longest phrase on a single line.
-        <div className="-mt-2 flex items-center justify-end gap-1.5 sm:hidden">
-          <Sparkles
-            className="size-3 text-[var(--pub-hi)] animate-twinkle"
-            aria-hidden
-          />
-          <TypingAnimation
-            words={STALE_NUDGE_PHRASES}
-            loop
-            typeSpeed={55}
-            deleteSpeed={28}
-            pauseDelay={1800}
-            cursorStyle="line"
-            className="text-[11.5px] font-medium text-[var(--pub)] leading-snug tracking-normal whitespace-nowrap"
-          />
         </div>
       )}
 
@@ -262,14 +254,14 @@ export function BalanceCard({
 
       <SplitBar publicValue={pub} privateValue={priv} height={8} />
 
-      {(onDeposit || onReceive) && (
-        // Primary CTA row. When both are present we render them
-        // side-by-side at full-width-each so they share the same
-        // prominence. When only one is wired up it falls through to a
-        // single full-width button (legacy single-CTA layout).
+      {(onDeposit || onReceive || onSend) && (
+        // Primary CTA stack: Deposit → Receive → Send. Side-by-side at
+        // full-width-each on sm+ so they share the same prominence;
+        // stacked on mobile. Any subset falls through gracefully.
         <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:gap-2">
           {onDeposit && <DepositButton onClick={onDeposit} />}
           {onReceive && <ReceiveButton onClick={onReceive} />}
+          {onSend && <SendButton onClick={onSend} />}
         </div>
       )}
     </section>

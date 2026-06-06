@@ -149,7 +149,7 @@ function NoticeBanners() {
     // on /account (see AccountPage), so this just gets the user there.
     return (
       <BannerShell>
-        <div className="rise-in flex w-fit items-center gap-2 rounded-full border border-line card-cream py-1.5 pl-3.5 pr-1.5 shadow">
+        <div className="rise-in ml-auto flex w-fit items-center gap-2 rounded-full border border-line card-cream py-1.5 pl-3.5 pr-1.5 shadow">
           <KeyRound className="size-3.5 shrink-0 text-ink-soft" />
           <Link
             to="/account"
