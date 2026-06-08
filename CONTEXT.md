@@ -351,6 +351,71 @@ breaking the EOA-anonymity property the relayer otherwise provides.
 The UX always surfaces this with an explicit confirm dialog before
 proceeding; never silent.
 
+### Private payments (proof-of-payment)
+
+**Private payment**:
+A purchase where the buyer pays a merchant with a Pampalo note instead
+of a public ERC-20 transfer, and a consuming contract accepts that
+payment the way it would accept an ERC-20. Two-step and non-atomic
+(model A): (1) the buyer issues an ordinary **Transfer** creating one
+note owned by the merchant's **Poseidon identifier** for `(asset,
+amount)`; (2) after the note is indexed the buyer builds a **payment
+proof** that the note exists in a known root, and the consuming contract
+settles it. The merchant genuinely receives a spendable note; the proof
+is a separate single-use coupon that gates the good. _Distinct from_
+**Transfer** (the payment leg itself) and **Unshield** (value out to a
+public address). _Avoid_ "redemption" as the feature name — that reads
+as NFT-specific; the mechanism is generic payment acceptance.
+
+**Payment proof** (redeem circuit):
+The membership proof a buyer generates to spend a private payment. Built
+by the `redeem` circuit (`circuits/redeem/`) — a single-input, no-
+balance, no-spend cousin of `withdraw`. Eight public inputs, in order:
+`root`, `redeem_nullifier`, `merchant_id`, `asset_id`, `asset_amount`,
+`recipient`, `consumer`, `reference`. The buyer can build it because
+they *created* the merchant's note (they know its `secret`), but can
+never *spend* it (they don't know the merchant's `owner_secret`).
+
+**Redeem nullifier**:
+The nullifier burned when a private payment is settled. Domain-separated
+from the spend **Nullifier** (`REDEEM_DOMAIN =
+keccak256("PAMPALO_REDEEM_V1") mod p`, mirrored in
+`pum_lib::compute_redeem_nullifier` and `shared/constants/zk.ts`) so a
+redeem cannot grief the merchant's later spend of the same note, or vice
+versa. Deliberately **excludes** `recipient`, `consumer` and
+`reference`, so one payment note is redeemable at most **once, ever,
+globally**.
+
+**Payments singleton** (`PampaloPayments`):
+A permissionless, standalone contract that is the shared registry of
+**redeem nullifiers**. Its `verifyAndBurn` checks the root via the live
+Pampalo deployment's `isKnownRoot`, verifies the payment proof against a
+dedicated `RedeemVerifier`, binds every public input to the caller's
+expectations, and burns the redeem nullifier — all on behalf of any
+consuming contract. It **never moves value** and never writes to the
+Pampalo core (reads roots only). The shared registry is what makes a
+payment single-use across *all* consumers, not just one storefront.
+
+**Private payment acceptor**:
+The inheritable base (`PrivatePaymentAcceptor`) that lets any contract
+accept a private payment in one line at the top of its purchase flow
+(`_acceptPayment(...)` / `_acceptPrivatePayment(...)`), mirroring how it
+would pull an ERC-20. Holds the vendor's `merchantId` config and the
+`privateEnabled` **kill switch**: the deploying vendor (the
+`privatePaymentAdmin`) can disable private payments at any time, after
+which the private branch reverts and only the public ERC-20 branch
+works.
+
+**Consumer binding**:
+The `consumer` public input on a **payment proof**, pinned to the
+contract allowed to settle it. The **payments singleton** requires
+`msg.sender == consumer`, which is what defeats a mempool watcher
+copying the proof and calling `verifyAndBurn` directly to burn the
+nullifier without delivering (a DoS the atomic Pampalo paths can't
+suffer). Paired with `recipient` (delivery target, frontrun-safe) and
+`reference` (an opaque vendor-defined field — item id, cart hash — that
+blocks same-price item-swap griefing).
+
 ### Naming / directory (Ethereum L1 / ENS)
 
 **Pampalo username**:
