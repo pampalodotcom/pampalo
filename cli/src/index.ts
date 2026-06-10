@@ -91,6 +91,13 @@ function resolveAsset(
   fail(`unknown asset "${asset}" — pass a token address or a known symbol`);
 }
 
+function amountFor(asset: { decimals: number }, human: string): bigint {
+  if (asset.decimals === 0 && !/^\d+$/.test(human)) {
+    fail("unknown token decimals — pass --amount in base units (integer)");
+  }
+  return parseAmount(human, asset.decimals);
+}
+
 // ── init ─────────────────────────────────────────────────────────────────
 common(
   program
@@ -221,6 +228,109 @@ common(
         console.log(`tx: ${txHash}`);
       },
       { txHash, to: o.to, amount: o.amount, asset: asset.symbol },
+    );
+  },
+);
+
+// ── shield (public → private, to self) ────────────────────────────────────
+common(
+  program
+    .command("shield")
+    .description("public → private note (to self)")
+    .requiredOption("--amount <human>", "amount in human units")
+    .option("--asset <addr|symbol|native>", "asset to shield", "native"),
+).action(async (o: CommonOpts & { amount: string; asset: string }) => {
+  const chainId = chainOf(o);
+  const asset = resolveAsset(chainId, o.asset);
+  const amount = amountFor(asset, o.amount);
+  const a = (await load(o))
+    .useRpc({ [chainId]: resolveRpc(chainId, o.rpc) })
+    .useStore();
+  const r = await a.shield({ chainId, asset: asset.address, amount });
+  out(
+    !!o.json,
+    () => {
+      console.log(`shielded ${o.amount} ${asset.symbol}`);
+      console.log(`tx:   ${r.txHash}`);
+      console.log(`leaf: ${r.leafCommitment}`);
+      console.log("\nnote is queued during the shield wait — run `pampalo sync` after it unlocks");
+    },
+    r,
+  );
+});
+
+// ── transfer (private → private) ───────────────────────────────────────────
+common(
+  program
+    .command("transfer")
+    .description("private note → private note")
+    .requiredOption("--amount <human>", "amount in human units")
+    .requiredOption("--poseidon <id>", "recipient Poseidon identifier")
+    .requiredOption("--envelope <key>", "recipient envelope public key")
+    .option("--asset <addr|symbol|native>", "asset", "native"),
+).action(
+  async (
+    o: CommonOpts & {
+      amount: string;
+      poseidon: string;
+      envelope: string;
+      asset: string;
+    },
+  ) => {
+    const chainId = chainOf(o);
+    const asset = resolveAsset(chainId, o.asset);
+    const a = (await load(o))
+      .useRpc({ [chainId]: resolveRpc(chainId, o.rpc) })
+      .useStore();
+    const r = await a.transfer({
+      chainId,
+      to: { poseidon: o.poseidon, envelope: o.envelope },
+      asset: asset.address,
+      amount: amountFor(asset, o.amount),
+    });
+    out(
+      !!o.json,
+      () => {
+        console.log(`transferred ${o.amount} ${asset.symbol} (private)`);
+        console.log(`tx: ${r.txHash}`);
+      },
+      r,
+    );
+  },
+);
+
+// ── unshield (private → public payout) ─────────────────────────────────────
+common(
+  program
+    .command("unshield")
+    .description("private note → public ERC-20/native payout")
+    .requiredOption("--amount <human>", "amount in human units")
+    .option("--recipient <address>", "EVM payout address (default: self)")
+    .option("--asset <addr|symbol|native>", "asset", "native"),
+).action(
+  async (
+    o: CommonOpts & { amount: string; recipient?: string; asset: string },
+  ) => {
+    const chainId = chainOf(o);
+    const asset = resolveAsset(chainId, o.asset);
+    const a = (await load(o))
+      .useRpc({ [chainId]: resolveRpc(chainId, o.rpc) })
+      .useStore();
+    const r = await a.unshield({
+      chainId,
+      asset: asset.address,
+      amount: amountFor(asset, o.amount),
+      recipient: o.recipient,
+    });
+    out(
+      !!o.json,
+      () => {
+        console.log(
+          `unshielded ${o.amount} ${asset.symbol} → ${o.recipient ?? a.addresses.evm}`,
+        );
+        console.log(`tx: ${r.txHash}`);
+      },
+      r,
     );
   },
 );

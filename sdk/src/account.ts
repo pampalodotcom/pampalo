@@ -22,12 +22,14 @@ import {
   writeKeystore,
 } from "./keystore.js";
 import { type RpcConfig, RpcTransport, type Transport } from "./transport.js";
-import { isNativeAsset } from "./constants.js";
+import { ETH_SENTINEL, isNativeAsset } from "./constants.js";
 import { Store, defaultDbPath } from "./store.js";
 import type { StoredNote } from "./store.js";
 import { syncDeployment } from "./sync.js";
 import type { SyncResult } from "./sync.js";
-import { DEPLOYMENTS } from "./deployments.js";
+import { DEPLOYMENTS, getDeployment } from "./deployments.js";
+import { buildShield, buildTransfer, buildTree, buildUnshield } from "./intents.js";
+import type { OutputNote } from "./intents.js";
 
 /** A token to look up when reading a public balance. */
 export type TokenRef = { address: string; decimals: number; symbol: string };
@@ -64,7 +66,11 @@ export type PrivateBalance = {
 const ERC20 = new Interface([
   "function balanceOf(address) view returns (uint256)",
   "function transfer(address to, uint256 amount) returns (bool)",
+  "function approve(address spender, uint256 amount) returns (bool)",
 ]);
+
+const hex64 = (v: string | bigint): string =>
+  "0x" + BigInt(v).toString(16).padStart(64, "0");
 
 export class Account {
   /** Account name (the keystore filename), or null for an ephemeral
@@ -343,6 +349,213 @@ export class Account {
     return this.#requireStore()
       .listNotes({ account: this.#key(), chainId: opts.chainId })
       .filter((n) => n.origin === "shield");
+  }
+
+  // ── Private writes (proof-carrying) ─────────────────────────────────
+
+  #decimalsFor(chainId: number, asset: string): number {
+    const a = asset.toLowerCase();
+    if (a === ETH_SENTINEL.toLowerCase()) return 18;
+    for (const t of DEPLOYMENTS[chainId]?.tokens ?? []) {
+      if (t.address.toLowerCase() === a) return t.decimals;
+    }
+    return 0;
+  }
+
+  /** v1 single-note coin selection: the smallest spendable, fully-synced
+   *  note (has a leafIndex) that covers `amount`. */
+  #selectNote(chainId: number, asset: string, amount: bigint): StoredNote {
+    const note = this.#requireStore()
+      .listNotes({ account: this.#key(), chainId, asset, state: "spendable" })
+      .filter((n) => n.leafIndex !== undefined && BigInt(n.amount) >= amount)
+      .sort((a, b) => (BigInt(a.amount) < BigInt(b.amount) ? -1 : 1))[0];
+    if (!note) {
+      throw new Error(
+        `no single spendable note covers ${amount} of ${asset} — run sync, or the amount exceeds your largest note (multi-note spend not in v1)`,
+      );
+    }
+    return note;
+  }
+
+  #envelopeFor(chainId: number): string {
+    return getDeployment(chainId).separateDerivationKey
+      ? this.addresses.envelopeIsolated
+      : this.addresses.envelope;
+  }
+
+  /** Optimistically record self-owned outputs (change). leafIndex is
+   *  unknown until the leaf lands on-chain; the next sync backfills it. */
+  #recordChange(chainId: number, deployment: string, outputs: OutputNote[]): void {
+    if (!this.#store) return;
+    for (const o of outputs) {
+      if (o.owner.toLowerCase() !== this.addresses.poseidon.toLowerCase()) continue;
+      this.#store.upsertNote({
+        account: this.#key(),
+        chainId,
+        deployment,
+        leafCommitment: o.leafCommitment,
+        asset: o.asset,
+        assetDecimals: this.#decimalsFor(chainId, o.asset),
+        amount: o.amount,
+        owner: o.owner,
+        secret: hex64(o.secret),
+        origin: "change",
+        state: "spendable",
+      });
+    }
+  }
+
+  /** Public ERC-20/native → private note (to self). ERC-20 sends an
+   *  approve first. */
+  async shield(opts: {
+    chainId: number;
+    asset?: string;
+    amount: bigint;
+  }): Promise<{ txHash: string; leafCommitment: string }> {
+    const reg = getDeployment(opts.chainId);
+    const provider = this.#requireTransport().provider(opts.chainId);
+    const wallet = this.signer().connect(provider);
+    const intent = await buildShield({
+      chainId: opts.chainId,
+      pampalo: reg.pampalo,
+      amount: opts.amount,
+      asset: opts.asset,
+      ownerPoseidon: this.addresses.poseidon,
+      envelopePubKey: this.#envelopeFor(opts.chainId),
+    });
+    if (intent.approveToken) {
+      const approve = await new Contract(intent.approveToken, ERC20, wallet)
+        .getFunction("approve")(reg.pampalo, opts.amount);
+      await approve.wait();
+    }
+    const tx = await wallet.sendTransaction({
+      to: intent.to,
+      data: intent.data,
+      value: BigInt(intent.value),
+    });
+    this.#store?.upsertNote({
+      account: this.#key(),
+      chainId: opts.chainId,
+      deployment: reg.pampalo,
+      leafCommitment: intent.leafCommitment,
+      asset: intent.assetId,
+      assetDecimals: this.#decimalsFor(opts.chainId, intent.assetId),
+      amount: intent.amount,
+      owner: this.addresses.poseidon,
+      secret: hex64(intent.secret),
+      origin: "shield",
+      state: "queued",
+      queuedTxHash: tx.hash,
+    });
+    return { txHash: tx.hash, leafCommitment: intent.leafCommitment };
+  }
+
+  /** Private note → private note(s). Single input note, recipient + self
+   *  change. Requires a synced store (the merkle tree is rebuilt from it). */
+  async transfer(opts: {
+    chainId: number;
+    to: { poseidon: string; envelope: string };
+    asset?: string;
+    amount: bigint;
+  }): Promise<{ txHash: string }> {
+    const reg = getDeployment(opts.chainId);
+    const asset = isNativeAsset(opts.asset)
+      ? ETH_SENTINEL.toLowerCase()
+      : opts.asset!.toLowerCase();
+    const store = this.#requireStore();
+    const note = this.#selectNote(opts.chainId, asset, opts.amount);
+    const tree = await buildTree(store.listLeaves(opts.chainId, reg.pampalo));
+    const change = BigInt(note.amount) - opts.amount;
+    const outputs = [
+      {
+        poseidonOwner: opts.to.poseidon,
+        envelopePubKey: opts.to.envelope,
+        asset,
+        amount: opts.amount,
+      },
+    ];
+    if (change > 0n) {
+      outputs.push({
+        poseidonOwner: this.addresses.poseidon,
+        envelopePubKey: this.#envelopeFor(opts.chainId),
+        asset,
+        amount: change,
+      });
+    }
+    const intent = await buildTransfer({
+      chainId: opts.chainId,
+      pampalo: reg.pampalo,
+      inputNotes: [
+        {
+          asset: note.asset,
+          amount: BigInt(note.amount),
+          secret: note.secret,
+          owner: note.owner,
+          leafIndex: note.leafIndex!,
+        },
+      ],
+      outputs,
+      walletPrivateKey: this.spendPrivateKey(),
+      tree,
+    });
+    const wallet = this.signer().connect(
+      this.#requireTransport().provider(opts.chainId),
+    );
+    const tx = await wallet.sendTransaction({ to: intent.to, data: intent.data });
+    store.patchNote(this.#key(), note.leafCommitment, {
+      state: "spent",
+      nullifier: intent.spentNullifiers[0],
+      spentTxHash: tx.hash,
+    });
+    this.#recordChange(opts.chainId, reg.pampalo, intent.outputs);
+    return { txHash: tx.hash };
+  }
+
+  /** Private note → public payout (+ optional self change). Recipient
+   *  defaults to the account's own EVM address. */
+  async unshield(opts: {
+    chainId: number;
+    asset?: string;
+    amount: bigint;
+    recipient?: string;
+  }): Promise<{ txHash: string }> {
+    const reg = getDeployment(opts.chainId);
+    const asset = isNativeAsset(opts.asset)
+      ? ETH_SENTINEL.toLowerCase()
+      : opts.asset!.toLowerCase();
+    const store = this.#requireStore();
+    const note = this.#selectNote(opts.chainId, asset, opts.amount);
+    const tree = await buildTree(store.listLeaves(opts.chainId, reg.pampalo));
+    const intent = await buildUnshield({
+      chainId: opts.chainId,
+      pampalo: reg.pampalo,
+      inputNote: {
+        asset: note.asset,
+        amount: BigInt(note.amount),
+        secret: note.secret,
+        owner: note.owner,
+        leafIndex: note.leafIndex!,
+      },
+      exitAddress: opts.recipient ?? this.addresses.evm,
+      exitAmount: opts.amount,
+      walletPrivateKey: this.spendPrivateKey(),
+      selfPoseidon: this.addresses.poseidon,
+      selfEnvelopePubKey: this.#envelopeFor(opts.chainId),
+      tree,
+    });
+    const wallet = this.signer().connect(
+      this.#requireTransport().provider(opts.chainId),
+    );
+    const tx = await wallet.sendTransaction({ to: intent.to, data: intent.data });
+    store.patchNote(this.#key(), note.leafCommitment, {
+      state: "spent",
+      nullifier: intent.spentNullifier,
+      spentTxHash: tx.hash,
+    });
+    if (intent.changeOutput) {
+      this.#recordChange(opts.chainId, reg.pampalo, [intent.changeOutput]);
+    }
+    return { txHash: tx.hash };
   }
 }
 

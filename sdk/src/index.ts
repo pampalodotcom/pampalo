@@ -15,6 +15,21 @@ export { DEPLOYMENTS, getDeployment } from "./deployments.js";
 export type { Deployment } from "./deployments.js";
 export { syncDeployment } from "./sync.js";
 export type { SyncResult, AccountKeys } from "./sync.js";
+export {
+  buildShield,
+  buildTransfer,
+  buildUnshield,
+  buildTree,
+  randomSecret,
+} from "./intents.js";
+export type {
+  ShieldIntent,
+  TransferIntent,
+  UnshieldIntent,
+  OutputNote,
+  TransferRecipient,
+  TransferInputNote,
+} from "./intents.js";
 export type { DerivedAddresses } from "./addresses.js";
 export {
   POSEIDON_MAX,
