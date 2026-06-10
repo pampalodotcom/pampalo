@@ -1,0 +1,34 @@
+{
+  "name": "@pampalo/sdk",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Headless Pampalo agent accounts for Node/TS. Custody, sync, and private transfers without a browser.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pampalodotcom/pampalo.git",
+    "directory": "sdk"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "engines": { "node": ">=20" },
+  "sideEffects": false,
+  "publishConfig": { "access": "public", "provenance": true },
+  "scripts": {
+    "tsc": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pampalo/shared": "workspace:*",
+    "@zkpassport/poseidon2": "^0.6.2",
+    "ethers": "^6.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "~5.8.3"
+  }
+}

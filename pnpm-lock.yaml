@@ -255,6 +255,25 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
+  sdk:
+    dependencies:
+      '@pampalo/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@zkpassport/poseidon2':
+        specifier: ^0.6.2
+        version: 0.6.2
+      ethers:
+        specifier: ^6.16.0
+        version: 6.16.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.19
+      typescript:
+        specifier: ~5.8.3
+        version: 5.8.3
+
   shared:
     dependencies:
       '@aztec/bb.js':

@@ -170,6 +170,79 @@ _Distinct from_: "recovery integrations" in AUTH.md (the future
 umbrella for MPC / Shamir / social recovery). Recover account is the
 v1 mnemonic-on-paper variant of that family.
 
+### Headless accounts (CLI / SDK)
+
+**Agent account**:
+A Pampalo identity created and custodied outside the browser, for use by a
+CLI or a Node/TS script (an "agent"). Same on-chain shape as a web wallet —
+one **mnemonic** deterministically producing one **EVM address**, one
+**envelope key**, one **Poseidon identifier** — but it is created by the CLI
+(`pampalo init`) as a *fresh, distinct identity*, not the human's web
+wallet. An existing **recovery phrase** may be brought in with `pampalo
+import` (explicit opt-in); the default is a brand-new mnemonic so an agent
+never holds the keys that control the user's human wallet. The account has
+no Convex **wallet** row and no **credential** — it is unknown to the
+passkey auth model entirely. _Avoid_: "CLI wallet" (the noun is **account**,
+and it is the same identity primitive as a web wallet, just headlessly
+custodied).
+
+**Account keystore**:
+The encrypted-at-rest home for an **agent account**'s **mnemonic**, modelled
+on `~/.ssh/`: a scrypt + AES-GCM keystore file under `~/.pampalo/accounts/`
+(many accounts, like many SSH keys). Passphrase-protected by default;
+unlocked once per process by the SDK (`Account.load`) and held in memory for
+the run, or supplied via `PAMPALO_MNEMONIC` for ephemeral/CI use. This
+deliberately reintroduces the scrypt-passphrase scheme that ADR 0002 deleted
+for the web wallet — but only on the CLI surface, where there is no
+WebAuthn authenticator and therefore no PRF to derive a KEK from. An
+ssh-agent-style daemon for cross-invocation unlock reuse is deferred.
+
+**Account transport**:
+The pluggable channel an **agent account** uses to read chain state and
+broadcast. Reuses the web app's `RpcClient` seam (`src/lib/rpc.ts`): day-1
+is `DirectRpcClient` pointed at a user-supplied RPC URL; a Convex-backed
+client (public catalog reads now, relayer + note hydrate once API-key auth
+lands) sits behind the same interface later. Because the relayer is
+Convex-gated and unreachable from a sessionless CLI, day-1 **Transfer** and
+**Unshield** **self-broadcast** — linking the agent's EVM address to the
+on-chain event, the very linkage the relayer exists to break. Acceptable for
+a sandboxed agent identity in v1; closed once the Convex transport + relayer
+path is wired.
+
+**Proposal** (keyless agent → human account):
+A future capability, distinct from an **agent account**'s self-custody. An
+external agent holding a Pampalo **API key** writes a transaction *intent*
+("transfer X of asset Y to recipient Z") into a queue tied to a *human's*
+Pampalo wallet — it never holds key material. Because the agent cannot reach
+the human's **DEK**, the intent is **ECIES-encrypted to the human's envelope
+key** (public); Convex stores only that ciphertext. At approval time the
+human's web wallet decrypts the intent, does coin selection, generates the
+proof, and signs with the passkey — so the **privacy invariant** and ADR
+0004 (server never sees a pre-broadcast unsigned tx, only an encrypted
+intent) both hold. The agent proposes *blind* to the human's private balance;
+feasibility is checked client-side at approval. The day-1 SDK is built to
+**separate intent construction from sign+broadcast** (mirroring the web app's
+`transfer-prep` → `signTransactionWithPasskey`/`relay` split) so the same
+intent builder later feeds either local signing or remote proposal.
+_Distinct from_: a "scoped delegated key" where the agent itself signs within
+server-enforced limits — explicitly *not* the chosen model.
+
+**SDK distribution**:
+The headless stack ships as three MIT-licensed public npm packages —
+`@pampalo/shared` (protocol crypto — already in the repo), `@pampalo/sdk`
+(the **Agent account** core), and `@pampalo/cli` (the `pampalo` binary) —
+all published from the **existing monorepo** (`pampalodotcom/pampalo`, made
+public) via Changesets. They depend on one another with `workspace:*`;
+Changesets rewrites those to real versions at publish time and releases in
+dependency order `shared → sdk → cli`. The app keeps consuming `shared` via
+`workspace:*` unchanged — no extraction, no migration, workspace dev loop
+intact. The scope `@pampalo` is owned by the npm **user** `pampalo` (a user
+account, not an org — the two share a namespace, so an org named `pampalo`
+is blocked); public scoped packages publish free under it, and the account
+can later be converted to an org with no package renames. (Three separate
+repos and a dedicated SDK monorepo were both considered and rejected: once
+the app repo went public, a single monorepo was the least-ceremony option.)
+
 ### Multi-chain deployment catalog
 
 **Pampalo deployment**:
