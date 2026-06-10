@@ -11,6 +11,7 @@
   },
   "exports": {
     ".": {
+      "development": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
@@ -25,9 +26,11 @@
   "dependencies": {
     "@pampalo/shared": "workspace:*",
     "@zkpassport/poseidon2": "^0.6.2",
+    "better-sqlite3": "^11.8.0",
     "ethers": "^6.16.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.10.2",
     "typescript": "~5.8.3"
   }

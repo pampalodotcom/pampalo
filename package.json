@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "concurrently --names convex,web --prefix-colors auto --kill-others-on-fail \"convex dev\" \"vite dev --port 3000\"",
+    "pampalo": "NODE_OPTIONS='--conditions=development' tsx cli/src/index.ts",
     "dev:web": "vite dev --port 3000",
     "dev:docs": "pnpm --filter @pampalo/docs-site dev --port 5173",
     "build": "vite build",
@@ -77,6 +78,7 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "better-sqlite3",
       "esbuild",
       "lightningcss"
     ],
