@@ -11,6 +11,7 @@ export default defineConfig({
     { text: "Introduction", link: "/" },
     { text: "Account", link: "/account" },
     { text: "Private Money", link: "/private-money" },
+    { text: "How It Works", link: "/how-it-works" },
     { text: "Building on Pampalo", link: "/building" },
     { text: "Pampalo the Company", link: "/pampalo-company" },
   ],

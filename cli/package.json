@@ -1,0 +1,28 @@
+{
+  "name": "@pampalo/cli",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "The pampalo command-line tool — drive a headless Pampalo agent account.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pampalodotcom/pampalo.git",
+    "directory": "cli"
+  },
+  "bin": { "pampalo": "./dist/index.js" },
+  "files": ["dist"],
+  "engines": { "node": ">=20" },
+  "publishConfig": { "access": "public", "provenance": true },
+  "scripts": {
+    "tsc": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pampalo/sdk": "workspace:*",
+    "commander": "^12.1.0",
+    "ethers": "^6.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "~5.8.3"
+  }
+}
