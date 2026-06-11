@@ -1,16 +1,16 @@
 # Building on Pampalo
 
 Pampalo ships a headless toolkit so scripts, backends, and AI agents can hold
-and operate Pampalo identities **without a browser** — no passkey, no web
+and operate Pampalo identities **without a browser**: no passkey, no web
 wallet. Everything the web app does (shield, transfer, unshield, sync) runs in
 plain Node, with zero-knowledge proofs generated locally.
 
 It comes as two packages:
 
-- **[`@pampalo/sdk`](/building/sdk)** — the programmatic core. An `Account`
+- **[`@pampalo/sdk`](/building/sdk)**: the programmatic core. An `Account`
   class that custodies keys, reads balances, syncs notes from chain, and
   builds + broadcasts shielded transactions. This is what you import.
-- **[`@pampalo/cli`](/building/cli)** — the `pampalo` command-line tool, a thin
+- **[`@pampalo/cli`](/building/cli)**: the `pampalo` command-line tool, a thin
   wrapper over the SDK. Anything the CLI does, the SDK does identically.
 
 Both sit on `@pampalo/shared`, the protocol cryptography (notes, proofs, ECIES,
@@ -19,8 +19,8 @@ the Poseidon merkle tree), which is published too.
 ## Agent accounts
 
 An **agent account** is a Pampalo identity created and custodied outside the
-browser. It has the same on-chain shape as a web wallet — one recovery phrase
-producing one EVM address, one envelope key, and one Poseidon identifier — but:
+browser. It has the same on-chain shape as a web wallet (one recovery phrase
+producing one EVM address, one envelope key, and one Poseidon identifier), but:
 
 - It's a **fresh, separate identity** by default. `pampalo init` (or
   `Account.create`) generates a brand-new recovery phrase, so an agent never
@@ -29,12 +29,12 @@ producing one EVM address, one envelope key, and one Poseidon identifier — but
 - Its recovery phrase is stored in an **encrypted keystore**, modelled on
   `~/.ssh/`: a scrypt + AES-256-GCM file under `~/.pampalo/accounts/`,
   unlocked by a passphrase. The web wallet uses a passkey instead; an agent
-  has no authenticator, so it uses a passphrase — the same trade-off
+  has no authenticator, so it uses a passphrase, the same trade-off
   `ssh-keygen` and Foundry's `cast` make.
 
 ## Requirements
 
-- **Node.js 20+** (22 recommended — that's where proof generation is tested).
+- **Node.js 20+** (22 recommended, that's where proof generation is tested).
 - An RPC endpoint for the chain you operate on (any standard JSON-RPC URL).
 
 ## Status
@@ -44,7 +44,7 @@ on [commbank.eth's](https://commbank.eth.limo)
 [codebase](https://github.com/hooperben/commbank.eth), with a Convex backend
 for catalog data and the transfer relayer.
 
-The SDK and CLI are at **`0.1.0`** — the read path and shield/transfer/unshield
+The SDK and CLI are at **`0.1.0`**: the read path and shield/transfer/unshield
 all work; the privacy-preserving relayer and a few conveniences are still on
 the way (each page calls out what's not done yet).
 

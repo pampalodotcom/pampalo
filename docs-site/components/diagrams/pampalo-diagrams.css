@@ -1,5 +1,5 @@
 /* ============================================================
-   Pampalo · protocol diagrams — shared styles
+   Pampalo · protocol diagrams: shared styles
    Imported once by components/diagrams/index.tsx; every diagram is
    inline SVG that reads these CSS variables, so it adapts to the docs
    site's light/dark automatically.
@@ -7,7 +7,7 @@
    Dark is driven solely by Vocs's `.dark` class on <html> (see
    initializeTheme.js in the vocs package). The upstream handoff CSS also
    shipped a `@media (prefers-color-scheme: dark)` block; it was removed
-   on purpose. Vocs lets a reader pick light mode on a dark-OS machine —
+   on purpose. Vocs lets a reader pick light mode on a dark-OS machine, and
    keeping the media query would render the diagrams dark against a light
    page. The class toggle is the single source of truth.
    ============================================================ */
@@ -31,7 +31,7 @@
   --d-warn:       #B07814;
   --d-warn-soft:  rgba(176,120,20,0.12);
 }
-/* dark — driven by Vocs's `.dark` class toggle on <html>. The wider
+/* dark: driven by Vocs's `.dark` class toggle on <html>. The wider
    selector list is kept so the same stylesheet still works if these
    diagrams are reused outside Vocs; `data-theme="dark"` also pins one
    diagram dark regardless of the page. */
@@ -115,7 +115,7 @@
 @keyframes pd-twinkle{ 0%,100%{ opacity:.3 } 50%{ opacity:.95 } }
 @keyframes pd-drop   { 0%,100%{ opacity:0; transform: translateY(-14px) } 12%,46%{ opacity:1; transform: translateY(0) } 60%{opacity:0; transform: translateY(0)} }
 @keyframes pd-sweep  { 0%{ transform: translateX(-4%) } 100%{ transform: translateX(104%) } }
-/* note-A consumption — green & live, then greys + stamps as the token lands */
+/* note-A consumption: green & live, then greys + stamps as the token lands */
 @keyframes pd-noteA-dim  { 0%{opacity:.5} 12%,58%{opacity:1} 84%,100%{opacity:.5} }
 @keyframes pd-noteA-body {
   0%        { fill: var(--d-surface-2); stroke: var(--d-line-hi); }

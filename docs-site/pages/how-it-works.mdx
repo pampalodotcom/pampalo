@@ -16,47 +16,47 @@ import {
 
 # How It Works
 
-Pampalo is a ZK private-money protocol. Value lives in **notes** committed to an on-chain Merkle tree, spent with zero-knowledge proofs, and addressed by an unlinkable **Poseidon identifier** rather than an Ethereum address. The nine figures below walk the protocol end to end — from a single balanced transfer up to the full shield → transfer → unshield journey.
+Pampalo is a ZK private-money protocol. Value lives in **notes** committed to an on-chain Merkle tree, spent with zero-knowledge proofs, and addressed by an unlinkable **Poseidon identifier** rather than an Ethereum address. The nine figures below walk the protocol end to end, from a single balanced transfer up to the full shield → transfer → unshield journey.
 
 ## Sum in = sum out
 
-No balance is edited. Alice _destroys_ her 5 USDC note and the transfer _creates_ two fresh notes — 2 to Bob, 3 back to herself as change. The chain never sees the amounts, yet the proof guarantees inputs and outputs balance for every asset.
+No balance is edited. Alice _destroys_ her 5 USDC note and the transfer _creates_ two fresh notes: 2 to Bob, 3 back to herself as change. The chain never sees the amounts, yet the proof guarantees inputs and outputs balance for every asset.
 
 <SumInSumOut />
 
 ## Anatomy of a note
 
-A note is four fields hashed by `poseidon2` into one **leaf** — the only thing that goes on-chain. The **secret** is the spend key and is never published. And _owner_ isn't an Ethereum address: one recovery phrase derives three identities, and the note's owner is the **Poseidon identifier**.
+A note is four fields hashed by `poseidon2` into one **leaf**, the only thing that goes on-chain. The **secret** is the spend key and is never published. And _owner_ isn't an Ethereum address: one recovery phrase derives three identities, and the note's owner is the **Poseidon identifier**.
 
 <AnatomyOfANote />
 
 ## The note tree
 
-Each note is a **leaf**. To prove your note is real you reveal a **sibling hash** at each level — re-hashing up the path must reproduce a known `root`, without disclosing which leaf you are. A 2048-leaf tree is addressed by `(tree_index, leaf_index)`; when it fills, the epoch rolls over and the old root stays valid forever.
+Each note is a **leaf**. To prove your note is real you reveal a **sibling hash** at each level; re-hashing up the path must reproduce a known `root`, without disclosing which leaf you are. A 2048-leaf tree is addressed by `(tree_index, leaf_index)`; when it fills, the epoch rolls over and the old root stays valid forever.
 
 <NoteTree />
 
 ## Spend = nullify
 
-The leaf is **never removed** — the tree is append-only. Spending publishes a **nullifier**, a deterministic fingerprint that drops into the `nullifierUsed` set. Spend the same note again and it yields the _same_ nullifier, which is already present — so the second attempt bounces. Spentness lives in a separate set, unlinkable to the leaf.
+The leaf is **never removed**; the tree is append-only. Spending publishes a **nullifier**, a deterministic fingerprint that drops into the `nullifierUsed` set. Spend the same note again and it yields the _same_ nullifier, which is already present, so the second attempt bounces. Spentness lives in a separate set, unlinkable to the leaf.
 
 <SpendNullify />
 
 ## The proof as a sealed box
 
-Private witnesses enter the **sealed** side and never leave the client. The proof checks five things — owned, in-tree, balanced, nullifier-correct, outputs-committed — and emits only the **public inputs** the chain needs: `root`, `nullifiers`, `output_hashes`. Bounding every amount to 128 bits makes the `p − N` overflow unrepresentable, so value can't be conjured from nothing.
+Private witnesses enter the **sealed** side and never leave the client. The proof checks five things (owned, in-tree, balanced, nullifier-correct, outputs-committed) and emits only the **public inputs** the chain needs: `root`, `nullifiers`, `output_hashes`. Bounding every amount to 128 bits makes the `p − N` overflow unrepresentable, so value can't be conjured from nothing.
 
 <SealedProof />
 
 ## Sending a note's secret
 
-The note's creator generates the **secret** and ECIES-encrypts it to the recipient's **Envelope key**. Only the ciphertext rides on-chain with the leaf, so the server and relayer never see the plaintext. The recipient's wallet **scans** events, decrypts with its Envelope private key, and files the note in local storage. A handle like `alice.pampalo.eth` resolves to the Envelope key and Poseidon identifier — never the EVM address.
+The note's creator generates the **secret** and ECIES-encrypts it to the recipient's **Envelope key**. Only the ciphertext rides on-chain with the leaf, so the server and relayer never see the plaintext. The recipient's wallet **scans** events, decrypts with its Envelope private key, and files the note in local storage. A handle like `alice.pampalo.eth` resolves to the Envelope key and Poseidon identifier, never the EVM address.
 
 <SendingASecret />
 
 ## The contracts on Ethereum
 
-The **Pampalo** contract is the hub: every entry point routes its proof to one of four verifiers before mutating the two pieces of state — the **Merkle tree** and the **nullifier set**. Shielding isn't instant: a deposit is escrowed in a **Queued** state for a one-hour compliance wait. After it, anyone can `executeShield`; before it, the shielder can cancel, a vigilant citizen can contest (refunding inline), and a booth operator can bypass the wait.
+The **Pampalo** contract is the hub: every entry point routes its proof to one of four verifiers before mutating the two pieces of state: the **Merkle tree** and the **nullifier set**. Shielding isn't instant: a deposit is escrowed in a **Queued** state for a one-hour compliance wait. After it, anyone can `executeShield`; before it, the shielder can cancel, a vigilant citizen can contest (refunding inline), and a booth operator can bypass the wait.
 
 **a · Contract topology**
 
@@ -68,12 +68,12 @@ The **Pampalo** contract is the hub: every entry point routes its proof to one o
 
 ## The relayer breaks the gas link
 
-Broadcasting your own transfer puts your EVM address on the event — **linking you** to the payment. Instead, you build and prove the transfer **client-side** and hand the proof and payload to a pool of five interchangeable relayer EOAs (picked LRU). The **relayer's** address lands on-chain; yours never does. Because `transfer` is permissionless, the relayer holds no privilege — it can't read your notes or alter the transfer, it only pays gas.
+Broadcasting your own transfer puts your EVM address on the event, **linking you** to the payment. Instead, you build and prove the transfer **client-side** and hand the proof and payload to a pool of five interchangeable relayer EOAs (picked LRU). The **relayer's** address lands on-chain; yours never does. Because `transfer` is permissionless, the relayer holds no privilege: it can't read your notes or alter the transfer, it only pays gas.
 
 <RelayerGasLink />
 
 ## The full journey
 
-The whole arc in three lanes. Alice **shields** public USDC into Note A; her wallet decrypts and files it. She **transfers** 2 to Bob plus 3 change, proving it client-side and broadcasting via a relayer; the contract nullifies A and inserts B and C, and Bob's wallet decrypts his note. Later Bob **unshields** to a public address. The chain only ever saw balanced proofs and opaque commitments — never the amounts or who paid whom.
+The whole arc in three lanes. Alice **shields** public USDC into Note A; her wallet decrypts and files it. She **transfers** 2 to Bob plus 3 change, proving it client-side and broadcasting via a relayer; the contract nullifies A and inserts B and C, and Bob's wallet decrypts his note. Later Bob **unshields** to a public address. The chain only ever saw balanced proofs and opaque commitments, never the amounts or who paid whom.
 
 <FullJourney />

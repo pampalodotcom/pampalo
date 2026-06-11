@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRpcClient } from "@/lib/rpc";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
@@ -259,11 +260,31 @@ function Dashboard({
   // safety timeout. The rpc client comes from the same provider the
   // confirm sheets use, so the polls reuse Alchemy connection state.
   const rpcClient = useRpcClient();
+  const queryClient = useQueryClient();
+  // The moment a move is mined, force the public-balance query for that
+  // (chain, asset) to refetch. Without this the row unlocks (pendingMoves
+  // cleared) but `usePublicBalance` keeps showing the pre-move balance
+  // until its 30s `refetchInterval` fires — so the slider snaps back to
+  // the OLD split and the idle hint reappears, reading as "nothing
+  // happened". The private side already updates optimistically via IDB;
+  // this closes the gap on the public side. A short delayed re-invalidate
+  // absorbs Alchemy replica lag (the receipt can land a beat before the
+  // balance endpoint reflects it).
+  const refreshPublicBalance = useCallback(
+    (cId: number, assetLower: string) => {
+      const queryKey = ["public-balance", cId, assetLower];
+      void queryClient.invalidateQueries({ queryKey });
+      window.setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey });
+      }, 2_500);
+    },
+    [queryClient],
+  );
   useEffect(() => {
     if (pendingMoves.size === 0) return;
     const intervals: number[] = [];
     for (const [key, move] of pendingMoves) {
-      const [chainStr] = key.split(":");
+      const [chainStr, assetLower] = key.split(":");
       const cId = Number(chainStr);
       const tick = async () => {
         if (Date.now() - move.startedAt > 90_000) {
@@ -272,6 +293,9 @@ function Dashboard({
             next.delete(key);
             return next;
           });
+          // Anomalous: the tx never confirmed in 90s. Refresh anyway so a
+          // late-landing tx isn't stuck behind the 30s interval.
+          refreshPublicBalance(cId, assetLower);
           return;
         }
         try {
@@ -282,6 +306,7 @@ function Dashboard({
               next.delete(key);
               return next;
             });
+            refreshPublicBalance(cId, assetLower);
           }
         } catch {
           // transient — keep polling
@@ -298,7 +323,7 @@ function Dashboard({
     return () => {
       for (const h of intervals) window.clearInterval(h);
     };
-  }, [pendingMoves, rpcClient]);
+  }, [pendingMoves, rpcClient, refreshPublicBalance]);
 
   // IDB-derived private balances + pending shields. The hook
   // re-subscribes via useSyncExternalStore so any optimistic write or
