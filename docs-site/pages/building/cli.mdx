@@ -1,6 +1,6 @@
-# CLI — `@pampalo/cli`
+# CLI: `@pampalo/cli`
 
-The `pampalo` command-line tool — a thin wrapper over the
+The `pampalo` command-line tool, a thin wrapper over the
 [SDK](/building/sdk). Use it to create an agent account, sync it, check
 balances, and move money from a terminal or a shell script.
 
@@ -46,7 +46,7 @@ PUBLIC
   USDC  25.0
 
 PRIVATE (spendable notes)
-  (none — run `pampalo sync`)
+  (none, run `pampalo sync`)
 
 SHIELDS
   (none)
@@ -60,7 +60,7 @@ Commands that touch the keystore need your passphrase. In order of precedence:
 2. `PAMPALO_PASSPHRASE` environment variable
 3. an interactive hidden prompt
 
-For unattended use, set `PAMPALO_MNEMONIC` to a recovery phrase — it runs the
+For unattended use, set `PAMPALO_MNEMONIC` to a recovery phrase; it runs the
 account directly, no keystore or passphrase needed.
 
 ## RPC configuration
@@ -69,7 +69,7 @@ Every on-chain command needs an RPC URL, resolved in this order:
 
 1. `--rpc <url>` flag
 2. `PAMPALO_RPC` environment variable
-3. `ALCHEMY_API_KEY` — the CLI builds the Alchemy URL for known chains
+3. `ALCHEMY_API_KEY`, from which the CLI builds the Alchemy URL for known chains
    (Ethereum, Base, and their Sepolia testnets)
 
 The CLI also auto-loads a `.env` / `.env.local` from the current directory, so
@@ -96,9 +96,9 @@ dropping `ALCHEMY_API_KEY=…` in a `.env.local` is enough to make `sync` and
 | --- | --- | --- |
 | `-a, --account <name>` | `default` | Which keystore to use |
 | `-c, --chain <id>` | `84532` | Chain id (Base Sepolia) |
-| `--rpc <url>` | — | RPC URL (else `PAMPALO_RPC` / `ALCHEMY_API_KEY`) |
-| `-p, --passphrase <s>` | — | Keystore passphrase (else prompt / env) |
-| `--json` | — | Machine-readable output (for agents) |
+| `--rpc <url>` | (none) | RPC URL (else `PAMPALO_RPC` / `ALCHEMY_API_KEY`) |
+| `-p, --passphrase <s>` | (none) | Keystore passphrase (else prompt / env) |
+| `--json` | (none) | Machine-readable output (for agents) |
 
 ### Moving money
 
@@ -124,7 +124,7 @@ Add `--json` to any command for structured output that's easy for an agent to
 parse.
 
 :::warning[Privacy note]
-`transfer` and `unshield` currently **self-broadcast** — your account's EVM
+`transfer` and `unshield` currently **self-broadcast**: your account's EVM
 address is visible as the sender on-chain, linking it to the transaction. The
 relayer that breaks this linkage isn't reachable from the CLI yet, so a v1
 agent account has a weaker privacy floor than the web wallet. `shield` is to
@@ -138,5 +138,5 @@ your own identity only in v1.
 | `~/.pampalo/accounts/<name>.json` | Encrypted keystore (scrypt + AES-256-GCM, mode `0600`) |
 | `~/.pampalo/pampalo.db` | SQLite note store + sync cursors |
 
-Everything private stays on your machine — the CLI talks only to your RPC and
+Everything private stays on your machine; the CLI talks only to your RPC and
 the public chain.

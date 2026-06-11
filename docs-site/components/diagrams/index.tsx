@@ -1,9 +1,9 @@
 /*
-  Pampalo — private-money protocol diagrams
+  Pampalo: private-money protocol diagrams
   ------------------------------------------
   Ten self-contained inline-SVG diagrams (07 is two panels) that adapt to
   light & dark. Authored as the §2–§10 narrative for the docs site's
-  "How It Works" page, but every export is independent — import whichever
+  "How It Works" page, but every export is independent, so import whichever
   you need into any MDX page or React view.
 
   Usage (MDX): import what you need, render <PampaloDefs /> once near the
@@ -38,7 +38,7 @@ export function PampaloDefs() {
   );
 }
 
-/** 01 · Sum in = sum out — the UTXO core */
+/** 01 · Sum in = sum out: the UTXO core */
 export function SumInSumOut() {
   return (
     <div className="pampdia">
