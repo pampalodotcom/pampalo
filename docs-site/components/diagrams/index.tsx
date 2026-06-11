@@ -116,7 +116,7 @@ export function SumInSumOut() {
   );
 }
 
-/** 02 · Anatomy of a note — notes & identities */
+/** 02 · Anatomy of a note: notes & identities */
 export function AnatomyOfANote() {
   return (
     <div className="pampdia">
@@ -200,7 +200,7 @@ export function AnatomyOfANote() {
   );
 }
 
-/** 03 · The note tree — Merkle tree & epochs */
+/** 03 · The note tree: Merkle tree & epochs */
 export function NoteTree() {
   return (
     <div className="pampdia">
@@ -328,7 +328,7 @@ export function NoteTree() {
   );
 }
 
-/** 04 · Spend = nullify — double-spend defence */
+/** 04 · Spend = nullify: double-spend defence */
 export function SpendNullify() {
   return (
     <div className="pampdia">
@@ -389,11 +389,11 @@ export function SpendNullify() {
   );
 }
 
-/** 05 · The proof as a sealed box — zero-knowledge */
+/** 05 · The proof as a sealed box: zero-knowledge */
 export function SealedProof() {
   return (
     <div className="pampdia">
-      <svg viewBox="0 0 960 404" role="img" aria-label="Private witnesses enter the sealed left side of the Transfer proof box. The box face lists five guarantees it checks. Only public inputs — root, nullifiers, output hashes — come out the right side, which is all the chain sees. A lower panel shows amounts bounded to 128 bits to block the field-overflow mint.">
+      <svg viewBox="0 0 960 404" role="img" aria-label="Private witnesses enter the sealed left side of the Transfer proof box. The box face lists five guarantees it checks. Only public inputs (root, nullifiers, output hashes) come out the right side, which is all the chain sees. A lower panel shows amounts bounded to 128 bits to block the field-overflow mint.">
         <text className="t-tick t-warn" x="30" y="34" fontSize="9.5">Private witnesses · never leave the client</text>
         <g fontSize="11">
           <rect className="node-2" x="30" y="50" width="184" height="30" rx="8" /><text className="t-mono" x="46" y="70">input notes</text>
@@ -456,7 +456,7 @@ export function SealedProof() {
 
         <line className="hair dash" x1="30" y1="324" x2="930" y2="324" />
         <text className="t-tick" x="30" y="348" fontSize="10">Field-overflow guard</text>
-        <text className="t-sub" x="212" y="348" fontSize="11">amounts bounded to 128 bits — blocks the <tspan className="t-mono">p − N</tspan> mint trick</text>
+        <text className="t-sub" x="212" y="348" fontSize="11">amounts bounded to 128 bits, blocking the <tspan className="t-mono">p − N</tspan> mint trick</text>
 
         <g transform="translate(610,338)">
           <line x1="0" y1="6" x2="200" y2="6" stroke="var(--d-priv-line)" strokeWidth="2" />
@@ -475,7 +475,7 @@ export function SealedProof() {
   );
 }
 
-/** 06 · Sending a note's secret — encrypted payloads */
+/** 06 · Sending a note's secret: encrypted payloads */
 export function SendingASecret() {
   return (
     <div className="pampdia">
@@ -555,7 +555,7 @@ export function SendingASecret() {
 export function ContractTopology() {
   return (
     <div className="pampdia">
-      <svg viewBox="0 0 960 272" role="img" aria-label="Four entry points — shield, transfer, unshield, unshield bundled — call the Pampalo contract hub, which mutates the Merkle tree and nullifier set and routes each proof to one of four verifier contracts.">
+      <svg viewBox="0 0 960 272" role="img" aria-label="Four entry points (shield, transfer, unshield, unshield bundled) call the Pampalo contract hub, which mutates the Merkle tree and nullifier set and routes each proof to one of four verifier contracts.">
         <g fontSize="11.5">
           <rect className="node-pub" x="20" y="40" width="156" height="38" rx="9" /><text className="t-mono t-pub" x="36" y="63">shield</text><text className="t-tick t-faint" x="166" y="63" fontSize="7" textAnchor="end">pub→priv</text>
           <rect className="node-priv" x="20" y="88" width="156" height="38" rx="9" /><text className="t-mono t-priv" x="36" y="111">transfer</text><text className="t-tick t-faint" x="166" y="111" fontSize="7" textAnchor="end">priv→priv</text>
@@ -642,7 +642,7 @@ export function ShieldQueueMachine() {
   );
 }
 
-/** 08 · The relayer breaks the gas link — gas sponsorship */
+/** 08 · The relayer breaks the gas link: gas sponsorship */
 export function RelayerGasLink() {
   return (
     <div className="pampdia">
@@ -704,7 +704,7 @@ export function RelayerGasLink() {
         <rect className="node" x="560" y="248" width="360" height="78" rx="13" />
         <text className="t-tick" x="578" y="272" fontSize="9">Contract · transfer event</text>
         <text className="t-lab" x="578" y="296" fontSize="12">from = <tspan className="t-mono t-priv">0xRel…7c</tspan></text>
-        <text className="t-tick t-faint" x="578" y="314" fontSize="8">the relayer's address — not yours</text>
+        <text className="t-tick t-faint" x="578" y="314" fontSize="8">the relayer's address, not yours</text>
 
         <path className="flow dash" d="M600,196 C560,220 560,236 600,248" fill="none" opacity="0.5" />
         <g transform="translate(566,224)">
@@ -719,11 +719,11 @@ export function RelayerGasLink() {
   );
 }
 
-/** 09 · The full journey — end-to-end swimlane */
+/** 09 · The full journey: end-to-end swimlane */
 export function FullJourney() {
   return (
     <div className="pampdia">
-      <svg viewBox="0 0 960 392" role="img" aria-label="A three-lane swimlane — client wallet, Pampalo contract and tree, public chain — across three steps: shield, transfer, unshield. Alice shields USDC into a note, transfers part to Bob via a relayer, and Bob later unshields to a public address.">
+      <svg viewBox="0 0 960 392" role="img" aria-label="A three-lane swimlane (client wallet, Pampalo contract and tree, public chain) across three steps: shield, transfer, unshield. Alice shields USDC into a note, transfers part to Bob via a relayer, and Bob later unshields to a public address.">
         <rect x="112" y="60" width="824" height="84" rx="12" fill="var(--d-priv-soft)" opacity="0.55" />
         <rect x="112" y="152" width="824" height="84" rx="12" fill="var(--d-surface-2)" opacity="0.6" />
         <rect x="112" y="244" width="824" height="84" rx="12" fill="var(--d-pub-soft)" opacity="0.5" />
