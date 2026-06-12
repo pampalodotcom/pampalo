@@ -11,6 +11,8 @@ import { BeachScene } from "@/components/pampalo/BeachScene";
 import { BoothSendBar } from "@/components/pampalo/share/BoothSendBar";
 import { QRCanvas } from "@/components/pampalo/deposit/QRCanvas";
 import { ThemeToggle } from "@/components/pampalo/ThemeToggle";
+import { useAccountModal } from "@/lib/account-modal";
+import { useAuth } from "@/lib/auth";
 import { useClipboard } from "@/lib/use-clipboard";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -86,6 +88,12 @@ function SharePage() {
   const search = Route.useSearch();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const auth = useAuth();
+  const accountModal = useAccountModal();
+  // /share is viewable signed-out (public link), so the account icon only
+  // appears when there's a signed-in wallet to open the modal for.
+  const signedInAddresses =
+    auth.state.status === "authenticated" ? auth.state.addresses : null;
 
   const { copy, copied } = useClipboard();
 
@@ -156,8 +164,22 @@ function SharePage() {
             >
               <ArrowLeft className="size-3.5" /> Back
             </button>
-            <div className="pointer-events-auto">
+            <div className="pointer-events-auto flex items-center gap-2">
               <ThemeToggle />
+              {signedInAddresses && (
+                <button
+                  type="button"
+                  onClick={accountModal.open}
+                  aria-label="Open account menu"
+                  className={cn(
+                    "inline-flex items-center justify-center",
+                    "rounded-full transition-transform hover:scale-105",
+                    "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ink/15",
+                  )}
+                >
+                  <AccountAvatar address={signedInAddresses.evm} size={32} />
+                </button>
+              )}
             </div>
           </div>
         </div>
