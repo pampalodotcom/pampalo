@@ -12,7 +12,7 @@ import { readFile } from "node:fs/promises";
 // Usage:
 //   pnpm --filter @pampalo/contracts exec hardhat run scripts/grant-roles.ts --network baseSepolia
 
-const TARGET = "0x4882788474F4916110100d737489F2e8d673287B";
+const TARGET = "0x301765d9Cc1fb414b4c510997a562f155d2C2A84";
 
 const ROLE_NAMES = [
   "VIGILANT_CITIZEN_ROLE",

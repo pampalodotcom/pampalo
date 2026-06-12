@@ -22,6 +22,7 @@ export default defineConfig({
       ],
     },
     { text: "Compliance", link: "/compliance" },
+    { text: "Sentry", link: "/sentry" },
     { text: "Pampalo the Company", link: "/pampalo-company" },
   ],
   socials: [
