@@ -1,3 +1,4 @@
+import { id as ethersId } from "ethers";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { action, internalAction, type ActionCtx } from "../_generated/server";
@@ -303,6 +304,15 @@ async function indexOneDeployment(
                 blockTime: meta.blockTime,
               });
             }
+            // Record the spent nullifier itself (public set; lets the
+            // client reconcile its own notes' spend status client-side —
+            // ADR 0019). Unconditional: every NullifierUsed is a spend.
+            await ctx.runMutation(internal.shieldQueue.store._upsertNullifier, {
+              deploymentId: d._id,
+              nullifier: decoded.nullifier,
+              blockNumber: Number(BigInt(log.blockNumber)),
+              txHash: log.transactionHash,
+            });
             break;
           }
         }
@@ -381,3 +391,59 @@ async function getTxMeta(
   cache.set(txHash, meta);
   return meta;
 }
+
+// ─── One-off nullifier backfill ──────────────────────────────────────────
+// The live indexer only started recording nullifiers (into pampaloNullifiers)
+// from this change onward; NullifierUsed events emitted before the cursor
+// passed them aren't captured. This scans [fromBlock, head] for the
+// NullifierUsed topic and upserts them, WITHOUT touching the live cursor.
+// Run once per deployment after deploy, passing its deploy block:
+//   npx convex run shieldQueue/refresh:backfillNullifiers '{"chainId":8453,"fromBlock":47237162}'
+// Idempotent (upsert dedupes on (deploymentId, nullifier)) — safe to re-run,
+// e.g. with a higher fromBlock if a single run runs long.
+const NULLIFIER_USED_TOPIC = ethersId("NullifierUsed(bytes32)");
+
+export const backfillNullifiers = internalAction({
+  args: { chainId: v.number(), fromBlock: v.number() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ scannedTo: number; inserted: number }> => {
+    const dep = await ctx.runQuery(
+      internal.shieldQueue.store._deploymentForChain,
+      { chainId: args.chainId },
+    );
+    if (!dep) {
+      throw new Error(
+        `backfillNullifiers: no enabled deployment for chain ${args.chainId}`,
+      );
+    }
+    const url = alchemyUrl(dep.alchemySubdomain);
+    const head = Number(BigInt(await rpc<string>(url, "eth_blockNumber", [])));
+
+    let cursor = args.fromBlock;
+    let inserted = 0;
+    while (cursor <= head) {
+      const toBlock = Math.min(head, cursor + MAX_BLOCKS_PER_CALL - 1);
+      const logs = await rpc<RawLog[]>(url, "eth_getLogs", [
+        {
+          fromBlock: "0x" + cursor.toString(16),
+          toBlock: "0x" + toBlock.toString(16),
+          address: dep.pampalo,
+          topics: [NULLIFIER_USED_TOPIC],
+        },
+      ]);
+      for (const log of logs) {
+        await ctx.runMutation(internal.shieldQueue.store._upsertNullifier, {
+          deploymentId: dep.deploymentId,
+          nullifier: (log.topics[1] ?? "0x").toLowerCase(),
+          blockNumber: Number(BigInt(log.blockNumber)),
+          txHash: log.transactionHash,
+        });
+        inserted += 1;
+      }
+      cursor = toBlock + 1;
+    }
+    return { scannedTo: head, inserted };
+  },
+});

@@ -27,7 +27,11 @@ export const _deploymentForChain = internalQuery({
   handler: async (
     ctx,
     args,
-  ): Promise<{ pampalo: string; alchemySubdomain: string } | null> => {
+  ): Promise<{
+    deploymentId: Id<"pampaloDeployments">;
+    pampalo: string;
+    alchemySubdomain: string;
+  } | null> => {
     const net = await ctx.db
       .query("supportedNetworks")
       .withIndex("by_chainId", (q) => q.eq("chainId", args.chainId))
@@ -39,8 +43,74 @@ export const _deploymentForChain = internalQuery({
       .unique();
     if (!dep || !dep.enabled) return null;
     return {
+      deploymentId: dep._id,
       pampalo: dep.pampalo,
       alchemySubdomain: net.alchemySubdomain,
+    };
+  },
+});
+
+/** Idempotent upsert of one spent nullifier (deploymentId, nullifier).
+ *  Written by the indexer's NullifierUsed path and the backfill action. */
+export const _upsertNullifier = internalMutation({
+  args: {
+    deploymentId: v.id("pampaloDeployments"),
+    nullifier: v.string(),
+    blockNumber: v.number(),
+    txHash: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const nullifier = args.nullifier.toLowerCase();
+    const existing = await ctx.db
+      .query("pampaloNullifiers")
+      .withIndex("by_deployment_and_nullifier", (q) =>
+        q.eq("deploymentId", args.deploymentId).eq("nullifier", nullifier),
+      )
+      .unique();
+    if (existing) return existing._id;
+    return await ctx.db.insert("pampaloNullifiers", {
+      deploymentId: args.deploymentId,
+      nullifier,
+      blockNumber: args.blockNumber,
+      txHash: args.txHash.toLowerCase(),
+    });
+  },
+});
+
+/** The PUBLIC set of spent nullifiers for a chain's deployment, paginated.
+ *  Set-download BY DESIGN: the client pulls the whole set and checks its own
+ *  notes' nullifiers LOCALLY, so the server never learns which nullifiers a
+ *  user holds (ADR 0019). There is deliberately NO "is this nullifier used?"
+ *  endpoint — that would re-leak note ownership. */
+export const usedNullifiers = query({
+  args: {
+    chainId: v.number(),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const empty = { page: [] as string[], isDone: true, continueCursor: "" };
+    const net = await ctx.db
+      .query("supportedNetworks")
+      .withIndex("by_chainId", (q) => q.eq("chainId", args.chainId))
+      .unique();
+    if (!net) return empty;
+    const dep = await ctx.db
+      .query("pampaloDeployments")
+      .withIndex("by_networkId", (q) => q.eq("networkId", net._id))
+      .unique();
+    if (!dep) return empty;
+    const res = await ctx.db
+      .query("pampaloNullifiers")
+      .withIndex("by_deployment_and_block", (q) =>
+        q.eq("deploymentId", dep._id),
+      )
+      .paginate(args.paginationOpts);
+    // Explicit shape (not a spread of PaginationResult) so the client-side
+    // return type is a concrete { page, isDone, continueCursor }.
+    return {
+      page: res.page.map((r) => r.nullifier),
+      isDone: res.isDone,
+      continueCursor: res.continueCursor,
     };
   },
 });

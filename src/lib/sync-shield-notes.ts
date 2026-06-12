@@ -48,6 +48,7 @@ import {
   type StoredNote,
 } from "./idb-notes";
 import { readSyncCursor, writeSyncCursor } from "./idb-sync-cursor";
+import { noteNullifier } from "./note-nullifier";
 import { getBlob, getRpId } from "./keystore";
 import { runGetForPrf } from "./passkey";
 import { PrfNotSupportedError } from "./auth-errors";
@@ -65,6 +66,9 @@ export type SyncShieldNotesResult = {
   unknownDeployment: number;
   /** Retired-deployment notes hydrated from the archive (ADR 0018). */
   archivedAdded: number;
+  /** Spendable notes flipped to `spent` because their nullifier was found
+   *  on-chain (spent on another device/origin). */
+  reconciledSpent: number;
 };
 
 function emptyResult(): SyncShieldNotesResult {
@@ -75,6 +79,7 @@ function emptyResult(): SyncShieldNotesResult {
     decryptFailed: 0,
     unknownDeployment: 0,
     archivedAdded: 0,
+    reconciledSpent: 0,
   };
 }
 
@@ -231,6 +236,19 @@ export async function syncShieldNotesWithPrivKey(
     }
   }
 
+  // ─── Spent reconciliation ───────────────────────────────────────────
+  // Sync otherwise only ever ADDS notes; nothing marks a note spent that
+  // was spent on a different device/origin (the optimistic spend write
+  // lives only in the IDB that performed it). On-chain a nullifier is
+  // unlinkable to its leaf, so we compute each spendable note's nullifier
+  // locally and ask the contract which are already in `nullifierUsed`.
+  // This is what makes balances converge across devices.
+  try {
+    await reconcileSpentNotes(deployments, result);
+  } catch (e) {
+    console.warn("[sync-shield-notes] spent reconciliation failed", e);
+  }
+
   // ─── Retired-deployment archive (ADR 0018) ──────────────────────────
   // Hydrate read-only history for contracts we've redeployed away from,
   // so the wallet's History panel shows the same retired notes on a fresh
@@ -244,6 +262,66 @@ export async function syncShieldNotesWithPrivKey(
   }
 
   return result;
+}
+
+// Flip spendable notes to `spent` when their nullifier is already on-chain.
+// The cross-device/origin spend signal sync otherwise lacks: a note spent
+// elsewhere stays `spendable` locally because the optimistic spend write
+// lives only in the IDB that performed it. Computed from stored notes alone
+// (no PRF — the note carries its own secret), one batched eth_call set per
+// deployment.
+async function reconcileSpentNotes(
+  deployments: ReadonlyArray<{ chainId: number; pampaloAddress: string }>,
+  result: SyncShieldNotesResult,
+): Promise<void> {
+  const convex = getConvexClient();
+  if (!convex) return;
+  const allNotes = await listNotes();
+
+  for (const dep of deployments) {
+    const depAddr = dep.pampaloAddress.toLowerCase();
+    // nullifier (lowercased) → note. Only live, positioned, spendable notes
+    // on this deployment can have been nullified.
+    const byNullifier = new Map<string, StoredNote>();
+    for (const n of allNotes) {
+      if (n.state !== "spendable") continue;
+      if (n.networkChainId !== dep.chainId) continue;
+      if (n.deploymentAddress.toLowerCase() !== depAddr) continue;
+      const nf = noteNullifier(n);
+      if (nf) byNullifier.set(nf.toLowerCase(), n);
+    }
+    if (byNullifier.size === 0) continue;
+
+    // Download the PUBLIC used-nullifier set (paginated) and match our own
+    // notes against it CLIENT-SIDE — the server never learns which
+    // nullifiers are ours, and there's deliberately no per-nullifier
+    // endpoint (ADR 0019). Stop early once every one of our notes matches.
+    const remaining = new Set(byNullifier.keys());
+    let cursor: string | null = null;
+    for (let page = 0; page < 10_000 && remaining.size > 0; page++) {
+      const res: {
+        page: string[];
+        isDone: boolean;
+        continueCursor: string;
+      } = await convex.query(api.shieldQueue.store.usedNullifiers, {
+        chainId: dep.chainId,
+        paginationOpts: { numItems: 512, cursor },
+      });
+      for (const nf of res.page) {
+        const key = nf.toLowerCase();
+        const note = byNullifier.get(key);
+        if (!note || !remaining.has(key)) continue;
+        await patchNoteByLeaf(note.leafCommitment, {
+          state: "spent",
+          nullifier: key,
+        });
+        result.reconciledSpent += 1;
+        remaining.delete(key);
+      }
+      if (res.isDone) break;
+      cursor = res.continueCursor;
+    }
+  }
 }
 
 // Pull retired self-shields (by shielder) + retired received notes (per
