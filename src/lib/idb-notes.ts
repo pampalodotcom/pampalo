@@ -29,7 +29,7 @@
 import { del, get, set } from "idb-keyval";
 
 // IDB is keyed per-wallet so two passkeys registered on the same
-// browser profile (e.g. ben@hooper.link + a test account) never see
+// browser profile (e.g. ben@name.com+ a test account) never see
 // each other's notes. The key embeds the wallet's lowercased EVM
 // address; reads return EMPTY until `setActiveWallet` is called on
 // sign-in. See AUTH.md threat model + the per-wallet scoping notes.
