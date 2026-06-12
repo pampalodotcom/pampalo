@@ -77,3 +77,9 @@ Broadcasting your own transfer puts your EVM address on the event, **linking you
 The whole arc in three lanes. Alice **shields** public USDC into Note A; her wallet decrypts and files it. She **transfers** 2 to Bob plus 3 change, proving it client-side and broadcasting via a relayer; the contract nullifies A and inserts B and C, and Bob's wallet decrypts his note. Later Bob **unshields** to a public address. The chain only ever saw balanced proofs and opaque commitments, never the amounts or who paid whom.
 
 <FullJourney />
+
+---
+
+Pampalo's private-money core builds on
+[commbank.eth's](https://commbank.eth.limo) Private Unstoppable Money protocol
+and account model.

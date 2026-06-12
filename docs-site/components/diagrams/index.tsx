@@ -200,6 +200,43 @@ export function AnatomyOfANote() {
   );
 }
 
+/** Account · one recovery phrase → three identities.
+ *  The identity-derivation half of AnatomyOfANote, extracted as a
+ *  standalone figure for the /account page (no note context). */
+export function AccountIdentities() {
+  return (
+    <div className="pampdia">
+      <svg viewBox="0 0 540 196" role="img" aria-label="One recovery phrase deterministically derives three identities: the Poseidon identifier (the unlinkable note owner), the public EVM address used for gas, and the secp256k1 Envelope key used to encrypt notes.">
+        <text className="t-tick" x="24" y="22" fontSize="10">One recovery phrase → three identities</text>
+
+        <rect className="node-2" x="24" y="74" width="148" height="64" rx="12" />
+        <text className="t-mono" x="98" y="102" fontSize="11" textAnchor="middle">recovery</text>
+        <text className="t-mono" x="98" y="120" fontSize="11" textAnchor="middle">phrase</text>
+
+        <path className="flow-priv" d="M172,98 C236,98 236,58 300,58" markerEnd="url(#pd-arrow-priv)" />
+        <path className="flow" d="M172,106 H300" markerEnd="url(#pd-arrow)" />
+        <path className="flow" d="M172,114 C236,114 236,160 300,160" markerEnd="url(#pd-arrow)" />
+
+        <g>
+          <rect className="node-priv" x="300" y="40" width="216" height="36" rx="9" />
+          <text className="t-mono t-priv" x="318" y="62" fontSize="11.5" fontWeight="600">Poseidon identifier</text>
+          <text className="t-tick t-priv" x="500" y="62" fontSize="8" textAnchor="end">= note owner</text>
+        </g>
+        <g>
+          <rect className="node" x="300" y="88" width="216" height="36" rx="9" />
+          <text className="t-mono" x="318" y="110" fontSize="11.5">EVM address</text>
+          <text className="t-tick t-faint" x="500" y="110" fontSize="8" textAnchor="end">public · gas</text>
+        </g>
+        <g>
+          <rect className="node" x="300" y="142" width="216" height="36" rx="9" />
+          <text className="t-mono" x="318" y="164" fontSize="11.5">Envelope key</text>
+          <text className="t-tick t-faint" x="500" y="164" fontSize="8" textAnchor="end">secp256k1</text>
+        </g>
+      </svg>
+    </div>
+  );
+}
+
 /** 03 · The note tree: Merkle tree & epochs */
 export function NoteTree() {
   return (
