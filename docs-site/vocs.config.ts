@@ -19,6 +19,7 @@ export default defineConfig({
         { text: "Overview", link: "/building" },
         { text: "SDK", link: "/building/sdk" },
         { text: "CLI", link: "/building/cli" },
+        { text: "Contracts", link: "/building/contracts" },
       ],
     },
     { text: "Compliance", link: "/compliance" },

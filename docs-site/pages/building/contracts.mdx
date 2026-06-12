@@ -1,0 +1,157 @@
+# Contracts: `@pampalo/contracts`
+
+Pampalo's core Solidity, packaged as importable source. Add it to any Hardhat
+or Foundry project and you can build contracts that **accept private payments**
+the same way they accept an ERC-20 — a storefront, a paywall, a tip jar — all
+settling against the live Pampalo protocol.
+
+This is the on-chain counterpart to the [SDK](/building/sdk): the SDK builds and
+broadcasts the private transfer, your contract redeems it.
+
+## Install
+
+:::code-group
+
+```bash [pnpm]
+pnpm add @pampalo/contracts
+```
+
+```bash [npm]
+npm install @pampalo/contracts
+```
+
+```bash [yarn]
+yarn add @pampalo/contracts
+```
+
+:::
+
+The package ships **raw `.sol` source** — there's no build step and no
+bytecode to trust; your compiler builds it alongside your own contracts.
+`@openzeppelin/contracts` is pulled in automatically (the only external
+dependency). Requires **solc ≥ 0.8.27**.
+
+## What's in the box
+
+| Path | What it is |
+| --- | --- |
+| `contracts/Pampalo.sol` | The protocol entrypoint — shield, transfer, withdraw, the nullifier set and the Poseidon merkle tree. You don't redeploy this; you point at the live one. |
+| `contracts/PampaloPayments.sol` | The payments singleton. `verifyAndBurn` checks a redeem proof and burns its nullifier — what an acceptor calls under the hood. |
+| `contracts/PrivatePaymentAcceptor.sol` | **The one you inherit.** An abstract base that drops private-payment acceptance into a purchase flow in one line. |
+| `contracts/mocks/MockShop.sol` | A minimal, working storefront built on the acceptor. Copy it as your starting point. |
+| `contracts/mocks/USDC.sol` | A mintable ERC-20 for local testing. |
+| `contracts/oracles/*`, `contracts/libraries/*` | Price-oracle interfaces and `DateMath`, used by the compliance surface. |
+| `contracts/verifiers/*` | Generated UltraHonk verifiers. You won't import these directly. |
+
+## Import
+
+Import by path, exactly as you would from OpenZeppelin:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.27;
+
+import {PrivatePaymentAcceptor} from "@pampalo/contracts/contracts/PrivatePaymentAcceptor.sol";
+import {PampaloPayments} from "@pampalo/contracts/contracts/PampaloPayments.sol";
+```
+
+Hardhat resolves `@pampalo/contracts/...` from `node_modules` out of the box.
+For Foundry, add a remapping:
+
+```
+@pampalo/contracts/=node_modules/@pampalo/contracts/
+@openzeppelin/=node_modules/@openzeppelin/
+```
+
+## Quickstart: accept a private payment
+
+Inherit `PrivatePaymentAcceptor` and call `_acceptPayment` at the top of your
+purchase flow. Buyers can pay **either** with a public ERC-20 transfer **or** by
+proving a prior Pampalo private payment — same function, one `bool`.
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.27;
+
+import {PampaloPayments} from "@pampalo/contracts/contracts/PampaloPayments.sol";
+import {PrivatePaymentAcceptor} from "@pampalo/contracts/contracts/PrivatePaymentAcceptor.sol";
+
+contract TipJar is PrivatePaymentAcceptor {
+  address public immutable asset;
+  mapping(address => uint256) public tipped;
+
+  constructor(PampaloPayments _payments, uint256 _merchantId, address _admin, address _asset)
+    PrivatePaymentAcceptor(_payments, _merchantId, _admin)
+  {
+    asset = _asset;
+  }
+
+  function tip(
+    uint256 amount,
+    bool usePrivate,
+    bytes calldata proof,
+    bytes32[] calldata publicInputs
+  ) external {
+    _acceptPayment(
+      usePrivate,
+      proof,
+      publicInputs,
+      asset,
+      amount,
+      msg.sender,   // recipient bound into the private proof
+      msg.sender,   // payer for the public ERC-20 branch
+      bytes32(0)    // reference (e.g. an item id)
+    );
+    tipped[msg.sender] += amount;
+  }
+}
+```
+
+What you get for free:
+
+- **`merchantId`** — the Poseidon identifier private payments must be paid to,
+  set at construction. Buyers send a Pampalo note to this id; the bound proof is
+  checked against it.
+- **`privateEnabled`** — a vendor kill switch. While off, the private branch
+  reverts and only the public ERC-20 path works. The public path is never gated.
+- **`privatePaymentAdmin`** — the address that can toggle the switch, rotate
+  `merchantId`, and hand off admin. Defaults to the `_admin` you pass in.
+
+`_acceptPrivatePayment` is also exposed if you want the private-only path
+without the public fallback. See `contracts/mocks/MockShop.sol` for the fuller
+storefront pattern (priced items, a `Delivered` event, per-item references).
+
+## Live deployment — Base Sepolia (84532)
+
+The package bundles `deployments/84532.json`, so you can point at the running
+Pampalo without redeploying anything:
+
+```ts
+import addrs from "@pampalo/contracts/deployments/84532.json";
+
+addrs.pampalo; // 0x3E6dfc4c233486A44e26A548e191c839f069037f
+addrs.tokens.usdc; // mintable test USDC
+```
+
+| Contract | Address |
+| --- | --- |
+| `Pampalo` | `0x3E6dfc4c233486A44e26A548e191c839f069037f` |
+| Test USDC | `0x4Fc9cc04f2A8d6Ff360352C61A4bb36Ab262Ae01` |
+
+Pair this with the [SDK](/building/sdk) to mint test USDC, shield it, and build
+the redeem proof your contract consumes.
+
+:::warning[Deploying your own Pampalo]
+Most teams should build **against the live deployment above**, not redeploy the
+protocol. If you do stand up your own instance for local testing, you'll also
+need the Poseidon2 huff hasher (`contracts/utils/Poseidon2Huff.json`, bundled)
+wired via `setPoseidon` — see the repo's deploy script for the full sequence.
+:::
+
+## Status
+
+The contracts are at **`0.1.0`**, tracking the same release line as the SDK and
+CLI. The private-payment acceptor surface is new; the underlying shield /
+transfer / withdraw core is the protocol the web wallet runs on today. Hackathon
+note: the one-hour deposit hold can be skipped at the Pampalo booth so teams can
+move money fast — see [Compliance](/compliance).
