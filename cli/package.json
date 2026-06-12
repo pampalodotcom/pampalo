@@ -1,6 +1,6 @@
 {
   "name": "@pampalo/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "The pampalo command-line tool — drive a headless Pampalo agent account.",
   "license": "MIT",
