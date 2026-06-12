@@ -27,10 +27,22 @@ import {
   type StoredNote,
 } from "@/lib/idb-notes";
 import { useRpcClient } from "@/lib/rpc";
+import { usePublicBalance } from "@/lib/balances";
+import {
+  affordabilityMessage,
+  checkAffordability,
+  type Affordability,
+} from "@/lib/affordability";
+import { normalizeBroadcastError } from "@/lib/broadcast-error";
+import {
+  broadcastPrivate,
+  BroadcastCancelledError,
+} from "@/lib/private-broadcast";
 import { prepareTransfer } from "@/lib/transfer-prep";
 import { useMerkleTree } from "@/lib/use-merkle-tree";
 import { cn } from "@/lib/utils";
 import { AssetMark } from "@/components/pampalo/AssetMark";
+import { useSelfBroadcastFallback } from "@/components/pampalo/SelfBroadcastFallback";
 import { NetworkLogo } from "@/components/pampalo/deposit/NetworkLogo";
 import { SunIcon, MoonIcon } from "@/components/pampalo/SunMoonIcons";
 import type { SendInputUnit, SendMode, SendRecipient } from "./SendSheet";
@@ -102,6 +114,7 @@ export function SendReviewStep({
   onClose: () => void;
 }) {
   const rpc = useRpcClient();
+  const fallback = useSelfBroadcastFallback(evmAddress);
   const accent = mode === "private" ? "priv" : "pub";
 
   // Private-mode-only resources. Both Convex queries skip until we
@@ -205,8 +218,90 @@ export function SendReviewStep({
     return deployments.find((d) => d.chainId === chainId) ?? null;
   }, [deployments, chainId]);
 
+  // ─── Affordability preflight (CONTEXT.md) ─────────────────────────
+  // A self-broadcast costs the user value + gasLimit×gasPrice in native
+  // ETH. Read the live native balance (and, for a public ERC-20 send,
+  // the token balance) so we can block submission before it reverts.
+  const nativeAsset = useMemo(
+    () => ({ chainId: chainId ?? 0, address: ETH_SENTINEL, symbol: "ETH", decimals: 18 }),
+    [chainId],
+  );
+  const nativeBal = usePublicBalance(
+    nativeAsset,
+    chainId !== null ? evmAddress : null,
+  );
+  const tokenForBal =
+    mode === "public" &&
+    sendToken &&
+    sendToken.address.toLowerCase() !== ETH_SENTINEL
+      ? sendToken
+      : null;
+  const tokenAsset = useMemo(
+    () => ({
+      chainId: chainId ?? 0,
+      address: tokenForBal?.address ?? ETH_SENTINEL,
+      symbol: tokenForBal?.symbol ?? "ETH",
+      decimals: tokenForBal?.decimals ?? 18,
+    }),
+    [chainId, tokenForBal],
+  );
+  const tokenBal = usePublicBalance(
+    tokenAsset,
+    tokenForBal && chainId !== null ? evmAddress : null,
+  );
+
+  const affordability = useMemo<Affordability | null>(() => {
+    if (chainId === null || amountWei === null || !sendToken || !gas?.gasPriceWei)
+      return null;
+    // Private transfer: until we know whether the chain sponsors, don't
+    // block — a relayed transfer pays no user gas.
+    if (mode === "private") {
+      if (!deployment) return null;
+      if (deployment.sponsoringTxs) return { ok: true };
+    }
+    // Balance not loaded yet → don't block; the broadcast backstop covers it.
+    if (!nativeBal.data) return null;
+    const isNative = sendToken.address.toLowerCase() === ETH_SENTINEL;
+    const gasLimit =
+      mode === "private"
+        ? TRANSFER_GAS_LIMIT
+        : isNative
+          ? PUBLIC_SEND_GAS_LIMIT_NATIVE
+          : PUBLIC_SEND_GAS_LIMIT_ERC20;
+    const valueWei = mode === "public" && isNative ? amountWei : 0n;
+    let token;
+    if (mode === "public" && !isNative) {
+      if (!tokenBal.data) return null; // token balance unknown → don't block yet
+      token = {
+        balanceWei: tokenBal.data.balanceWei,
+        neededWei: amountWei,
+        symbol: sendToken.symbol,
+        decimals: sendToken.decimals,
+      };
+    }
+    return checkAffordability({
+      nativeBalanceWei: nativeBal.data.balanceWei,
+      valueWei,
+      gasLimit,
+      gasPriceWei: BigInt(gas.gasPriceWei),
+      token,
+    });
+  }, [
+    chainId,
+    amountWei,
+    sendToken,
+    gas,
+    mode,
+    deployment,
+    nativeBal.data,
+    tokenBal.data,
+  ]);
+  const unaffordable =
+    affordability && !affordability.ok ? affordability : null;
+
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [errorRaw, setErrorRaw] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
 
   // Receipt polling — same shape as ActionConfirmSheet.
@@ -250,7 +345,14 @@ export function SendReviewStep({
       setError("Gas price not loaded yet — try again in a moment.");
       return;
     }
+    // Preflight: don't even sign if the wallet can't cover value + gas.
+    if (unaffordable) {
+      setError(affordabilityMessage(unaffordable));
+      setErrorRaw(null);
+      return;
+    }
     setError(null);
+    setErrorRaw(null);
 
     try {
       if (mode === "private") {
@@ -259,7 +361,14 @@ export function SendReviewStep({
         await runPublic();
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // User declined the self-broadcast fallback — benign, reset to idle.
+      if (e instanceof BroadcastCancelledError) {
+        setPhase("idle");
+        return;
+      }
+      const n = normalizeBroadcastError(e);
+      setError(n.friendly);
+      setErrorRaw(n.raw);
       setPhase("error");
     }
   };
@@ -392,7 +501,20 @@ export function SendReviewStep({
     });
 
     setPhase("broadcasting");
-    const { txHash: hash } = await rpc.sendRawTransaction(chainId, signed);
+    // Sponsoring chain → relay so the user's EVM address never signs this
+    // transfer (the EOA-anonymity property). Falls back to the pre-signed
+    // self-broadcast only with explicit consent.
+    const { txHash: hash } = await broadcastPrivate({
+      rpc,
+      sponsoring: deployment.sponsoringTxs,
+      chainId,
+      kind: "transfer",
+      proof: prep.proofBytes,
+      publicInputs: prep.publicInputs,
+      payload: prep.payload,
+      signedSelfBroadcast: signed,
+      confirmFallback: fallback.confirm,
+    });
     setTxHash(hash);
 
     console.log(
@@ -512,6 +634,7 @@ export function SendReviewStep({
   })();
 
   return (
+    <>
     <div className="flex flex-col gap-4 px-5 pt-2 pb-5 sm:px-6 sm:pt-3 sm:pb-6">
       {!isSuccessPanel && (
         <button
@@ -628,14 +751,32 @@ export function SendReviewStep({
 
           {error && (
             <div className="rounded-xl border border-[var(--pub-soft-2)] bg-[var(--pub-soft)] px-3.5 py-2.5 text-[12.5px] text-[var(--pub)]">
-              {error}
+              <div>{error}</div>
+              {errorRaw && (
+                <details className="mt-1.5">
+                  <summary className="cursor-pointer select-none text-[11px] font-semibold opacity-80">
+                    Details
+                  </summary>
+                  <p className="mt-1 break-all font-mono text-[10.5px] opacity-80">
+                    {errorRaw}
+                  </p>
+                </details>
+              )}
+            </div>
+          )}
+
+          {/* Preflight block — shown when the wallet can't cover value+gas
+              on a self-broadcast (relayed paths skip this). */}
+          {!error && unaffordable && phase !== "error" && (
+            <div className="rounded-xl border border-[var(--pub-soft-2)] bg-[var(--pub-soft)] px-3.5 py-2.5 text-[12.5px] text-[var(--pub)]">
+              {affordabilityMessage(unaffordable)}
             </div>
           )}
 
           <button
             type="button"
             onClick={onConfirm}
-            disabled={inFlight}
+            disabled={inFlight || unaffordable !== null}
             className={cn(
               "inline-flex h-[50px] w-full items-center justify-center gap-2 rounded-full",
               "text-[14px] font-bold text-white shadow-sm",
@@ -654,6 +795,8 @@ export function SendReviewStep({
         </>
       )}
     </div>
+    {fallback.element}
+    </>
   );
 }
 
@@ -700,7 +843,7 @@ function SuccessPanel({
 
   const subcopy = isConfirmed
     ? mode === "private"
-      ? "Transfer mined. Receiver can tap Sync to discover the note."
+      ? "Tell whomever you sent this to to resync their Pampalo account."
       : "Transfer mined."
     : "Awaiting confirmation - should land in a few seconds.";
 

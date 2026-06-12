@@ -23,7 +23,7 @@ describe("shieldBudget", () => {
     10036677144260647934022413515521823129584317400947571241312859176539726523915n;
   const owner = BigInt(poseidon2Hash([ownerSecret]).toString());
 
-  const DEFAULT_CAP = 10_000n; // 100_00 = $100 in cents
+  const DEFAULT_CAP = 20_000n; // 200_00 = $200 in cents
 
   before(async () => {
     ({ pampalo, Signers, usdcDeployment, connection } = await getTestingAPI());

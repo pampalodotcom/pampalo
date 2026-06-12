@@ -4,6 +4,12 @@ import { internalMutation } from "../_generated/server";
 import { lowerAddress } from "../lib/normalize";
 import { ETH_ADDRESS } from "../catalog/seed";
 
+// Gas-sponsoring defaults (TRANSFERS.md §2.4). Base Sepolia is the only
+// chain sponsoring at seed time; flipping another chain on is a manual
+// operator change. The min-balance floor is per-chain (gas prices vary).
+const BASE_SEPOLIA_CHAIN_ID = 84532;
+const DEFAULT_MIN_RELAYER_BALANCE_WEI = "10000000000000000"; // 0.01 ETH
+
 // Dashboard / CLI-only seed for the Pampalo deployment catalogue. Run:
 //   pnpm convex run shieldQueue/seed:seedAll
 //
@@ -55,7 +61,7 @@ const DEPLOYMENTS: SeedDeployment[] = [
     // cron once that lands. Tightening these doesn't break anything;
     // they're display caches, not enforcement.
     shieldWaitSeconds: 3600,
-    defaultMonthlyCapUsdCents: 100_00, // $100.00
+    defaultMonthlyCapUsdCents: 200_00, // $200.00 (display cache; chain enforces)
     // Base Sepolia is fast-finality; 5 blocks ≈ 10s of trail.
     confirmationDepth: 5,
     assets: [
@@ -126,6 +132,11 @@ export const addDeployment = internalMutation({
       lastIndexedBlock:
         existing?.lastIndexedBlock ?? args.lastIndexedBlock ?? 0,
       enabled: args.enabled ?? true,
+      // Preserve sponsoring config across a full replace; default per chain.
+      sponsoringTxs:
+        existing?.sponsoringTxs ?? args.chainId === BASE_SEPOLIA_CHAIN_ID,
+      minRelayerBalanceWei:
+        existing?.minRelayerBalanceWei ?? DEFAULT_MIN_RELAYER_BALANCE_WEI,
     };
     if (existing) {
       await ctx.db.replace(existing._id, payload);
@@ -230,6 +241,13 @@ export const seedAll = internalMutation({
         // Preserve cursor on re-seed; fresh rows start at 0.
         lastIndexedBlock: existing?.lastIndexedBlock ?? 0,
         enabled: true,
+        // Preserve an operator's manual sponsoring flip on re-seed; default
+        // to on only for Base Sepolia. relayerAccounts rows are seeded
+        // separately via relayer/node:seedRelayerAccounts.
+        sponsoringTxs:
+          existing?.sponsoringTxs ?? d.chainId === BASE_SEPOLIA_CHAIN_ID,
+        minRelayerBalanceWei:
+          existing?.minRelayerBalanceWei ?? DEFAULT_MIN_RELAYER_BALANCE_WEI,
       };
 
       let deploymentId: Id<"pampaloDeployments">;
