@@ -12,7 +12,7 @@ import { readFile } from "node:fs/promises";
 // Usage:
 //   pnpm --filter @pampalo/contracts exec hardhat run scripts/grant-roles.ts --network baseSepolia
 
-const TARGET = "0x4882788474F4916110100d737489F2e8d673287B";
+const TARGET = "0xfdfbef2b49213269218e0b60b603536c61733e2d";
 
 const ROLE_NAMES = [
   "VIGILANT_CITIZEN_ROLE",
@@ -90,7 +90,9 @@ async function main() {
       );
     }
   } else {
-    console.log("  RELAYER_MNEMONIC not set — skipped compliance-signer grant.");
+    console.log(
+      "  RELAYER_MNEMONIC not set — skipped compliance-signer grant.",
+    );
   }
 
   console.log("\n✓ Role grants complete.");

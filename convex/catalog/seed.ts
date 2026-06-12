@@ -499,6 +499,7 @@ export const seedAll = internalMutation({
   ): Promise<{
     networks: number;
     tokens: number;
+    tokensPruned: number;
     priceFeeds: number;
     uniswapPools: number;
   }> => {
@@ -552,6 +553,31 @@ export const seedAll = internalMutation({
         priceFeedShortId: t.priceFeedShortId,
       });
       tokenInserted += 1;
+    }
+
+    // Prune re-addressed orphans: a mock that respins on redeploy (e.g.
+    // Base Sepolia USDC) leaves its OLD-address row behind, so the assets
+    // view renders a duplicate chip. For each declared token, drop any
+    // same-network row with the SAME symbol at a DIFFERENT address. Narrow
+    // by design — never touches a differently-symboled (manually-added)
+    // token, so the insert-only "preserve dashboard edits" contract holds.
+    let tokenPruned = 0;
+    for (const t of TOKENS) {
+      const networkId = netIds[t.chainId];
+      if (!networkId) continue;
+      const addr = t.address.toLowerCase();
+      const sameNetwork = await ctx.db
+        .query("supportedTokens")
+        .withIndex("by_networkId_and_address", (q) =>
+          q.eq("networkId", networkId),
+        )
+        .collect();
+      for (const row of sameNetwork) {
+        if (row.symbol === t.symbol && row.address !== addr) {
+          await ctx.db.delete(row._id);
+          tokenPruned += 1;
+        }
+      }
     }
 
     // Price feeds (all live on mainnet)
@@ -617,6 +643,7 @@ export const seedAll = internalMutation({
     return {
       networks: NETWORKS.length,
       tokens: tokenInserted,
+      tokensPruned: tokenPruned,
       priceFeeds: feedCount,
       uniswapPools: poolCount,
     };
