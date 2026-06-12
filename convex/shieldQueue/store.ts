@@ -56,6 +56,10 @@ export const _enabledDeployments = internalQuery({
     const out: IndexerDeployment[] = [];
     for (const d of deployments) {
       if (!d.enabled) continue;
+      // Skip placeholder rows (`pampalo: ""`) — they have no contract to
+      // index, and an empty `address` makes `eth_getLogs` throw
+      // -32602. Mirrors the guard in the catalog query above.
+      if (!d.pampalo) continue;
       const network = await ctx.db.get(d.networkId);
       if (!network) continue;
       out.push({
@@ -242,6 +246,111 @@ export const _upsertNotePayload = internalMutation({
       logIndex: args.logIndex,
       emittedAt: Date.now(),
     });
+  },
+});
+
+// ─── Pool-activity feed (transfers + unshields) ──────────────────────────
+
+/** Idempotent upsert of one (deploymentId, txHash) activity row. Both the
+ *  NullifierUsed and NotePayload indexer paths call this for the same tx;
+ *  the first creates it, later calls only fill gaps (e.g. payloadPreview
+ *  from the NotePayload path). Never created for shields. */
+export const _upsertActivity = internalMutation({
+  args: {
+    deploymentId: v.id("pampaloDeployments"),
+    txHash: v.string(),
+    kind: v.union(v.literal("transfer"), v.literal("unshield")),
+    from: v.string(),
+    blockNumber: v.number(),
+    blockTime: v.number(),
+    payloadPreview: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const txHash = args.txHash.toLowerCase();
+    const existing = await ctx.db
+      .query("pampaloActivity")
+      .withIndex("by_deployment_and_tx", (q) =>
+        q.eq("deploymentId", args.deploymentId).eq("txHash", txHash),
+      )
+      .unique();
+    if (existing) {
+      // Only fill a missing payloadPreview; don't churn the rest on replay.
+      if (args.payloadPreview && !existing.payloadPreview) {
+        await ctx.db.patch(existing._id, {
+          payloadPreview: args.payloadPreview,
+        });
+      }
+      return existing._id;
+    }
+    return await ctx.db.insert("pampaloActivity", {
+      deploymentId: args.deploymentId,
+      txHash,
+      kind: args.kind,
+      from: lowerAddress(args.from),
+      blockNumber: args.blockNumber,
+      blockTime: args.blockTime,
+      payloadPreview: args.payloadPreview,
+    });
+  },
+});
+
+export type ActivityRow = {
+  txHash: string;
+  chainId: number;
+  kind: "transfer" | "unshield";
+  blockTime: number;
+  payloadPreview: string | null;
+  /** Relayer pool index when `from` is a known relayer account, else null
+   *  (self-broadcast). The user's own address is deliberately not surfaced
+   *  for self-broadcasts — the txHash links out for anyone who wants it. */
+  relayerIndex: number | null;
+};
+
+/** Recent pool activity (newest first), classified transfer/unshield, with
+ *  relayer attribution resolved against `relayerAccounts`. Public. */
+export const recentActivity = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<ActivityRow[]> => {
+    const limit = Math.min(args.limit ?? 50, 200);
+    const rows = await ctx.db
+      .query("pampaloActivity")
+      .withIndex("by_block")
+      .order("desc")
+      .take(limit);
+
+    // Resolve chainId per deployment + relayer addresses per chain, cached.
+    const chainByDep = new Map<string, number | null>();
+    const relayerByChain = new Map<number, Map<string, number>>();
+    const out: ActivityRow[] = [];
+    for (const r of rows) {
+      let chainId = chainByDep.get(r.deploymentId);
+      if (chainId === undefined) {
+        const dep = await ctx.db.get(r.deploymentId);
+        const net = dep ? await ctx.db.get(dep.networkId) : null;
+        chainId = net?.chainId ?? null;
+        chainByDep.set(r.deploymentId, chainId);
+      }
+      if (chainId === null) continue;
+
+      let relayers = relayerByChain.get(chainId);
+      if (!relayers) {
+        const accts = await ctx.db
+          .query("relayerAccounts")
+          .withIndex("by_chainId_and_index", (q) => q.eq("chainId", chainId))
+          .collect();
+        relayers = new Map(accts.map((a) => [a.address, a.accountIndex]));
+        relayerByChain.set(chainId, relayers);
+      }
+      out.push({
+        txHash: r.txHash,
+        chainId,
+        kind: r.kind,
+        blockTime: r.blockTime,
+        payloadPreview: r.payloadPreview ?? null,
+        relayerIndex: relayers.get(r.from) ?? null,
+      });
+    }
+    return out;
   },
 });
 
@@ -530,6 +639,9 @@ export const enabledDeployments = query({
       pampaloAddress: string;
       shieldWaitSeconds: number;
       defaultMonthlyCapUsdCents: number;
+      // Whether the relayer sponsors transfer/unshield on this chain.
+      // Drives the client's relay-vs-self-broadcast branch. See ADR 0015.
+      sponsoringTxs: boolean;
     }>
   > => {
     const deployments = await ctx.db.query("pampaloDeployments").collect();
@@ -540,6 +652,7 @@ export const enabledDeployments = query({
       pampaloAddress: string;
       shieldWaitSeconds: number;
       defaultMonthlyCapUsdCents: number;
+      sponsoringTxs: boolean;
     }> = [];
     for (const d of deployments) {
       if (!d.enabled) continue;
@@ -557,6 +670,7 @@ export const enabledDeployments = query({
         pampaloAddress: d.pampalo,
         shieldWaitSeconds: d.shieldWaitSeconds,
         defaultMonthlyCapUsdCents: d.defaultMonthlyCapUsdCents,
+        sponsoringTxs: d.sponsoringTxs ?? false,
       });
     }
     return out;

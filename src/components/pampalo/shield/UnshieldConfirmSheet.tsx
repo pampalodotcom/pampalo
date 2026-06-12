@@ -16,12 +16,24 @@ import {
 } from "@/lib/idb-notes";
 import { prepareUnshield } from "@/lib/unshield-prep";
 import { useRpcClient } from "@/lib/rpc";
+import { usePublicBalance } from "@/lib/balances";
+import {
+  affordabilityMessage,
+  checkAffordability,
+  type Affordability,
+} from "@/lib/affordability";
+import { normalizeBroadcastError } from "@/lib/broadcast-error";
+import {
+  broadcastPrivate,
+  BroadcastCancelledError,
+} from "@/lib/private-broadcast";
 import { useIsDesktop } from "@/lib/use-media-query";
 import { useMerkleTree } from "@/lib/use-merkle-tree";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { AssetMark } from "../AssetMark";
+import { useSelfBroadcastFallback } from "../SelfBroadcastFallback";
 
 // Slider-driven unshield. Mirror of ShieldConfirmSheet — same phase
 // machine, same celebratory done-state, same dialog/sheet responsive
@@ -84,6 +96,7 @@ export function UnshieldConfirmSheet({
 }: Props) {
   const isDesktop = useIsDesktop();
   const rpc = useRpcClient();
+  const fallback = useSelfBroadcastFallback(addresses.evm);
 
   const deployments = useQuery(api.shieldQueue.store.enabledDeployments, {});
   const gas = useQuery(
@@ -98,6 +111,7 @@ export function UnshieldConfirmSheet({
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [errorRaw, setErrorRaw] = useState<string | null>(null);
   const [signedTx, setSignedTx] = useState<string | null>(null);
   const [broadcastedTxHash, setBroadcastedTxHash] = useState<string | null>(
     null,
@@ -107,6 +121,7 @@ export function UnshieldConfirmSheet({
     if (!open) {
       setPhase("idle");
       setError(null);
+      setErrorRaw(null);
       setSignedTx(null);
       setBroadcastedTxHash(null);
     }
@@ -116,6 +131,36 @@ export function UnshieldConfirmSheet({
     if (!payload || !deployments) return null;
     return deployments.find((d) => d.chainId === payload.chainId) ?? null;
   }, [deployments, payload]);
+
+  // ─── Affordability preflight (CONTEXT.md) ─────────────────────────
+  // Unshield moves value 0 (the exit is paid by the contract), so the
+  // only cost is gas — and ONLY when self-broadcasting. On a sponsoring
+  // chain the relayer pays, so the user needs no native ETH; we skip the
+  // check there (a pool-exhausted fallback is caught by the backstop).
+  const nativeAsset = useMemo(
+    () => ({
+      chainId: payload?.chainId ?? 0,
+      address: ETH_SENTINEL,
+      symbol: "ETH",
+      decimals: 18,
+    }),
+    [payload?.chainId],
+  );
+  const nativeBal = usePublicBalance(nativeAsset, payload ? addresses.evm : null);
+  const affordability = useMemo<Affordability | null>(() => {
+    if (!payload || !gas?.gasPriceWei) return null;
+    if (!deployment) return null; // sponsoring unknown until loaded
+    if (deployment.sponsoringTxs) return { ok: true }; // relayer pays gas
+    if (!nativeBal.data) return null;
+    return checkAffordability({
+      nativeBalanceWei: nativeBal.data.balanceWei,
+      valueWei: 0n,
+      gasLimit: UNSHIELD_GAS_LIMIT,
+      gasPriceWei: BigInt(gas.gasPriceWei),
+    });
+  }, [payload, gas, deployment, nativeBal.data]);
+  const unaffordable =
+    affordability && !affordability.ok ? affordability : null;
 
   const amountFmt = useMemo(() => {
     if (!payload) return "";
@@ -158,7 +203,15 @@ export function UnshieldConfirmSheet({
       );
       return;
     }
+    // Preflight: on a non-sponsoring chain the user pays gas themselves;
+    // block when they can't cover it. (Button is already disabled here.)
+    if (unaffordable) {
+      setError(affordabilityMessage(unaffordable));
+      setErrorRaw(null);
+      return;
+    }
     setError(null);
+    setErrorRaw(null);
 
     try {
       setPhase("signing");
@@ -232,7 +285,20 @@ export function UnshieldConfirmSheet({
       setSignedTx(signed);
 
       setPhase("submitting");
-      const { txHash } = await rpc.sendRawTransaction(payload.chainId, signed);
+      // On a sponsoring chain, relay so the user's EVM address never signs
+      // the exit (the headline privacy win for a fresh-address withdrawal).
+      // Falls back to the pre-signed self-broadcast only with consent.
+      const { txHash } = await broadcastPrivate({
+        rpc,
+        sponsoring: deployment.sponsoringTxs,
+        chainId: payload.chainId,
+        kind: "unshield",
+        proof: prep.proofBytes,
+        publicInputs: prep.publicInputs,
+        payload: prep.payload,
+        signedSelfBroadcast: signed,
+        confirmFallback: fallback.confirm,
+      });
       setBroadcastedTxHash(txHash);
       onBroadcasted?.({
         chainId: payload.chainId,
@@ -286,8 +352,14 @@ export function UnshieldConfirmSheet({
       setPhase("done");
       onOpenChange(false);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
+      // User declined the self-broadcast fallback — benign, not an error.
+      if (e instanceof BroadcastCancelledError) {
+        setPhase("idle");
+        return;
+      }
+      const n = normalizeBroadcastError(e);
+      setError(n.friendly);
+      setErrorRaw(n.raw);
       setPhase("error");
     }
   };
@@ -298,7 +370,12 @@ export function UnshieldConfirmSheet({
     phase === "submitting" ||
     phase === "awaiting";
   const closeable = !isBusy;
-  const confirmDisabled = !payload || !deployment || isBusy || phase === "done";
+  const confirmDisabled =
+    !payload ||
+    !deployment ||
+    isBusy ||
+    phase === "done" ||
+    unaffordable !== null;
 
   const confirmLabel = (() => {
     switch (phase) {
@@ -376,6 +453,25 @@ export function UnshieldConfirmSheet({
         {/* Status / error line */}
         <StatusLine phase={phase} error={error} />
 
+        {/* Preflight block — self-broadcast gas the wallet can't cover. */}
+        {!error && unaffordable && (
+          <div className="rounded-xl border border-[var(--pub-soft-2)] bg-[var(--pub-soft)] px-3.5 py-2.5 text-[12.5px] text-[var(--pub)]">
+            {affordabilityMessage(unaffordable)}
+          </div>
+        )}
+
+        {/* Raw RPC error behind a details toggle (backstop). */}
+        {error && errorRaw && (
+          <details className="rounded-xl border border-[var(--pub-soft-2)] bg-[var(--pub-soft)] px-3.5 py-2 text-[12.5px] text-[var(--pub)]">
+            <summary className="cursor-pointer select-none text-[11px] font-semibold opacity-80">
+              Details
+            </summary>
+            <p className="mt-1 break-all font-mono text-[10.5px] opacity-80">
+              {errorRaw}
+            </p>
+          </details>
+        )}
+
         {/* Action stack — same shape as ShieldConfirmSheet. */}
         <div className="flex flex-col gap-2">
           {phase !== "done" && (
@@ -432,28 +528,34 @@ export function UnshieldConfirmSheet({
 
   if (isDesktop) {
     return (
-      <Dialog open={open} onOpenChange={closeable ? onOpenChange : () => {}}>
-        <DialogContent
-          className={cn("w-[480px] max-w-[calc(100%-2rem)] gap-0 p-0")}
-        >
-          <VisuallyHidden.Root>
-            <DialogTitle>Confirm unshield</DialogTitle>
-          </VisuallyHidden.Root>
-          {body}
-        </DialogContent>
-      </Dialog>
+      <>
+        <Dialog open={open} onOpenChange={closeable ? onOpenChange : () => {}}>
+          <DialogContent
+            className={cn("w-[480px] max-w-[calc(100%-2rem)] gap-0 p-0")}
+          >
+            <VisuallyHidden.Root>
+              <DialogTitle>Confirm unshield</DialogTitle>
+            </VisuallyHidden.Root>
+            {body}
+          </DialogContent>
+        </Dialog>
+        {fallback.element}
+      </>
     );
   }
 
   return (
-    <Sheet open={open} onOpenChange={closeable ? onOpenChange : () => {}}>
-      <SheetContent side="bottom" className="gap-0 p-0">
-        <VisuallyHidden.Root>
-          <SheetTitle>Confirm unshield</SheetTitle>
-        </VisuallyHidden.Root>
-        {body}
-      </SheetContent>
-    </Sheet>
+    <>
+      <Sheet open={open} onOpenChange={closeable ? onOpenChange : () => {}}>
+        <SheetContent side="bottom" className="gap-0 p-0">
+          <VisuallyHidden.Root>
+            <SheetTitle>Confirm unshield</SheetTitle>
+          </VisuallyHidden.Root>
+          {body}
+        </SheetContent>
+      </Sheet>
+      {fallback.element}
+    </>
   );
 }
 

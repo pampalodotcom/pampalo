@@ -122,12 +122,39 @@ export function extractPrfFirst(
   assertion: AuthenticationResponseJSON,
 ): ArrayBuffer | null {
   const ext = assertion.clientExtensionResults as
-    | { prf?: { results?: { first?: string | ArrayBuffer } } }
+    | { prf?: { results?: { first?: unknown } } }
     | undefined;
-  const first = ext?.prf?.results?.first;
+  return coercePrfOutput(ext?.prf?.results?.first);
+}
+
+// Native platform authenticators hand back `prf.results.first` as a real
+// ArrayBuffer. Extensions that proxy WebAuthn through a content-script /
+// background messaging boundary (e.g. 1Password) serialize it across that
+// boundary, so it can arrive as a base64url string, a Uint8Array, a plain
+// number[] array, an index-keyed object, or a {type:"Buffer",data:[…]} blob.
+// Normalize every shape to an ArrayBuffer so importKey gets a BufferSource.
+function coercePrfOutput(first: unknown): ArrayBuffer | null {
   if (!first) return null;
   if (typeof first === "string") return base64UrlToBuffer(first);
-  return first;
+  if (first instanceof ArrayBuffer) return first;
+  if (ArrayBuffer.isView(first)) {
+    const view = first as ArrayBufferView;
+    const out = new Uint8Array(view.byteLength);
+    out.set(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
+    return out.buffer;
+  }
+  if (Array.isArray(first)) return Uint8Array.from(first).buffer;
+  if (typeof first === "object") {
+    const obj = first as { data?: unknown; [k: number]: unknown };
+    // {type:"Buffer",data:[…]} (Node-style serialization)
+    if (Array.isArray(obj.data)) return Uint8Array.from(obj.data).buffer;
+    // index-keyed object {0:…,1:…} from a structured-cloned typed array
+    const bytes = Object.values(obj).filter(
+      (v): v is number => typeof v === "number",
+    );
+    if (bytes.length > 0) return Uint8Array.from(bytes).buffer;
+  }
+  return null;
 }
 
 // Re-export for convenience

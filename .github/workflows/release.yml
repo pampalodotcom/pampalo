@@ -1,0 +1,50 @@
+name: Release
+
+# Publishes @pampalo/shared, @pampalo/sdk, @pampalo/cli to npm via
+# Changesets. On push to main: if changesets are present, opens/updates a
+# "Version Packages" PR; when that PR merges, this run publishes the bumped
+# packages with npm provenance (Built and signed on GitHub Actions).
+#
+# Auth is tokenless OIDC "trusted publishing" — no NPM_TOKEN secret. It
+# requires, one-time on npmjs.com after each package's first publish:
+#   <package> → Settings → Trusted Publisher → GitHub Actions
+#   repo: pampalodotcom/pampalo · workflow: release.yml
+
+on:
+  push:
+    branches: [main]
+
+concurrency: release-${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write # Changesets opens the version PR / tags
+  pull-requests: write
+  id-token: write # OIDC: provenance + trusted publishing
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+
+      # Trusted publishing + provenance need npm >= 11.5.1; Node 22 ships older.
+      - run: npm install -g npm@latest
+
+      - run: pnpm install --frozen-lockfile
+
+      # Build the publishable packages (prepack also builds, but fail fast here).
+      - run: pnpm --filter @pampalo/shared --filter @pampalo/sdk --filter @pampalo/cli build
+
+      - uses: changesets/action@v1
+        with:
+          publish: pnpm changeset publish
+        env:
+          NPM_CONFIG_PROVENANCE: "true"

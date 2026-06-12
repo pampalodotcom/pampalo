@@ -9,7 +9,10 @@ import {
   networkSlugForChainId,
   type NetworkSlug,
 } from "./NetworkChip";
-import { PendingShieldsList } from "./PendingShieldsList";
+import {
+  PendingShieldsList,
+  type CancelRequest,
+} from "./PendingShieldsList";
 import { SplitBar } from "./SplitBar";
 import { SplitSlider } from "./SplitSlider";
 import { SunIcon, MoonIcon } from "./SunMoonIcons";
@@ -109,6 +112,8 @@ export function AssetRow({
   executableNotes,
   /** Per-note finalise handler. */
   onFinalise,
+  /** Cancel a still-queued pending shield (refunds the shielder). */
+  onCancel,
   className,
 }: {
   asset: AssetRowData;
@@ -119,6 +124,7 @@ export function AssetRow({
   queuedNotes?: PendingNote[];
   executableNotes?: PendingNote[];
   onFinalise?: (note: PendingNote) => void;
+  onCancel?: (req: CancelRequest) => void;
   className?: string;
 }) {
   const dp = asset.roundTo ?? DEFAULT_ROUND_TO[asset.symbol] ?? 4;
@@ -433,6 +439,8 @@ export function AssetRow({
           queuedNotes={queuedNotes ?? []}
           executableNotes={executableNotes ?? []}
           onFinalise={onFinalise}
+          onCancel={onCancel}
+          priceUsd={asset.priceUsd}
           roundTo={asset.roundTo}
         />
       </div>

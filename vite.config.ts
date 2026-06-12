@@ -92,8 +92,18 @@ function convexHttpProxy(target: string | undefined): Plugin {
               res.end();
             }
           } catch (err) {
+            // A transient upstream failure (Convex site unreachable, VPN
+            // blip, dropped connection) must NOT propagate into Vite's
+            // error overlay and blow up the whole dev page. Log it and
+            // return a clean 502 the client (Convex HTTP) can retry.
             console.error("[pampalo] /_convex proxy error", err);
-            next(err);
+            if (!res.headersSent) {
+              res.statusCode = 502;
+              res.setHeader("content-type", "text/plain");
+              res.end("convex upstream unreachable");
+            } else {
+              res.end();
+            }
           }
         },
       );

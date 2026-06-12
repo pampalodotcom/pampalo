@@ -11,7 +11,17 @@ export default defineConfig({
     { text: "Introduction", link: "/" },
     { text: "Account", link: "/account" },
     { text: "Private Money", link: "/private-money" },
-    { text: "Building on Pampalo", link: "/building" },
+    { text: "How It Works", link: "/how-it-works" },
+    {
+      text: "Building on Pampalo",
+      collapsed: false,
+      items: [
+        { text: "Overview", link: "/building" },
+        { text: "SDK", link: "/building/sdk" },
+        { text: "CLI", link: "/building/cli" },
+      ],
+    },
+    { text: "Compliance", link: "/compliance" },
     { text: "Pampalo the Company", link: "/pampalo-company" },
   ],
   font: {

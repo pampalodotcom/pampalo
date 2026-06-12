@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRpcClient } from "@/lib/rpc";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
@@ -7,6 +8,11 @@ import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 import { AccountAvatar } from "@/components/pampalo/AccountAvatar";
 import { AssetRow, type AssetRowData } from "@/components/pampalo/AssetRow";
+import type { CancelRequest } from "@/components/pampalo/PendingShieldsList";
+import {
+  CancelShieldSheet,
+  type CancelShieldPayload,
+} from "@/components/pampalo/shield/CancelShieldSheet";
 import { warmShield } from "@/lib/shield-prep";
 import {
   usePrivateBalances,
@@ -220,6 +226,44 @@ function Dashboard({
     useState<ShieldConfirmPayload | null>(null);
   const [unshieldPayload, setUnshieldPayload] =
     useState<UnshieldConfirmPayload | null>(null);
+  const [cancelPayload, setCancelPayload] =
+    useState<CancelShieldPayload | null>(null);
+
+  // Resolve a queued pending shield's on-chain pendingId (from the user's
+  // shield-queue rows) + its deployment router, then open the cancel sheet.
+  const myShields = useQuery(
+    api.shieldQueue.store.byShielder,
+    addresses.evm ? { shielder: addresses.evm } : "skip",
+  );
+  const deploymentRows = useQuery(
+    api.shieldQueue.store.enabledDeployments,
+    {},
+  );
+  const pendingIdByLeaf = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of myShields ?? []) {
+      if (r.state === "queued") m.set(r.leafCommitment.toLowerCase(), r.pendingId);
+    }
+    return m;
+  }, [myShields]);
+  const handleCancelPending = (req: CancelRequest) => {
+    const pendingId = pendingIdByLeaf.get(req.leafCommitment.toLowerCase());
+    const dep = deploymentRows?.find((d) => d.chainId === req.chainId);
+    if (!pendingId || !dep) {
+      toast.error("Couldn't resolve this shield yet — tap Sync and try again.");
+      return;
+    }
+    setCancelPayload({
+      pendingId,
+      chainId: req.chainId,
+      pampaloAddress: dep.pampaloAddress,
+      amount: req.amount,
+      symbol: req.symbol,
+      decimals: req.decimals,
+      leafCommitment: req.leafCommitment,
+      priceUsd: req.priceUsd ?? null,
+    });
+  };
 
   // Per-(chain, asset) "tx confirming on-chain" set. While a row is
   // in here, AssetRow disables its slider + action buttons and shows
@@ -259,11 +303,31 @@ function Dashboard({
   // safety timeout. The rpc client comes from the same provider the
   // confirm sheets use, so the polls reuse Alchemy connection state.
   const rpcClient = useRpcClient();
+  const queryClient = useQueryClient();
+  // The moment a move is mined, force the public-balance query for that
+  // (chain, asset) to refetch. Without this the row unlocks (pendingMoves
+  // cleared) but `usePublicBalance` keeps showing the pre-move balance
+  // until its 30s `refetchInterval` fires — so the slider snaps back to
+  // the OLD split and the idle hint reappears, reading as "nothing
+  // happened". The private side already updates optimistically via IDB;
+  // this closes the gap on the public side. A short delayed re-invalidate
+  // absorbs Alchemy replica lag (the receipt can land a beat before the
+  // balance endpoint reflects it).
+  const refreshPublicBalance = useCallback(
+    (cId: number, assetLower: string) => {
+      const queryKey = ["public-balance", cId, assetLower];
+      void queryClient.invalidateQueries({ queryKey });
+      window.setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey });
+      }, 2_500);
+    },
+    [queryClient],
+  );
   useEffect(() => {
     if (pendingMoves.size === 0) return;
     const intervals: number[] = [];
     for (const [key, move] of pendingMoves) {
-      const [chainStr] = key.split(":");
+      const [chainStr, assetLower] = key.split(":");
       const cId = Number(chainStr);
       const tick = async () => {
         if (Date.now() - move.startedAt > 90_000) {
@@ -272,6 +336,9 @@ function Dashboard({
             next.delete(key);
             return next;
           });
+          // Anomalous: the tx never confirmed in 90s. Refresh anyway so a
+          // late-landing tx isn't stuck behind the 30s interval.
+          refreshPublicBalance(cId, assetLower);
           return;
         }
         try {
@@ -282,6 +349,7 @@ function Dashboard({
               next.delete(key);
               return next;
             });
+            refreshPublicBalance(cId, assetLower);
           }
         } catch {
           // transient — keep polling
@@ -298,7 +366,7 @@ function Dashboard({
     return () => {
       for (const h of intervals) window.clearInterval(h);
     };
-  }, [pendingMoves, rpcClient]);
+  }, [pendingMoves, rpcClient, refreshPublicBalance]);
 
   // IDB-derived private balances + pending shields. The hook
   // re-subscribes via useSyncExternalStore so any optimistic write or
@@ -489,6 +557,7 @@ function Dashboard({
                     shieldableKeys={shieldableKeys}
                     onShield={setShieldPayload}
                     onUnshield={setUnshieldPayload}
+                    onCancelPending={handleCancelPending}
                     privateBuckets={privateBalances.perAsset}
                     pendingMoves={pendingMoves}
                   />
@@ -520,6 +589,14 @@ function Dashboard({
         onBroadcasted={(p) =>
           registerPendingMove("unshield", p.chainId, p.assetAddress, p.txHash)
         }
+      />
+      <CancelShieldSheet
+        open={cancelPayload !== null}
+        onOpenChange={(next) => {
+          if (!next) setCancelPayload(null);
+        }}
+        payload={cancelPayload}
+        evmAddress={addresses.evm}
       />
     </>
   );
@@ -804,6 +881,7 @@ function AssetGroupRow({
   shieldableKeys,
   onShield,
   onUnshield,
+  onCancelPending,
   privateBuckets,
   pendingMoves,
 }: {
@@ -814,6 +892,7 @@ function AssetGroupRow({
   shieldableKeys: Set<string>;
   onShield: (payload: ShieldConfirmPayload) => void;
   onUnshield: (payload: UnshieldConfirmPayload) => void;
+  onCancelPending: (req: CancelRequest) => void;
   privateBuckets: AssetBucket[];
   /** Wallet-level "tx confirming on-chain" set, keyed by
    *  `${chainId}:${assetAddress.toLowerCase()}`. */
@@ -952,6 +1031,7 @@ function AssetGroupRow({
       confirmingKind={confirmingMove?.kind ?? null}
       queuedNotes={queuedNotes}
       executableNotes={executableNotes}
+      onCancel={onCancelPending}
       onFinalise={(note) => {
         // Finalise CTA wiring lands in a follow-up — for now we
         // just point the user at /sentry where Sponsor finalise

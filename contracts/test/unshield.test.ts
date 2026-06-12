@@ -205,6 +205,21 @@ describe("unshield", () => {
 
     const usdcBalanceAfter = await usdcDeployment.balanceOf(Signers[9].address);
     expect(usdcBalanceAfter).to.equal(usdcBalanceBefore + bobAmount);
+
+    // unshieldBudget() reflects the charge against the unshield bucket
+    // (msg.sender = Signers[0]). 2 USDC * 100 cents = 200 cents used,
+    // against the $200 default cap. Proves the view reads unshieldUsage,
+    // not shieldUsage.
+    const [uCap, uUsed, uRemaining] = await pampalo.unshieldBudget(
+      Signers[0].address,
+    );
+    expect(uCap).to.equal(20_000n);
+    expect(uUsed).to.equal(200n);
+    expect(uRemaining).to.equal(20_000n - 200n);
+    // The shield bucket for the same address is independent — the shield
+    // earlier in this flow charged it separately, so it is NOT 200.
+    const [, sUsed] = await pampalo.shieldBudget(Signers[0].address);
+    expect(sUsed).to.not.equal(uUsed);
   });
 
   it("unshields native ETH to an external address", async () => {
