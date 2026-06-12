@@ -1,0 +1,64 @@
+# Sentry
+
+**Sentry** is Pampalo's transparency dashboard: a **permissionless, public
+view** of what's happening on the protocol, open to anyone at `/sentry` — no
+account, no login required. It's the watchtower over every Pampalo deployment.
+
+Everything Sentry shows is **public on-chain material**. It never reveals
+private data: the amounts and recipients of private transfers stay hidden, in
+line with [how the protocol works](/how-it-works). Sentry surfaces what the
+chain already makes public, in one place, for everyone.
+
+## What you can watch
+
+Sentry aggregates live activity across **every Pampalo deployment** (each
+chain), filterable by network:
+
+- **Shield queue** — every pending shield currently in its holding period: the
+  shielder's public address, the asset and amount, and when the
+  [Shield wait](/compliance) expires. This is the surface where deposits are
+  watched before they're accepted into the pool.
+- **Pool activity** — recent private transfers and withdrawals
+  (note→note transfers and unshields). You can see that a private spend
+  happened and which deployment it touched; the **amounts and recipients stay
+  encrypted on-chain**.
+- **Gas sponsors** — the relayer accounts that broadcast private transfers and
+  withdrawals on users' behalf, so a user's own address never lands on the
+  event. All public EOAs.
+- **Compliance signers** — the accounts that auto-contest deposits flagged
+  against a blocklist, and their most recent contest.
+
+## Permissionless by design
+
+Anyone can **monitor**. Privileged **actions** are role-gated, but the roles
+don't gate visibility — they only add buttons for the people who hold them.
+Sign in with your passkey and Sentry surfaces what you're allowed to do on each
+deployment:
+
+- **Anyone — sponsor a finalise.** Once a shield's [Shield wait](/compliance)
+  elapses, calling `executeShield` is permissionless: any signed-in user can
+  pay the gas to push a pending shield into the pool.
+- **Vigilant Citizen — contest.** Holders of `VIGILANT_CITIZEN_ROLE` can
+  contest a pending shield before it executes, which cancels it and
+  [refunds the shielder in full](/compliance). This is the post-hoc safety
+  valve during the holding period.
+- **Booth Operator — fast-track.** Holders of `BOOTH_OPERATOR_ROLE` can waive
+  the Shield wait for a vetted user, so deposits land immediately — useful for
+  onboarding people quickly at an event.
+
+A guest sees the same dashboard with the action buttons replaced by a prompt to
+sign in. The point is that **watching the protocol is open to all**: the queue,
+the activity, the sponsors, and the compliance actors are visible to anyone who
+opens the page.
+
+## Why it exists
+
+Pampalo's privacy guarantee is about hiding _your_ data, not about hiding the
+_protocol_. A private system still needs to be auditable: anyone should be able
+to see that deposits are being watched, that the holding period is honoured,
+that contests happen, and which actors hold which powers. Sentry makes that
+legible — a single, permissionless window onto the protocol's public events.
+
+See [Compliance](/compliance) for the contest and holding-period rules Sentry
+acts on, and [How It Works](/how-it-works) for the shield-queue state machine
+behind the dashboard.
