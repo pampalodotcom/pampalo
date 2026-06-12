@@ -40,6 +40,7 @@ CIRCUITS=(
   "transfer:TransferVerifier"
   "transfer_external:TransferExternalVerifier"
   "withdraw:WithdrawVerifier"
+  "redeem:RedeemVerifier"
 )
 
 build_one() {

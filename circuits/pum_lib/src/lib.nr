@@ -49,3 +49,30 @@ pub fn reconstruct_leaf(
 ) -> Field {
     poseidon2::Poseidon2::hash([asset_id, asset_amount, owner, secret], 4)
 }
+
+// Domain tag for the redeem (proof-of-payment) nullifier, kept distinct
+// from the spend nullifier (`compute_nullifier`). A note paid to a
+// merchant is later spent by that merchant via a normal transfer/unshield,
+// which burns the SPEND nullifier. The redeem path proves the same note
+// merely *exists* and burns the REDEEM nullifier. Sharing one value would
+// let either action grief the other (whoever acts first locks out the
+// second), so the two live in separate domains.
+//
+// Value = keccak256("PAMPALO_REDEEM_V1") reduced mod the BN254 scalar
+// field. Mirrored in shared/constants/zk.ts (REDEEM_DOMAIN) -- the two
+// MUST stay in lockstep.
+pub global REDEEM_DOMAIN: Field =
+    0x1fbbd0b6d86010b7561c935f8b2fa24f7c0bcbd567023d2507130815387f017f;
+
+pub fn compute_redeem_nullifier(
+    leaf_index: Field,
+    owner: Field,
+    secret: Field,
+    asset_id: Field,
+    asset_amount: Field,
+) -> Field {
+    poseidon2::Poseidon2::hash(
+        [REDEEM_DOMAIN, leaf_index, owner, secret, asset_id, asset_amount],
+        6,
+    )
+}
