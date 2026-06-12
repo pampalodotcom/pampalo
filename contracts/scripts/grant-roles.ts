@@ -90,7 +90,9 @@ async function main() {
       );
     }
   } else {
-    console.log("  RELAYER_MNEMONIC not set — skipped compliance-signer grant.");
+    console.log(
+      "  RELAYER_MNEMONIC not set — skipped compliance-signer grant.",
+    );
   }
 
   console.log("\n✓ Role grants complete.");

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import { internalMutation, internalQuery, query } from "../_generated/server";
 import { lowerAddress } from "../lib/normalize";
+import { resolveMinBalanceWei } from "../lib/relayerFloor";
 import { sessionByTokenOrNull } from "../auth/ceremony";
 
 // Default-runtime queries + mutations for the gas-sponsoring relayer pool.
@@ -57,7 +58,9 @@ export const _relayerDeploymentForChain = internalQuery({
       alchemySubdomain: net.alchemySubdomain,
       chainId: net.chainId,
       sponsoringTxs: dep.sponsoringTxs ?? false,
-      minRelayerBalanceWei: dep.minRelayerBalanceWei ?? "0",
+      // Resolved to wei here so the acquire-lock comparison (and the relay
+      // action that passes this through) sees the live USD-denominated floor.
+      minRelayerBalanceWei: await resolveMinBalanceWei(ctx, dep),
     };
   },
 });
@@ -288,7 +291,7 @@ export const listRelayerAccounts = query({
       if (!d.enabled || d.sponsoringTxs !== true) continue;
       const net = await ctx.db.get(d.networkId);
       if (!net) continue;
-      minByChain.set(net.chainId, d.minRelayerBalanceWei ?? "0");
+      minByChain.set(net.chainId, await resolveMinBalanceWei(ctx, d));
     }
 
     const rows = await ctx.db.query("relayerAccounts").collect();

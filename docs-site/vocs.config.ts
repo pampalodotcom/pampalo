@@ -24,6 +24,12 @@ export default defineConfig({
     { text: "Compliance", link: "/compliance" },
     { text: "Pampalo the Company", link: "/pampalo-company" },
   ],
+  socials: [
+    {
+      icon: "github",
+      link: "https://github.com/pampalodotcom/pampalo",
+    },
+  ],
   font: {
     default: { google: "Inter" },
     mono: { google: "JetBrains Mono" },

@@ -202,36 +202,142 @@ export function AnatomyOfANote() {
 
 /** Account · one recovery phrase → three identities.
  *  The identity-derivation half of AnatomyOfANote, extracted as a
- *  standalone figure for the /account page (no note context). */
+ *  standalone figure for the /account page: each identity is a card with
+ *  a checklist of what it does. */
 export function AccountIdentities() {
+  const RECOV_X = 28;
+  const LEFT_W = 160;
+  const CARD_X = 250;
+  const CARD_W = 300;
+  const CARD_H = 108;
+  const GAP = 22;
+  const TOP = 44;
+
+  const cards = [
+    {
+      priv: true,
+      title: "Poseidon identifier",
+      items: [
+        "Owns your private notes",
+        "Proven in zero-knowledge",
+        "Unlinkable to your EVM address",
+      ],
+    },
+    {
+      priv: false,
+      title: "EVM address",
+      items: [
+        "Pays gas, holds public balances",
+        "Your cleartext on-chain handle",
+        "The only identity seen in the open",
+      ],
+    },
+    {
+      priv: false,
+      title: "Envelope key",
+      items: [
+        "Receives notes others encrypt to you",
+        "A secp256k1 public key",
+        "Only you hold the key to decrypt",
+      ],
+    },
+  ];
+
+  const cardY = (i: number): number => TOP + i * (CARD_H + GAP);
+  const cardMid = (i: number): number => cardY(i) + CARD_H / 2;
+  const blockH = cards.length * CARD_H + (cards.length - 1) * GAP;
+  const recovMidY = TOP + blockH / 2;
+  const recovH = 64;
+  const VB_W = CARD_X + CARD_W + 10;
+  const VB_H = TOP + blockH + 16;
+
   return (
     <div className="pampdia">
-      <svg viewBox="0 0 540 196" role="img" aria-label="One recovery phrase deterministically derives three identities: the Poseidon identifier (the unlinkable note owner), the public EVM address used for gas, and the secp256k1 Envelope key used to encrypt notes.">
-        <text className="t-tick" x="24" y="22" fontSize="10">One recovery phrase → three identities</text>
+      <svg
+        viewBox={`0 0 ${VB_W} ${VB_H}`}
+        role="img"
+        aria-label="One recovery phrase deterministically derives three identities. The Poseidon identifier owns your private notes, is proven in zero-knowledge, and is unlinkable to your EVM address. The EVM address pays gas, holds public balances, and is your only cleartext on-chain handle. The Envelope key receives notes others encrypt to you using a secp256k1 public key only you can decrypt."
+      >
+        <text className="t-tick" x={RECOV_X} y="22" fontSize="10">
+          One recovery phrase → three identities
+        </text>
 
-        <rect className="node-2" x="24" y="74" width="148" height="64" rx="12" />
-        <text className="t-mono" x="98" y="102" fontSize="11" textAnchor="middle">recovery</text>
-        <text className="t-mono" x="98" y="120" fontSize="11" textAnchor="middle">phrase</text>
+        <rect
+          className="node-2"
+          x={RECOV_X}
+          y={recovMidY - recovH / 2}
+          width={LEFT_W}
+          height={recovH}
+          rx="12"
+        />
+        <text className="t-mono" x={RECOV_X + LEFT_W / 2} y={recovMidY - 4} fontSize="11" textAnchor="middle">
+          recovery
+        </text>
+        <text className="t-mono" x={RECOV_X + LEFT_W / 2} y={recovMidY + 14} fontSize="11" textAnchor="middle">
+          phrase
+        </text>
 
-        <path className="flow-priv" d="M172,98 C236,98 236,58 300,58" markerEnd="url(#pd-arrow-priv)" />
-        <path className="flow" d="M172,106 H300" markerEnd="url(#pd-arrow)" />
-        <path className="flow" d="M172,114 C236,114 236,160 300,160" markerEnd="url(#pd-arrow)" />
+        {cards.map((c, i) => {
+          const x1 = RECOV_X + LEFT_W;
+          const y1 = recovMidY + (i - 1) * 8;
+          const y2 = cardMid(i);
+          const mid = (x1 + CARD_X) / 2;
+          const d =
+            y1 === y2
+              ? `M${x1},${y1} H${CARD_X}`
+              : `M${x1},${y1} C${mid},${y1} ${mid},${y2} ${CARD_X},${y2}`;
+          return (
+            <path
+              key={`flow-${i}`}
+              className={c.priv ? "flow-priv" : "flow"}
+              d={d}
+              markerEnd={`url(#pd-arrow${c.priv ? "-priv" : ""})`}
+            />
+          );
+        })}
 
-        <g>
-          <rect className="node-priv" x="300" y="40" width="216" height="36" rx="9" />
-          <text className="t-mono t-priv" x="318" y="62" fontSize="11.5" fontWeight="600">Poseidon identifier</text>
-          <text className="t-tick t-priv" x="500" y="62" fontSize="8" textAnchor="end">= note owner</text>
-        </g>
-        <g>
-          <rect className="node" x="300" y="88" width="216" height="36" rx="9" />
-          <text className="t-mono" x="318" y="110" fontSize="11.5">EVM address</text>
-          <text className="t-tick t-faint" x="500" y="110" fontSize="8" textAnchor="end">public · gas</text>
-        </g>
-        <g>
-          <rect className="node" x="300" y="142" width="216" height="36" rx="9" />
-          <text className="t-mono" x="318" y="164" fontSize="11.5">Envelope key</text>
-          <text className="t-tick t-faint" x="500" y="164" fontSize="8" textAnchor="end">secp256k1</text>
-        </g>
+        {cards.map((c, i) => {
+          const y = cardY(i);
+          const px = CARD_X + 18;
+          return (
+            <g key={`card-${i}`}>
+              <rect
+                className={c.priv ? "node-priv" : "node"}
+                x={CARD_X}
+                y={y}
+                width={CARD_W}
+                height={CARD_H}
+                rx="12"
+              />
+              <text
+                className={c.priv ? "t-mono t-priv" : "t-mono"}
+                x={px}
+                y={y + 27}
+                fontSize="13"
+                fontWeight={c.priv ? 600 : 400}
+              >
+                {c.title}
+              </text>
+              <line className="hair" x1={px} y1={y + 40} x2={CARD_X + CARD_W - 18} y2={y + 40} />
+              {c.items.map((it, j) => {
+                const iy = y + 60 + j * 18;
+                return (
+                  <g key={`item-${i}-${j}`}>
+                    <path
+                      className="flow-priv"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d={`M${px},${iy - 3.5} l3,3.5 l6,-7`}
+                    />
+                    <text className="t-sub" x={px + 16} y={iy} fontSize="10.5">
+                      {it}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+          );
+        })}
       </svg>
     </div>
   );
@@ -516,7 +622,7 @@ export function SealedProof() {
 export function SendingASecret() {
   return (
     <div className="pampdia">
-      <svg viewBox="0 0 960 386" role="img" aria-label="The note creator encrypts the secret to the recipient's Envelope key. The ciphertext rides on-chain with the leaf; the server and relayer see only ciphertext. The recipient's wallet scans events, decrypts with its Envelope private key, and files the note locally. An inset shows alice.pampalo.eth resolving to an Envelope key and Poseidon identifier.">
+      <svg viewBox="0 0 960 232" role="img" aria-label="The note creator encrypts the secret to the recipient's Envelope key. The ciphertext rides on-chain with the leaf; the server and relayer see only ciphertext. The recipient's wallet scans events, decrypts with its Envelope private key, and files the note locally.">
         <text className="t-tick t-faint" x="24" y="34" fontSize="9">Sender · creator</text>
         <text className="t-tick t-faint" x="400" y="34" fontSize="9">On-chain · public</text>
         <text className="t-tick t-faint" x="588" y="34" fontSize="9">Recipient · wallet</text>
@@ -569,20 +675,6 @@ export function SendingASecret() {
         <rect className="node-priv" x="792" y="86" width="144" height="64" rx="12" />
         <text className="t-lab" x="864" y="114" fontSize="11" textAnchor="middle">file note locally</text>
         <text className="t-tick t-priv" x="864" y="132" fontSize="8.5" textAnchor="middle">IndexedDB</text>
-
-        <line className="hair dash" x1="24" y1="244" x2="936" y2="244" />
-        <text className="t-tick" x="24" y="268" fontSize="10">Human-readable handle</text>
-        <rect className="node-2" x="24" y="284" width="190" height="44" rx="12" />
-        <text className="t-mono" x="119" y="311" fontSize="12" textAnchor="middle">alice.pampalo.eth</text>
-        <path className="flow" d="M214,306 H262" markerEnd="url(#pd-arrow)" />
-        <text className="t-tick t-faint" x="238" y="298" fontSize="7.5" textAnchor="middle">resolves</text>
-        <rect className="node-priv" x="266" y="286" width="186" height="40" rx="10" />
-        <text className="t-mono t-priv" x="280" y="310" fontSize="11">Envelope key</text>
-        <rect className="node-priv" x="466" y="286" width="220" height="40" rx="10" />
-        <text className="t-mono t-priv" x="480" y="310" fontSize="11">Poseidon identifier</text>
-        <rect x="700" y="286" width="200" height="40" rx="10" fill="none" stroke="var(--d-line)" strokeWidth="1.2" strokeDasharray="4 3" />
-        <text className="t-mono t-faint" x="714" y="304" fontSize="10">EVM address</text>
-        <text className="t-tick t-faint" x="714" y="318" fontSize="7.5">deliberately not published</text>
       </svg>
     </div>
   );

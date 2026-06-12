@@ -1,6 +1,11 @@
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
-import { internalMutation, type MutationCtx } from "../_generated/server";
+import { internal } from "../_generated/api";
+import {
+  internalAction,
+  internalMutation,
+  type MutationCtx,
+} from "../_generated/server";
 import { lowerAddress } from "../lib/normalize";
 import { ETH_ADDRESS } from "../catalog/seed";
 
@@ -154,6 +159,21 @@ type SeedDeployment = {
   shieldWaitSeconds: number;
   defaultMonthlyCapUsdCents: number;
   confirmationDepth: number;
+  // Block the Pampalo contract was deployed at — the indexer's cold-start
+  // cursor. REQUIRED for mainnet: without it a fresh/placeholder row starts
+  // at 0 and the indexer scans the chain from genesis. Mirrors
+  // sdk/src/deployments.ts `fromBlock`.
+  fromBlock?: number;
+  // Whether the relayer pool sponsors transfer/unshield on this chain
+  // (ADR 0015). Defaults to Base Sepolia only when omitted; set explicitly
+  // to turn another chain's sponsoring on at seed time. Preserved across
+  // re-seeds (an operator's later manual flip is never clobbered).
+  sponsoringTxs?: boolean;
+  // Per-account funding floor as a fixed USD value (cents). Preferred over
+  // the static wei floor — resolved to wei at read-time via the live
+  // eth/usd price, so it stays a fixed dollar amount as ETH moves. Omit on
+  // testnet (valueless gas) to use the static wei fallback.
+  minRelayerBalanceUsdCents?: number;
   assets: Array<{
     tokenAddress: string;
     oracle: string;
@@ -183,6 +203,7 @@ const DEPLOYMENTS: SeedDeployment[] = [
     defaultMonthlyCapUsdCents: 200_00, // $200.00 (display cache; chain enforces)
     // Base Sepolia is fast-finality; 5 blocks ≈ 10s of trail.
     confirmationDepth: 5,
+    fromBlock: 42746800, // v2 deploy block (mirrors sdk/src/deployments.ts)
     assets: [
       {
         // Native ETH sentinel — matches the Pampalo contract's ETH_ADDRESS.
@@ -194,6 +215,47 @@ const DEPLOYMENTS: SeedDeployment[] = [
         // USDC mock — respins with every deploy. Update alongside the
         // address in catalog/seed.ts TOKENS.
         tokenAddress: "0x445b24Cf4Ac9AC20ecc417Ac41160Fdc8088520d",
+        oracle: "0xF1bCFbb62F3337295C2f33CCe0662574F4687b2A",
+        assetDecimals: 6,
+      },
+    ],
+  },
+  {
+    // Base mainnet (8453). Same contract addresses as Base Sepolia
+    // (deployed from the index-1 nonce-0 deployer for cross-chain parity —
+    // DEPLOYMENT.md ledger). Verbatim from contracts/deployments/8453.json.
+    chainId: 8453,
+    pampalo: "0x86cC802B2d5a9EF41194E68ed69EeCC37AdAAf59",
+    poseidon2Huff: "0x55edf41867bA8F18f68c2E42614465f86C35AE4E",
+    verifiers: {
+      deposit: "0x04D2D2B7D4345714D0451D4446E5C2dca049Ce33",
+      transfer: "0xEDE22DBb1C48FAb78079924e60038b0E74c51357",
+      withdraw: "0x09e3f6f4A67F5C8818c634137AeA181acCa392A3",
+      transferExternal: "0x98f54Fb3fB1BA577344aFfd9222B5100aCB35e1D",
+    },
+    shieldWaitSeconds: 3600,
+    defaultMonthlyCapUsdCents: 200_00, // $200.00 (display cache; chain enforces)
+    // Base mainnet has a single sequencer; 5 blocks (~10s) of trail is
+    // ample. Bump if you ever want more reorg headroom for real value.
+    confirmationDepth: 5,
+    fromBlock: 47237162, // deploy block (mirrors sdk/src/deployments.ts)
+    // Turn relayer sponsoring on for mainnet at seed time.
+    sponsoringTxs: true,
+    // $10 of gas per account — resolved to wei via the live eth/usd price.
+    minRelayerBalanceUsdCents: 10_00,
+    assets: [
+      {
+        // Native ETH sentinel.
+        tokenAddress: ETH_ADDRESS,
+        oracle: "0x84A490A5f77C202aa89687c9105f8cf0e7485bE9",
+        assetDecimals: 18,
+      },
+      {
+        // Real Circle-issued USDC on Base (NOT the mock). Must be
+        // registered on the Pampalo contract on-chain first —
+        // scripts/add-base-usdc.ts. Oracle wraps Base's Chainlink
+        // USDC/USD feed, so it prices real USDC correctly.
+        tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
         oracle: "0xF1bCFbb62F3337295C2f33CCe0662574F4687b2A",
         assetDecimals: 6,
       },
@@ -324,9 +386,15 @@ export const seedAll = internalMutation({
   ): Promise<{
     deployments: number;
     assets: number;
+    chains: Array<{ chainId: number; action: string }>;
+    missingNetworks: number[];
   }> => {
     let assetCount = 0;
     const deploymentIds: Array<Id<"pampaloDeployments">> = [];
+    // Per-chain outcome so "did 8453 land?" is answerable from the result,
+    // and missing-network skips are surfaced instead of aborting the run.
+    const chains: Array<{ chainId: number; action: string }> = [];
+    const missingNetworks: number[] = [];
 
     for (const d of DEPLOYMENTS) {
       const network = await ctx.db
@@ -334,9 +402,15 @@ export const seedAll = internalMutation({
         .withIndex("by_chainId", (q) => q.eq("chainId", d.chainId))
         .unique();
       if (!network) {
-        throw new Error(
-          `No supportedNetworks row for chainId ${d.chainId}. Run catalog/seed:seedAll first.`,
+        // Skip this chain rather than throwing half-done — the earlier
+        // chains in the loop have already been upserted, and aborting here
+        // would leave the operator guessing what landed. Report it instead.
+        console.warn(
+          `[seed] no supportedNetworks row for chainId ${d.chainId} — ` +
+            `skipped. Run catalog/seed:seedAll first, then re-run.`,
         );
+        missingNetworks.push(d.chainId);
+        continue;
       }
 
       const existing = await ctx.db
@@ -349,8 +423,21 @@ export const seedAll = internalMutation({
       // and `pampaloLeaves` would COLLIDE on (epoch,leafIndex) with the new
       // tree (both restart at 0,0), corrupting the client's tree mirror and
       // breaking proofs. So wipe them + reset the cursor. See ADR 0017.
+      //
+      // Guard against `existing.pampalo === ""`: a forward-declared
+      // placeholder row being populated with real addresses for the first
+      // time is an *initial* seed, not a redeploy — there are no children
+      // to archive/wipe and no stale tree to reset.
       const addressChanged =
-        !!existing && existing.pampalo !== lowerAddress(d.pampalo);
+        !!existing &&
+        existing.pampalo !== "" &&
+        existing.pampalo !== lowerAddress(d.pampalo);
+
+      const action = !existing
+        ? "created"
+        : addressChanged
+          ? "redeployed"
+          : "updated";
 
       const deploymentPayload = {
         networkId: network._id,
@@ -365,17 +452,31 @@ export const seedAll = internalMutation({
         shieldWaitSeconds: d.shieldWaitSeconds,
         defaultMonthlyCapUsdCents: d.defaultMonthlyCapUsdCents,
         confirmationDepth: d.confirmationDepth,
-        // Reset the cursor on a redeploy (cold-start re-scan from head);
-        // otherwise preserve it. Fresh rows start at 0.
-        lastIndexedBlock: addressChanged ? 0 : (existing?.lastIndexedBlock ?? 0),
+        // Cursor handling:
+        //   • redeploy        → cold-start from the new deploy block
+        //   • live row (>0)    → preserve the indexer's progress
+        //   • placeholder/new  → start at the deploy block, NEVER 0 (else
+        //                        the indexer scans the chain from genesis)
+        lastIndexedBlock: addressChanged
+          ? (d.fromBlock ?? 0)
+          : existing && existing.lastIndexedBlock > 0
+            ? existing.lastIndexedBlock
+            : (d.fromBlock ?? 0),
         enabled: true,
-        // Preserve an operator's manual sponsoring flip on re-seed; default
-        // to on only for Base Sepolia. relayerAccounts rows are seeded
-        // separately via relayer/node:seedRelayerAccounts.
+        // Preserve an operator's manual sponsoring flip on re-seed; else
+        // take the seed entry's explicit value; else default to Base
+        // Sepolia only. relayerAccounts rows are seeded separately via
+        // relayer/node:seedRelayerAccounts.
         sponsoringTxs:
-          existing?.sponsoringTxs ?? d.chainId === BASE_SEPOLIA_CHAIN_ID,
+          existing?.sponsoringTxs ??
+          d.sponsoringTxs ??
+          d.chainId === BASE_SEPOLIA_CHAIN_ID,
         minRelayerBalanceWei:
           existing?.minRelayerBalanceWei ?? DEFAULT_MIN_RELAYER_BALANCE_WEI,
+        // Preserve a manual USD-floor edit; else take the seed entry's value
+        // (undefined on testnet → static wei fallback is used).
+        minRelayerBalanceUsdCents:
+          existing?.minRelayerBalanceUsdCents ?? d.minRelayerBalanceUsdCents,
       };
 
       let deploymentId: Id<"pampaloDeployments">;
@@ -411,6 +512,7 @@ export const seedAll = internalMutation({
         );
       }
       deploymentIds.push(deploymentId);
+      chains.push({ chainId: d.chainId, action });
 
       // Assets — one upsert per declared asset.
       for (const a of d.assets) {
@@ -449,6 +551,50 @@ export const seedAll = internalMutation({
       }
     }
 
-    return { deployments: deploymentIds.length, assets: assetCount };
+    return {
+      deployments: deploymentIds.length,
+      assets: assetCount,
+      chains,
+      missingNetworks,
+    };
+  },
+});
+
+// One command that seeds in the correct order — catalog (networks +
+// tokens + price feeds) THEN the Pampalo deployment catalogue — so the
+// "run catalog first or shieldQueue throws / skips" footgun disappears.
+// Run:  npx convex run shieldQueue/seed:seedEverything
+export const seedEverything = internalAction({
+  args: {},
+  // Explicit return type required: the handler references this module's own
+  // `seedAll` via `runMutation`, so inference would be circular.
+  handler: async (
+    ctx,
+  ): Promise<{
+    catalog: {
+      networks: number;
+      priceFeeds: number;
+      tokens: number;
+      tokensPruned: number;
+      uniswapPools: number;
+    };
+    deployments: {
+      deployments: number;
+      assets: number;
+      chains: Array<{ chainId: number; action: string }>;
+      missingNetworks: number[];
+    };
+  }> => {
+    const catalog = await ctx.runMutation(internal.catalog.seed.seedAll, {});
+    const deployments = await ctx.runMutation(
+      internal.shieldQueue.seed.seedAll,
+      {},
+    );
+    if (deployments.missingNetworks.length > 0) {
+      console.warn(
+        `[seed] deployments still missing networks: ${deployments.missingNetworks.join(", ")}`,
+      );
+    }
+    return { catalog, deployments };
   },
 });
