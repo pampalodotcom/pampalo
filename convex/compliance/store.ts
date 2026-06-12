@@ -282,6 +282,37 @@ export type ComplianceSignerView = {
   lastContestAt: number | null;
 };
 
+export type AddressFlag = {
+  source: string;
+  reason: string;
+  addedAt: number;
+};
+
+/**
+ * Public: compliance-blocklist status for an address, one row per
+ * (address, source). Empty array = not flagged. Backs the /sentry block
+ * explorer's "is this a known bad actor?" lookup. Exposing this is safe —
+ * the sources (OFAC, Chainalysis, Railgun) are themselves public sanctions
+ * lists, and a shield from a flagged address is auto-contested on-chain
+ * anyway (ADR 0016), so the flag is already observable.
+ */
+export const flagsForAddress = query({
+  args: { address: v.string() },
+  handler: async (ctx, args): Promise<AddressFlag[]> => {
+    const addr = lowerAddress(args.address);
+    const rows = await ctx.db
+      .query("blockedAddresses")
+      .withIndex("by_address", (q) => q.eq("address", addr))
+      .order("desc")
+      .collect();
+    return rows.map((r) => ({
+      source: r.source,
+      reason: r.reason,
+      addedAt: r.addedAt,
+    }));
+  },
+});
+
 /** Public read for the /sentry "Vigilant Citizen bot" panel. */
 export const getComplianceSigner = query({
   args: {},

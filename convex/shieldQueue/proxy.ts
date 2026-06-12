@@ -14,20 +14,23 @@ import { alchemyUrl, rpc, rpcBatch, type RpcRequest } from "../lib/alchemy";
 
 const PAMPALO_BUDGET_IFACE = new Interface([
   "function shieldBudget(address user) view returns (uint256 effectiveCapUsdCents, uint256 usdCentsUsedThisMonth, uint256 remainingUsdCents)",
+  "function unshieldBudget(address user) view returns (uint256 effectiveCapUsdCents, uint256 usdCentsUsedThisMonth, uint256 remainingUsdCents)",
 ]);
 
-export type ShieldBudgetResult = {
+export type BudgetResult = {
   effectiveCapUsdCents: string;
   usdCentsUsedThisMonth: string;
   remainingUsdCents: string;
 };
+// Retained alias — `shieldBudget`'s existing consumers import this name.
+export type ShieldBudgetResult = BudgetResult;
 
 export const shieldBudget = action({
   args: {
     chainId: v.number(),
     user: v.string(), // 0x… EVM address; any case accepted
   },
-  handler: async (ctx, args): Promise<ShieldBudgetResult | null> => {
+  handler: async (ctx, args): Promise<BudgetResult | null> => {
     const dep = await ctx.runQuery(
       internal.shieldQueue.store._deploymentForChain,
       { chainId: args.chainId },
@@ -45,6 +48,43 @@ export const shieldBudget = action({
 
     const decoded = PAMPALO_BUDGET_IFACE.decodeFunctionResult(
       "shieldBudget",
+      result,
+    ) as unknown as [bigint, bigint, bigint];
+    return {
+      effectiveCapUsdCents: decoded[0].toString(),
+      usdCentsUsedThisMonth: decoded[1].toString(),
+      remainingUsdCents: decoded[2].toString(),
+    };
+  },
+});
+
+// Unshield twin of {shieldBudget}. Same return triple, read from the
+// contract's independent `unshieldUsage` bucket — a user can have spent
+// their shield budget but still hold full unshield budget, and vice versa.
+// Backs the /account monthly-cap tracker (the "Unshielded this month" bar).
+export const unshieldBudget = action({
+  args: {
+    chainId: v.number(),
+    user: v.string(), // 0x… EVM address; any case accepted
+  },
+  handler: async (ctx, args): Promise<BudgetResult | null> => {
+    const dep = await ctx.runQuery(
+      internal.shieldQueue.store._deploymentForChain,
+      { chainId: args.chainId },
+    );
+    if (!dep) return null;
+
+    const data = PAMPALO_BUDGET_IFACE.encodeFunctionData("unshieldBudget", [
+      args.user,
+    ]);
+    const url = alchemyUrl(dep.alchemySubdomain);
+    const result = await rpc<string>(url, "eth_call", [
+      { to: dep.pampalo, data },
+      "latest",
+    ]);
+
+    const decoded = PAMPALO_BUDGET_IFACE.decodeFunctionResult(
+      "unshieldBudget",
       result,
     ) as unknown as [bigint, bigint, bigint];
     return {

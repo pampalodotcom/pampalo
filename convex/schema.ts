@@ -370,7 +370,11 @@ export default defineSchema({
     // Global all-deployments view by state — drives the /sentry default
     // "all networks · queued" query without scan-and-filter. See
     // SHIELD_FLOW.md §10.3.
-    .index("by_state", ["state"]),
+    .index("by_state", ["state"])
+    // /sentry block-explorer lookups: resolve a queue tx or a leaf
+    // commitment back to the shield that produced it.
+    .index("by_queuedTxHash", ["queuedTxHash"])
+    .index("by_leafCommitment", ["leafCommitment"]),
 
   // Mirror of `PoseidonMerkleTree.LeafInserted` events. One row per
   // executed shield / transfer / unshield output, captured by the
