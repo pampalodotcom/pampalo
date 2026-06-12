@@ -263,6 +263,50 @@ export default defineSchema({
     .index("by_chainId_and_index", ["chainId", "accountIndex"])
     .index("by_chainId_and_busy", ["chainId", "busy"]),
 
+  // ─── Compliance blocklist (ADR 0016) ────────────────────────────────────
+  // Normalized, source-keyed blocklist of EVM addresses Pampalo refuses
+  // entry to. Fed by ingest crons (OFAC SDN, manual ops adds) and checked
+  // by the scan cron against queued shielders; matches are auto-contested
+  // before the shield wait elapses, via the dedicated compliance signer.
+  // Per-address oracles (Chainalysis isSanctioned) are queried live at scan
+  // time rather than ingested here. All public material — sanctioned-address
+  // lists are public — and nothing joins to any Pampalo userId.
+  //
+  // One row per (address, source): the same address flagged by two sources
+  // is two rows, so removing one source doesn't unblock prematurely.
+  blockedAddresses: defineTable({
+    address: v.string(), // lowercased
+    source: v.string(), // "ofac" | "manual" | "chainalysis" | "railgun" | ...
+    reason: v.string(), // human-readable, surfaced in the ShieldContested event
+    addedAt: v.number(), // ms — first-seen
+  })
+    .index("by_address", ["address"])
+    .index("by_address_and_source", ["address", "source"])
+    .index("by_source", ["source"]),
+
+  // The dedicated compliance signer (index 5 off RELAYER_MNEMONIC, ADR
+  // 0016) surfaced for the /sentry "Vigilant Citizen bot" panel. One row
+  // per chain (balance is per-chain; the address is chain-independent).
+  // Seeded like relayerAccounts; all public material. Role status is read
+  // live on-chain in the UI, not stored here.
+  complianceSigner: defineTable({
+    chainId: v.number(),
+    address: v.string(), // lowercased, derived (index 5)
+    balanceWei: v.string(),
+    balanceUpdatedAt: v.number(),
+    lastContestTxHash: v.optional(v.string()),
+    lastContestAt: v.optional(v.number()), // ms
+  }).index("by_chainId", ["chainId"]),
+
+  // Block cursors for compliance ingest indexers (e.g. the Chainalysis
+  // sanctions oracle on Ethereum mainnet). `key` is "<source>:<chainId>";
+  // `lastIndexedBlock` advances monotonically so the day-1 backfill resumes
+  // across cron runs without rescanning. See ADR 0016.
+  complianceCursors: defineTable({
+    key: v.string(),
+    lastIndexedBlock: v.number(),
+  }).index("by_key", ["key"]),
+
   // Join table mirroring on-chain `Pampalo.supportedAssets(addr)`. Rows
   // are write-once + state flip; never deleted, so the Sentry audit view
   // can show "asset was disabled at …". See SHIELD_FLOW.md §2.2.
@@ -377,6 +421,27 @@ export default defineSchema({
     ])
     .index("by_deployment_and_tx", ["deploymentId", "txHash"])
     .index("by_deployment", ["deploymentId"]),
+
+  // Pool-activity feed for the /sentry explorer: one row per private-spend
+  // tx (transfer / unshield), classified by the tx's function selector and
+  // triggered by `NullifierUsed` (emitted by every spend). Shields live in
+  // shieldQueueEntries, not here. `from` is the public broadcaster — a
+  // relayer account when sponsored, else the user's own EOA (self-
+  // broadcast). `payloadPreview` is a shortened ECIES blob captured when the
+  // tx also emitted a NotePayload. All public on-chain material; the private
+  // interior (amounts, note owners) is never recorded. See TRANSFERS.md §9.5.
+  pampaloActivity: defineTable({
+    deploymentId: v.id("pampaloDeployments"),
+    txHash: v.string(), // lowercased
+    kind: v.union(v.literal("transfer"), v.literal("unshield")),
+    from: v.string(), // lowercased broadcaster EOA
+    blockNumber: v.number(),
+    blockTime: v.number(), // unix seconds
+    payloadPreview: v.optional(v.string()), // shortened ECIES hex, when seen
+  })
+    .index("by_deployment_and_tx", ["deploymentId", "txHash"])
+    .index("by_deployment_and_block", ["deploymentId", "blockNumber"])
+    .index("by_block", ["blockNumber"]),
 
   // Cached Uniswap pool addresses. Pool addresses are deterministic
   // (CREATE2 from factory + tokens [+ fee for v3]) and can always be

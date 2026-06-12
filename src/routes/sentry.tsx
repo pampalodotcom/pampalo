@@ -36,6 +36,8 @@ import {
   type ContestPayload,
 } from "@/components/pampalo/sentry/ContestSheet";
 import { GasSponsorsPanel } from "@/components/pampalo/sentry/GasSponsorsPanel";
+import { PoolActivityPanel } from "@/components/pampalo/sentry/PoolActivityPanel";
+import { ComplianceSignerPanel } from "@/components/pampalo/sentry/ComplianceSignerPanel";
 import { ThemeToggle } from "@/components/pampalo/ThemeToggle";
 import { useAccountModal } from "@/lib/account-modal";
 import { useAuth } from "@/lib/auth";
@@ -356,9 +358,11 @@ function Sentry() {
           )}
         </div>
 
-        {/* ─── Gas sponsors (relayer pool) — below the queue ───────── */}
+        {/* ─── Explorer: pool activity + gas sponsors — below the queue ─ */}
         <div className="mt-6">
+          <PoolActivityPanel filter={filter} />
           <GasSponsorsPanel filter={filter} />
+          <ComplianceSignerPanel filter={filter} />
         </div>
       </section>
 

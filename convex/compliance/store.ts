@@ -188,6 +188,133 @@ export const blockedStats = query({
   },
 });
 
+// ─── Compliance signer (the Vigilant Citizen bot EOA) ────────────────────
+
+/** Idempotent upsert of the index-5 signer row for a chain (seed-time).
+ *  Preserves last-contest provenance on an existing row. */
+export const upsertComplianceSigner = internalMutation({
+  args: { chainId: v.number(), address: v.string(), balanceWei: v.string() },
+  handler: async (ctx, args) => {
+    const address = lowerAddress(args.address);
+    const existing = await ctx.db
+      .query("complianceSigner")
+      .withIndex("by_chainId", (q) => q.eq("chainId", args.chainId))
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        address,
+        balanceWei: args.balanceWei,
+        balanceUpdatedAt: Date.now(),
+      });
+      return existing._id;
+    }
+    return await ctx.db.insert("complianceSigner", {
+      chainId: args.chainId,
+      address,
+      balanceWei: args.balanceWei,
+      balanceUpdatedAt: Date.now(),
+    });
+  },
+});
+
+export const setComplianceSignerBalance = internalMutation({
+  args: { chainId: v.number(), balanceWei: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("complianceSigner")
+      .withIndex("by_chainId", (q) => q.eq("chainId", args.chainId))
+      .unique();
+    if (!row) return;
+    await ctx.db.patch(row._id, {
+      balanceWei: args.balanceWei,
+      balanceUpdatedAt: Date.now(),
+    });
+  },
+});
+
+/** Stamp the latest contest tx so the panel can show "last contest …". */
+export const recordContest = internalMutation({
+  args: { chainId: v.number(), txHash: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("complianceSigner")
+      .withIndex("by_chainId", (q) => q.eq("chainId", args.chainId))
+      .unique();
+    if (!row) return;
+    await ctx.db.patch(row._id, {
+      lastContestTxHash: args.txHash.toLowerCase(),
+      lastContestAt: Date.now(),
+    });
+  },
+});
+
+/** Address + RPC subdomain for one chain's signer — used by the balance
+ *  reconcile (which knows the address but not the mnemonic). */
+export const _complianceSignerForChain = internalQuery({
+  args: { chainId: v.number() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ address: string; alchemySubdomain: string } | null> => {
+    const row = await ctx.db
+      .query("complianceSigner")
+      .withIndex("by_chainId", (q) => q.eq("chainId", args.chainId))
+      .unique();
+    if (!row) return null;
+    const net = await ctx.db
+      .query("supportedNetworks")
+      .withIndex("by_chainId", (q) => q.eq("chainId", args.chainId))
+      .unique();
+    if (!net) return null;
+    return { address: row.address, alchemySubdomain: net.alchemySubdomain };
+  },
+});
+
+export type ComplianceSignerView = {
+  chainId: number;
+  address: string;
+  balanceWei: string;
+  minBalanceWei: string;
+  lowBalance: boolean;
+  balanceUpdatedAt: number;
+  lastContestTxHash: string | null;
+  lastContestAt: number | null;
+};
+
+/** Public read for the /sentry "Vigilant Citizen bot" panel. */
+export const getComplianceSigner = query({
+  args: {},
+  handler: async (ctx): Promise<ComplianceSignerView[]> => {
+    const rows = await ctx.db.query("complianceSigner").collect();
+    // Gas floor per chain = the deployment's relayer floor (same kind of
+    // gas account); default "0" when absent.
+    const minByChain = new Map<number, string>();
+    for (const d of await ctx.db.query("pampaloDeployments").collect()) {
+      const net = await ctx.db.get(d.networkId);
+      if (net) minByChain.set(net.chainId, d.minRelayerBalanceWei ?? "0");
+    }
+    return rows.map((r) => {
+      const min = minByChain.get(r.chainId) ?? "0";
+      let lowBalance = false;
+      try {
+        lowBalance = BigInt(r.balanceWei) < BigInt(min);
+      } catch {
+        lowBalance = false;
+      }
+      return {
+        chainId: r.chainId,
+        address: r.address,
+        balanceWei: r.balanceWei,
+        minBalanceWei: min,
+        lowBalance,
+        balanceUpdatedAt: r.balanceUpdatedAt,
+        lastContestTxHash: r.lastContestTxHash ?? null,
+        lastContestAt: r.lastContestAt ?? null,
+      };
+    });
+  },
+});
+
 // ─── Shield-queue screening source ───────────────────────────────────────
 
 export type QueuedToScreen = {

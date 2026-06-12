@@ -1,5 +1,6 @@
 "use node";
 
+import { v } from "convex/values";
 import { HDNodeWallet, Interface } from "ethers";
 import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
@@ -186,6 +187,10 @@ export const scanAndContest = internalAction({
         const txHash = await rpc<string>(url, "eth_sendRawTransaction", [signed]);
         nonces.set(e.chainId, nonce + 1);
         contested += 1;
+        await ctx.runMutation(internal.compliance.store.recordContest, {
+          chainId: e.chainId,
+          txHash,
+        });
         console.warn(
           `[compliance] contested pendingId ${e.pendingId} on chain ${e.chainId} ` +
             `tx ${txHash} — ${reason}`,
@@ -215,5 +220,34 @@ export const complianceSignerInfo = internalAction({
   args: {},
   handler: async (): Promise<{ index: number; address: string }> => {
     return { index: COMPLIANCE_INDEX, address: complianceWallet().address };
+  },
+});
+
+/** Seed the compliance-signer row for a chain so the /sentry panel can show
+ *  it (address + live balance). Idempotent. Run with:
+ *    pnpm convex run compliance/node:seedComplianceSigner '{"chainId":84532}'
+ */
+export const seedComplianceSigner = internalAction({
+  args: { chainId: v.number() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ chainId: number; address: string }> => {
+    const dep = await ctx.runQuery(
+      internal.relayer.store._relayerDeploymentForChain,
+      { chainId: args.chainId },
+    );
+    if (!dep) throw new Error(`no enabled deployment for chain ${args.chainId}`);
+    const address = complianceWallet().address.toLowerCase();
+    const balHex = await rpc<string>(alchemyUrl(dep.alchemySubdomain), "eth_getBalance", [
+      address,
+      "latest",
+    ]);
+    await ctx.runMutation(internal.compliance.store.upsertComplianceSigner, {
+      chainId: args.chainId,
+      address,
+      balanceWei: BigInt(balHex).toString(),
+    });
+    return { chainId: args.chainId, address };
   },
 });
