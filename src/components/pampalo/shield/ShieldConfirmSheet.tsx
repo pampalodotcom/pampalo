@@ -15,6 +15,13 @@ import {
 } from "@/lib/shield-prep";
 import { withUnlockedWallet } from "@/lib/auth-flow";
 import { useRpcClient } from "@/lib/rpc";
+import { usePublicBalance } from "@/lib/balances";
+import {
+  affordabilityMessage,
+  checkAffordability,
+  type Affordability,
+} from "@/lib/affordability";
+import { normalizeBroadcastError } from "@/lib/broadcast-error";
 import { useIsDesktop } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -107,6 +114,7 @@ export function ShieldConfirmSheet({
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [errorRaw, setErrorRaw] = useState<string | null>(null);
   const [prepared, setPrepared] = useState<
     PreparedShieldNativeTx | PreparedShieldErc20Tx | null
   >(null);
@@ -117,6 +125,7 @@ export function ShieldConfirmSheet({
     if (!open) {
       setPhase("idle");
       setError(null);
+      setErrorRaw(null);
       setPrepared(null);
       setSignedTx(null);
     }
@@ -138,13 +147,82 @@ export function ShieldConfirmSheet({
     });
   }, [payload]);
 
+  // ─── Affordability preflight (CONTEXT.md) ─────────────────────────
+  // Shield is always self-signed, so the user always needs native ETH
+  // for gas — even when shielding an ERC-20 (the gas asset differs from
+  // the shielded asset). Native ETH shield additionally moves `amount`.
+  const isErc20 =
+    !!payload &&
+    payload.assetAddress.toLowerCase() !== ETH_ADDRESS.toLowerCase();
+  const nativeAsset = useMemo(
+    () => ({
+      chainId: payload?.chainId ?? 0,
+      address: ETH_SENTINEL,
+      symbol: "ETH",
+      decimals: 18,
+    }),
+    [payload?.chainId],
+  );
+  const nativeBal = usePublicBalance(nativeAsset, payload ? addresses.evm : null);
+  const tokenAsset = useMemo(
+    () => ({
+      chainId: payload?.chainId ?? 0,
+      address: isErc20 ? payload.assetAddress : ETH_SENTINEL,
+      symbol: payload?.symbol ?? "ETH",
+      decimals: payload?.decimals ?? 18,
+    }),
+    [payload, isErc20],
+  );
+  const tokenBal = usePublicBalance(
+    tokenAsset,
+    isErc20 ? addresses.evm : null,
+  );
+
+  const affordability = useMemo<Affordability | null>(() => {
+    if (!payload || !gas?.gasPriceWei || !nativeBal.data) return null;
+    const native =
+      payload.assetAddress.toLowerCase() === ETH_ADDRESS.toLowerCase();
+    const gasLimit = native
+      ? SHIELD_GAS_LIMIT
+      : APPROVE_GAS_LIMIT + SHIELD_GAS_LIMIT;
+    const valueWei = native ? payload.amount : 0n;
+    let token;
+    if (!native) {
+      if (!tokenBal.data) return null;
+      token = {
+        balanceWei: tokenBal.data.balanceWei,
+        neededWei: payload.amount,
+        symbol: payload.symbol,
+        decimals: payload.decimals,
+      };
+    }
+    return checkAffordability({
+      nativeBalanceWei: nativeBal.data.balanceWei,
+      valueWei,
+      gasLimit,
+      gasPriceWei: BigInt(gas.gasPriceWei),
+      token,
+    });
+  }, [payload, gas, nativeBal.data, tokenBal.data]);
+  const unaffordable =
+    affordability && !affordability.ok ? affordability : null;
+
   const onConfirm = async () => {
     if (!payload || !deployment) return;
     if (!gas?.gasPriceWei) {
       setError("Gas price not loaded yet — try again in a moment.");
       return;
     }
+    // Preflight: shield is always self-signed, so block when the wallet
+    // can't cover the shield amount (native) and/or gas. (The button is
+    // already disabled in this state; this is a defensive backstop.)
+    if (unaffordable) {
+      setError(affordabilityMessage(unaffordable));
+      setErrorRaw(null);
+      return;
+    }
     setError(null);
+    setErrorRaw(null);
 
     // Defensive: the route is supposed to inject the asset address from
     // the catalog before opening this sheet. If it didn't, we'd silently
@@ -339,8 +417,9 @@ export function ShieldConfirmSheet({
       setPhase("done");
       onOpenChange(false);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
+      const n = normalizeBroadcastError(e);
+      setError(n.friendly);
+      setErrorRaw(n.raw);
       setPhase("error");
     }
   };
@@ -352,7 +431,12 @@ export function ShieldConfirmSheet({
     phase === "submitting" ||
     phase === "awaiting";
   const closeable = !isBusy;
-  const confirmDisabled = !payload || !deployment || isBusy || phase === "done";
+  const confirmDisabled =
+    !payload ||
+    !deployment ||
+    isBusy ||
+    phase === "done" ||
+    unaffordable !== null;
 
   const confirmLabel = (() => {
     switch (phase) {
@@ -448,6 +532,25 @@ export function ShieldConfirmSheet({
           symbol={payload?.symbol}
           amountFmt={amountFmt}
         />
+
+        {/* Preflight block — wallet can't cover the shield amount / gas. */}
+        {!error && unaffordable && (
+          <div className="rounded-xl border border-[var(--pub-soft-2)] bg-[var(--pub-soft)] px-3.5 py-2.5 text-[12.5px] text-[var(--pub)]">
+            {affordabilityMessage(unaffordable)}
+          </div>
+        )}
+
+        {/* Raw RPC error behind a details toggle (backstop). */}
+        {error && errorRaw && (
+          <details className="rounded-xl border border-[var(--pub-soft-2)] bg-[var(--pub-soft)] px-3.5 py-2 text-[12.5px] text-[var(--pub)]">
+            <summary className="cursor-pointer select-none text-[11px] font-semibold opacity-80">
+              Details
+            </summary>
+            <p className="mt-1 break-all font-mono text-[10.5px] opacity-80">
+              {errorRaw}
+            </p>
+          </details>
+        )}
 
         {/* Action stack — Confirm sits on top of Cancel on every viewport,
             so the primary action is always closest to the user's thumb /

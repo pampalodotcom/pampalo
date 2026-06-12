@@ -56,6 +56,10 @@ export const _enabledDeployments = internalQuery({
     const out: IndexerDeployment[] = [];
     for (const d of deployments) {
       if (!d.enabled) continue;
+      // Skip placeholder rows (`pampalo: ""`) — they have no contract to
+      // index, and an empty `address` makes `eth_getLogs` throw
+      // -32602. Mirrors the guard in the catalog query above.
+      if (!d.pampalo) continue;
       const network = await ctx.db.get(d.networkId);
       if (!network) continue;
       out.push({
@@ -530,6 +534,9 @@ export const enabledDeployments = query({
       pampaloAddress: string;
       shieldWaitSeconds: number;
       defaultMonthlyCapUsdCents: number;
+      // Whether the relayer sponsors transfer/unshield on this chain.
+      // Drives the client's relay-vs-self-broadcast branch. See ADR 0015.
+      sponsoringTxs: boolean;
     }>
   > => {
     const deployments = await ctx.db.query("pampaloDeployments").collect();
@@ -540,6 +547,7 @@ export const enabledDeployments = query({
       pampaloAddress: string;
       shieldWaitSeconds: number;
       defaultMonthlyCapUsdCents: number;
+      sponsoringTxs: boolean;
     }> = [];
     for (const d of deployments) {
       if (!d.enabled) continue;
@@ -557,6 +565,7 @@ export const enabledDeployments = query({
         pampaloAddress: d.pampalo,
         shieldWaitSeconds: d.shieldWaitSeconds,
         defaultMonthlyCapUsdCents: d.defaultMonthlyCapUsdCents,
+        sponsoringTxs: d.sponsoringTxs ?? false,
       });
     }
     return out;

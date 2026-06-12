@@ -124,12 +124,23 @@ contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
   mapping(address => MonthlyVolume) public shieldUsage;
   mapping(address => MonthlyVolume) public unshieldUsage;
 
-  uint256 public defaultMonthlyCapUsdCents = 100_00; // $100.00
+  uint256 public defaultMonthlyCapUsdCents = 200_00; // $200.00
   mapping(address => uint256) public addressMonthlyCapUsdCents; // 0 = use default
 
   event ShieldCapCharged(address indexed user, uint256 usdCents);
   event UnshieldCapCharged(address indexed user, uint256 usdCents);
   event ShieldCapRefunded(address indexed user, uint256 usdCents);
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Fast-track — per-user monthly waiver of the shield wait
+  // ──────────────────────────────────────────────────────────────────────
+
+  // monthKey (UTC) for which this user's queued shields skip the wait and
+  // land immediately executable. A booth operator sets it to vouch for a
+  // vetted user for the current calendar month; it auto-expires when the
+  // month rolls over (the stored key no longer matches). Zero = never.
+  mapping(address => uint64) public fastTrackAllowedMonth;
+  event FastTrackAllowed(address indexed user, uint64 monthKey);
 
   // ──────────────────────────────────────────────────────────────────────
   // Kill switch
@@ -238,12 +249,44 @@ contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
       uint256 remainingUsdCents
     )
   {
+    return _budgetView(shieldUsage[user], user);
+  }
+
+  /// @notice Unshield twin of {shieldBudget}. The cap is the same
+  ///         per-address effective cap; the usage bucket is the
+  ///         independent `unshieldUsage` one — a user may have spent
+  ///         their shield budget but still have full unshield budget,
+  ///         and vice versa. Mirrors `_chargeUnshieldRaw` → `_bumpUsage`.
+  function unshieldBudget(address user)
+    external
+    view
+    returns (
+      uint256 effectiveCapUsdCents,
+      uint256 usdCentsUsedThisMonth,
+      uint256 remainingUsdCents
+    )
+  {
+    return _budgetView(unshieldUsage[user], user);
+  }
+
+  /// @dev Shared cap-state read for the shield/unshield budget views.
+  ///      Recomputes the same numbers `_bumpUsage` would, including the
+  ///      prior-month auto-reset (a bucket from a past UTC month reads as
+  ///      zero used). Saturating remaining.
+  function _budgetView(MonthlyVolume storage vol, address user)
+    internal
+    view
+    returns (
+      uint256 effectiveCapUsdCents,
+      uint256 usdCentsUsedThisMonth,
+      uint256 remainingUsdCents
+    )
+  {
     uint256 cap = addressMonthlyCapUsdCents[user];
     if (cap == 0) cap = defaultMonthlyCapUsdCents;
     effectiveCapUsdCents = cap;
 
     uint64 mk = DateMath.monthKey(block.timestamp);
-    MonthlyVolume storage vol = shieldUsage[user];
     usdCentsUsedThisMonth = vol.monthKey == mk
       ? uint256(vol.usdCentsUsed)
       : 0;
@@ -251,6 +294,26 @@ contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
     remainingUsdCents = usdCentsUsedThisMonth >= cap
       ? 0
       : cap - usdCentsUsedThisMonth;
+  }
+
+  /// @notice True if `user`'s shields queued right now would skip the
+  ///         wait (a booth operator vouched for them this UTC month).
+  function isFastTracked(address user) public view returns (bool) {
+    return fastTrackAllowedMonth[user] == DateMath.monthKey(block.timestamp);
+  }
+
+  /// @notice Booth-operator waiver: let `user`'s shields skip the wait for
+  ///         the current UTC month. Auto-expires at month rollover. This
+  ///         bypasses the contest window for those shields, so it is a
+  ///         deliberate "we vouch for this user" action, not a toggle.
+  /// @param  allowed false revokes the waiver immediately.
+  function setFastTrackAllowed(address user, bool allowed)
+    external
+    onlyRole(BOOTH_OPERATOR_ROLE)
+  {
+    uint64 mk = allowed ? DateMath.monthKey(block.timestamp) : 0;
+    fastTrackAllowedMonth[user] = mk;
+    emit FastTrackAllowed(user, mk);
   }
 
   // ──────────────────────────────────────────────────────────────────────
@@ -336,7 +399,12 @@ contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
     uint64 usdCents = _chargeShield(msg.sender, asset, amount);
 
     id = nextPendingId++;
-    uint64 unlockTime = uint64(block.timestamp) + shieldWaitTime;
+    // Fast-tracked users (a booth operator vouched for them this month)
+    // land immediately executable — unlockTime is now, skipping the wait
+    // and its contest window. Everyone else serves the full shieldWaitTime.
+    uint64 unlockTime = isFastTracked(msg.sender)
+      ? uint64(block.timestamp)
+      : uint64(block.timestamp) + shieldWaitTime;
 
     pendingShields[id] = PendingShield({
       shielder: msg.sender,

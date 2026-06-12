@@ -231,7 +231,37 @@ export default defineSchema({
     // for schema migration — undefined treated as true (the new
     // default) by the client. See derive-addresses.ts.
     separateDerivationKey: v.optional(v.boolean()),
+    // Gas-sponsoring relayer config (TRANSFERS.md 2.1, ADR 0010/0015).
+    // sponsoringTxs gates whether `relayer.relay` accepts this chain;
+    // minRelayerBalanceWei is the per-account floor below which the
+    // acquire-lock mutation skips an account. Both optional for migration:
+    // undefined sponsoringTxs is treated as false (no sponsoring).
+    sponsoringTxs: v.optional(v.boolean()),
+    minRelayerBalanceWei: v.optional(v.string()),
   }).index("by_networkId", ["networkId"]),
+
+  // Relayer pool (gas sponsors). Five derived EOAs per sponsoring chain,
+  // broadcasting Pampalo.transfer and Pampalo.unshield on a user's behalf
+  // so paying gas doesn't link the user's EVM address to the on-chain
+  // event. Derived from RELAYER_MNEMONIC at m/44'/60'/0'/0/{0..4}. Holds NO
+  // on-chain role: only ETH for gas. The separate compliance signer
+  // (index 5) is NOT in this table. All public material: addresses are
+  // recomputable from the mnemonic, and nothing here joins to any userId.
+  // See TRANSFERS.md 2.2 and ADR 0015.
+  relayerAccounts: defineTable({
+    chainId: v.number(),
+    accountIndex: v.number(), // 0..4
+    address: v.string(), // lowercased, derived
+    busy: v.boolean(),
+    busySince: v.optional(v.number()), // ms; set on acquire, cleared on release
+    lastBroadcastAt: v.optional(v.number()), // ms; drives LRU on acquire
+    lastTxHash: v.optional(v.string()), // debug-only provenance, latest only
+    balanceWei: v.string(), // decimal string; optimistic accounting
+    balanceUpdatedAt: v.number(), // ms; touched on every write
+    balanceLastReconciledAt: v.optional(v.number()), // ms; cron-only
+  })
+    .index("by_chainId_and_index", ["chainId", "accountIndex"])
+    .index("by_chainId_and_busy", ["chainId", "busy"]),
 
   // Join table mirroring on-chain `Pampalo.supportedAssets(addr)`. Rows
   // are write-once + state flip; never deleted, so the Sentry audit view

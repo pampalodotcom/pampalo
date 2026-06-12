@@ -83,24 +83,24 @@ describe("monthly caps", () => {
     expect(after.usdCentsUsed).to.equal(usedBefore);
   });
 
-  it("blocks a shield that would exceed the default $100 cap", async () => {
-    // Set oracle to a price that pushes 5 USDC over the remaining cap
-    // for a fresh signer. Use Signers[6] who has no prior usage.
+  it("blocks a shield that would exceed the default $200 cap", async () => {
+    // A fresh signer with no prior usage; shield more than the $200
+    // default in one go and expect the cap charge to revert.
     const stranger = Signers[6];
 
     // Give the stranger some USDC + approve
-    const big = 200_000_000n; // 200 USDC
+    const big = 300_000_000n; // 300 USDC
     await usdcDeployment.mint(stranger.address, big);
     await usdcDeployment
       .connect(stranger)
       .approve(await pampalo.getAddress(), big);
 
-    // Build a shield for 150 USDC = $150 — over the $100 cap
-    const { assetId, proof } = await buildShield(150_000_000n);
+    // Build a shield for 250 USDC = $250 — over the $200 cap
+    const { assetId, proof } = await buildShield(250_000_000n);
     await expect(
       pampalo
         .connect(stranger)
-        .shield(assetId, 150_000_000n, proof.proof, proof.publicInputs, "0x"),
+        .shield(assetId, 250_000_000n, proof.proof, proof.publicInputs, "0x"),
     ).to.be.revertedWith("monthly cap exceeded");
   });
 
@@ -152,10 +152,9 @@ describe("monthly caps", () => {
     // Fast-forward ~32 days to guarantee crossing a UTC month boundary
     await connection.networkHelpers.time.increase(32 * 24 * 60 * 60);
 
-    // Second shield: 50 USDC again — would fail if bucket weren't reset
-    // (50 + 50 = 100; default cap is exactly $100, but the next shield's
-    // 50 doesn't fit if usage was still at 50 of a $100 cap due to
-    // off-by-one math — so use 80 USDC to make the rollover unambiguous)
+    // Second shield: 80 USDC in the fresh month. If the bucket weren't
+    // reset, prior usage would still be counted; 80 USDC ($80) lands
+    // unambiguously inside a fresh $200 cap, so success proves the reset.
     const second = await buildShield(80_000_000n);
     await expect(
       pampalo

@@ -41,4 +41,22 @@ crons.interval(
   {},
 );
 
+// Relayer pool balance reconciliation — corrects optimistic-deduction
+// drift against eth_getBalance. See TRANSFERS.md §5.
+crons.interval(
+  "reconcile relayer balances",
+  { minutes: 15 },
+  internal.relayer.reconcile.reconcileBalances,
+  {},
+);
+
+// Zombie-lock reaper — force-releases relayer accounts stuck busy past
+// the 60s threshold (crashed/hung relay actions). See TRANSFERS.md §3.4.
+crons.interval(
+  "reap relayer zombie locks",
+  { minutes: 1 },
+  internal.relayer.store.reapZombieLocks,
+  {},
+);
+
 export default crons;

@@ -35,6 +35,7 @@ import {
   ContestSheet,
   type ContestPayload,
 } from "@/components/pampalo/sentry/ContestSheet";
+import { GasSponsorsPanel } from "@/components/pampalo/sentry/GasSponsorsPanel";
 import { ThemeToggle } from "@/components/pampalo/ThemeToggle";
 import { useAccountModal } from "@/lib/account-modal";
 import { useAuth } from "@/lib/auth";
@@ -353,6 +354,11 @@ function Sentry() {
               Showing all {paginated.results.length} queued shields.
             </span>
           )}
+        </div>
+
+        {/* ─── Gas sponsors (relayer pool) — below the queue ───────── */}
+        <div className="mt-6">
+          <GasSponsorsPanel filter={filter} />
         </div>
       </section>
 

@@ -354,6 +354,30 @@ tree. During the wait the shielded asset is escrowed by the Pampalo
 contract; no on-chain note exists yet, so the shielder may cancel and
 recover the asset, and a **vigilant citizen** may contest.
 
+**Fast-track**:
+A `BOOTH_OPERATOR_ROLE` waiver of the **Shield wait** for a vetted user.
+Two on-chain forms: `executeShieldImmediate(id)` finalises one named
+**Pending shield** now; the per-user monthly flag (`fastTrackAllowed`
+keyed by `(user, monthKey)`) makes every shield that user queues this
+calendar month land with `unlockTime = block.timestamp` — immediately
+executable. Fast-tracking **skips the contest window**, so it is a
+deliberate "the operator vouches for this user this month" trust
+statement, not a convenience toggle. Resets each UTC month like the caps.
+
+**Monthly cap**:
+The per-address USD ceiling on shielded *and* unshielded volume per UTC
+month. Tracked on-chain as two independent buckets (`shieldUsage`,
+`unshieldUsage`), each charged at its respective op and each bounded by
+the same `effectiveCap` — the per-address override
+(`addressMonthlyCapUsdCents`) if set, else `defaultMonthlyCapUsdCents`
+(**$200.00**). So a user may shield up to $200 *and* unshield up to $200
+in the same month; the two don't net against each other. Charged in USD
+cents at the Chainlink-oracle price seen at op time; a **Contest** or
+`cancelShield` refunds the shield charge inline (subject to the
+same-month caveat in `_refundShieldCap`). Read via the `shieldBudget` /
+`unshieldBudget` views, which mirror the on-chain charge math (including
+the prior-month auto-reset) so the client slider and the contract agree.
+
 **Pending shield**:
 A queued shield awaiting unlock. Identified by an opaque `pendingId`;
 the shielder, asset, amount, and leaf commitment are all stored on-chain
@@ -374,6 +398,16 @@ A `VIGILANT_CITIZEN_ROLE` action that cancels a pending shield, refunding
 the shielder's escrow. Used for compliance review (e.g. OFAC-listed
 source addresses). Distinct from `cancelShield` which is the shielder's
 own opt-out during the wait.
+
+_Automated Contest_: a Convex cron indexes blocked addresses from
+external sources (the Chainalysis on-chain sanctions oracle; Railgun's
+published blocklist) into a Convex table, then scans the **Shield queue**
+for any **Pending shield** whose `shielder` is blocked and calls
+`contestShield(id, reason)` via the **Compliance signer** before the
+**Shield wait** elapses. Because on-chain `shield(...)` is permissionless
+(ADR 0007), this post-hoc contest during the wait window is the *only*
+mechanism for "programmatic refusal of entry" — entry can't be blocked
+at call time, only unwound before the note is inserted.
 
 _Refund is on-chain, push-style, at contest time_: `contestShield`
 calls `_refundEscrow(p.shielder, p.asset, p.amount)` inline, which
@@ -396,15 +430,35 @@ upstream-named because they're bytecode-bound.
 
 **Gas sponsor / Relayer account**:
 One of the EOAs the Pampalo backend uses to broadcast a user's
-**Transfer** without revealing their EVM address. Five accounts per
-**sponsoring chain**, derived from a single backend `RELAYER_MNEMONIC`
-at BIP44 path `m/44'/60'/0'/0/{0..4}`. The accounts are interchangeable
-and selected LRU among the idle, funded subset; concurrent transfers
-on the same chain never collide on the same account because the
-acquire/release flow is gated by an atomic Convex mutation. Pampalo's
-contract is permissionless on `transfer(...)`, so the relayer holds
-no on-chain role — its only privilege is "has ETH to spend on gas."
-See `TRANSFERS.md` and ADR 0010.
+**Transfer** or **Unshield** without revealing their EVM address. Five
+accounts per **sponsoring chain**, derived from a single backend
+`RELAYER_MNEMONIC` at BIP44 path `m/44'/60'/0'/0/{0..4}`. The accounts
+are interchangeable and selected LRU among the idle, funded subset;
+concurrent broadcasts on the same chain never collide on the same
+account because the acquire/release flow is gated by an atomic Convex
+mutation. Pampalo's contract is permissionless on `transfer(...)` and
+`unshield(...)`, so the relayer holds **no on-chain role** — its only
+privilege is "has ETH to spend on gas." Relaying an **Unshield** is the
+privacy win that justifies the expanded scope: the holder can withdraw
+to a brand-new, **unfunded** EVM address (the relayer pays gas) instead
+of needing that address to already hold ETH, which would link it. Every
+relay is gated to protect the sponsor's gas: the proof bytes must be
+non-empty / non-zero, a pre-broadcast `eth_call` simulation must not
+revert, and the move must be within the user's **monthly cap**. See
+`TRANSFERS.md` and ADR 0015 (which supersedes the transfer-only scope of
+ADR 0010).
+_Avoid_: granting the relayer pool any on-chain role — compliance
+contests are signed by the separate **Compliance signer**, never these
+accounts.
+
+**Compliance signer** (Sentry account):
+A single dedicated EOA the Pampalo backend uses to sign automated
+`contestShield(...)` calls. Derived from the **same** `RELAYER_MNEMONIC`
+but at a **distinct index past the relayer pool** (`m/44'/60'/0'/0/5`),
+and the only backend account granted `VIGILANT_CITIZEN_ROLE`. Kept
+separate from the **Relayer accounts** (0–4) so the gas-sponsor identity
+stays role-less and is never publicly linkable to compliance
+enforcement. Drives the **automated Contest** path. See ADR 0016.
 
 **Sponsoring chain**:
 A `pampaloDeployments` row with `sponsoringTxs = true`. Means the
@@ -423,6 +477,23 @@ EVM address is publicly linked to the on-chain transfer event —
 breaking the EOA-anonymity property the relayer otherwise provides.
 The UX always surfaces this with an explicit confirm dialog before
 proceeding; never silent.
+
+**Affordability preflight**:
+The client-side check that blocks a confirm/review button when the
+user's wallet can't cover a **self-broadcast**. A self-broadcast costs
+the user `value + gasLimit × maxFeePerGas` in native ETH — the exact
+amount the node reserves up-front (not an estimate; Pampalo uses fixed
+per-flow `gasLimit` constants, never `eth_estimateGas`, per ADR 0004).
+The preflight reads the chain's native balance (and, for an ERC-20
+send, the token balance) via `usePublicBalance` and disables submission
+with a specific "need ≈X, have Y" message when short. It applies to
+**public Send**, **Shield** (always self-signed), and the
+**self-broadcast fallback** of Transfer / Unshield — **never** the
+relayed path, which costs the user zero native ETH (a **sponsoring
+chain**'s relayer pays the gas). A broadcast-time error normaliser is
+the backstop for the residual race (30s-stale balance, gas spike):
+known RPC strings (`insufficient funds`, nonce conflicts) map to
+friendly copy, with the raw error kept behind a details toggle.
 
 ### Naming / directory (Ethereum L1 / ENS)
 
