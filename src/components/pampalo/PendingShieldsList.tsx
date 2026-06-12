@@ -10,6 +10,17 @@ import { cn } from "@/lib/utils";
 import { weiToNumber } from "@/lib/balances";
 import { txUrl } from "@/lib/explorer";
 import type { PendingNote } from "@/lib/use-private-balances";
+import { NetworkChip, networkSlugForChainId } from "./NetworkChip";
+
+/** What a queued pending shield needs to be cancelled by its shielder. */
+export type CancelRequest = {
+  leafCommitment: string;
+  chainId: number;
+  amount: bigint;
+  symbol: string;
+  decimals: number;
+  priceUsd?: number | null;
+};
 
 // Collapsable per-asset list of pending shields shown beneath the
 // SplitSlider on each AssetRow. Surfaces both buckets:
@@ -32,6 +43,11 @@ type Props = {
    *  a no-op placeholder; the cleaner UX path is to wire to a confirm
    *  sheet at the wallet level. */
   onFinalise?: (note: PendingNote) => void;
+  /** Cancel a still-queued shield (refunds the shielder). Wired to a
+   *  confirm sheet at the wallet level. */
+  onCancel?: (req: CancelRequest) => void;
+  /** USD price per whole token, for the per-row USD value. */
+  priceUsd?: number | null;
   /** Roughly how many display digits to show for the amount column. */
   roundTo?: number;
 };
@@ -48,8 +64,15 @@ export function PendingShieldsList({
   queuedNotes,
   executableNotes,
   onFinalise,
+  onCancel,
+  priceUsd,
   roundTo,
 }: Props) {
+  const usdFor = (amount: bigint): string | null => {
+    if (priceUsd == null) return null;
+    const usd = weiToNumber(amount, decimals) * priceUsd;
+    return usd.toLocaleString("en-US", { style: "currency", currency: "USD" });
+  };
   const [open, setOpen] = useState(false);
   const total = queuedNotes.length + executableNotes.length;
   if (total === 0) return null;
@@ -108,11 +131,17 @@ export function PendingShieldsList({
                 "bg-[var(--priv-soft)]/40",
               )}
             >
-              <span className="inline-flex items-center gap-2 text-[12px] text-ink">
+              <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink">
                 <Sparkles className="size-3.5 text-[var(--priv)]" aria-hidden />
                 <span className="font-mono font-semibold">
                   {fmtAmount(n.amount, decimals, dp)} {symbol}
                 </span>
+                {usdFor(n.amount) && (
+                  <span className="text-[11px] text-ink-mute">
+                    {usdFor(n.amount)}
+                  </span>
+                )}
+                <NetworkBadge chainId={n.chainId} />
                 <span className="text-[11px] text-ink-mute">
                   ready to finalise
                 </span>
@@ -136,17 +165,48 @@ export function PendingShieldsList({
           {queuedNotes.map((n) => (
             <li
               key={`queued-${n.leafCommitment}`}
-              className="flex items-center justify-between gap-2 px-2 py-1.5"
+              className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-2 py-1.5"
             >
-              <span className="inline-flex items-center gap-2 text-[12px] text-ink">
+              <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink">
                 <Clock3 className="size-3.5 text-ink-mute" aria-hidden />
                 <span className="font-mono">
                   {fmtAmount(n.amount, decimals, dp)} {symbol}
                 </span>
+                {usdFor(n.amount) && (
+                  <span className="text-[11px] text-ink-mute">
+                    {usdFor(n.amount)}
+                  </span>
+                )}
+                <NetworkBadge chainId={n.chainId} />
                 <ExplorerLink note={n} />
               </span>
-              <span className="font-mono text-[11px] text-ink-mute">
-                unlocks {countdownLabel(n.unlockTime)}
+              <span className="inline-flex shrink-0 items-center gap-2">
+                <span className="font-mono text-[11px] text-ink-mute">
+                  unlocks {countdownLabel(n.unlockTime)}
+                </span>
+                {onCancel && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onCancel({
+                        leafCommitment: n.leafCommitment,
+                        chainId: n.chainId,
+                        amount: n.amount,
+                        symbol,
+                        decimals,
+                        priceUsd: priceUsd ?? null,
+                      })
+                    }
+                    className={cn(
+                      "inline-flex h-7 items-center rounded-full px-3",
+                      "border border-line bg-paper text-[11.5px] font-semibold text-ink",
+                      "transition-colors hover:bg-paper-lo",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-faint",
+                    )}
+                  >
+                    Cancel
+                  </button>
+                )}
               </span>
             </li>
           ))}
@@ -177,6 +237,12 @@ function ExplorerLink({ note }: { note: PendingNote }) {
       <ExternalLink className="size-3" aria-hidden />
     </a>
   );
+}
+
+function NetworkBadge({ chainId }: { chainId: number }) {
+  const slug = networkSlugForChainId(chainId);
+  if (!slug) return null;
+  return <NetworkChip network={slug} />;
 }
 
 function fmtAmount(wei: bigint, decimals: number, dp: number): string {

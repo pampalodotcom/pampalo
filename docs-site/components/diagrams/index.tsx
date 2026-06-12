@@ -154,7 +154,7 @@ export function AnatomyOfANote() {
         </g>
 
         <polygon className="node-2" points="430,98 453,112 453,140 430,154 407,140 407,112" />
-        <text className="t-mono" x="430" y="129" fontSize="10.5" textAnchor="middle">poseidon2</text>
+        <text className="t-mono" x="430" y="129" fontSize="10.5" textAnchor="middle" letterSpacing="1.2">poseidon2</text>
         <text className="t-tick t-faint" x="430" y="176" fontSize="8.5" textAnchor="middle">SNARK-friendly hash</text>
 
         <g>
@@ -265,13 +265,13 @@ export function NoteTree() {
           <rect className="node" x="324" y="236" width="44" height="34" rx="7" />
           <rect x="328" y="240" width="36" height="26" rx="4" fill="none" stroke="var(--d-priv-line)" strokeWidth="1.4" strokeDasharray="3 2" />
           <rect className="node-priv" x="390" y="234" width="44" height="38" rx="8" />
-          <text className="t-tick t-priv" x="412" y="257" fontSize="8" textAnchor="middle" fontWeight="600">my leaf</text>
+          <text className="t-tick t-priv" x="412" y="257" fontSize="8" textAnchor="middle" fontWeight="600">my note</text>
           <rect x="456" y="236" width="44" height="34" rx="7" fill="var(--d-surface-2)" stroke="var(--d-line)" strokeWidth="1" />
           <rect x="522" y="236" width="44" height="34" rx="7" fill="var(--d-surface-2)" stroke="var(--d-line)" strokeWidth="1" />
           <text className="t-tick t-faint" x="544" y="288" fontSize="8" textAnchor="middle">ZERO_LEAF</text>
         </g>
 
-        <text className="t-sub" x="313" y="306" fontSize="11.5" textAnchor="middle">Re-hash my leaf up the path → reproduces a known <tspan className="t-priv" fontWeight="600">root</tspan>. Proves membership, reveals nothing.</text>
+        <text className="t-sub" x="313" y="306" fontSize="11.5" textAnchor="middle">Re-hash my note up the path → reproduces a known <tspan className="t-priv" fontWeight="600">root</tspan>. Proves membership, reveals nothing.</text>
 
         <line className="hair dash" x1="36" y1="332" x2="924" y2="332" />
         <text className="t-tick" x="36" y="356" fontSize="10">Tree rotation · epochs (append-only, old roots never expire)</text>
@@ -354,19 +354,19 @@ export function SpendNullify() {
         <circle className="m-token pd-t4" r="5" fill="var(--d-priv)" />
 
         <path className="flow dash" d="M204,208 C250,224 270,250 300,262" markerEnd="url(#pd-arrow)" />
-        <text className="t-tick t-warn" x="244" y="258" fontSize="8.5">spend again</text>
+        <text className="t-tick t-warn" x="216" y="258" fontSize="8.5">spend again</text>
         <g>
           <rect className="node-2" x="300" y="232" width="170" height="62" rx="12" />
           <text className="t-tick" x="318" y="256" fontSize="9">same nullifier</text>
           <text className="t-mono" x="318" y="278" fontSize="13">0x4c…e9</text>
         </g>
-        <path className="flow-pub dash" d="M470,262 C540,258 580,210 626,176" markerEnd="url(#pd-arrow-pub)" />
+        <path className="flow-pub dash" d="M470,262 C520,250 555,205 590,176" markerEnd="url(#pd-arrow-pub)" />
 
-        <g transform="translate(636,168)">
+        <g transform="translate(600,168)">
           <circle r="12" fill="var(--d-warn-soft)" stroke="var(--d-warn)" strokeWidth="1.5" />
           <path d="M-4.5,-4.5 L4.5,4.5 M4.5,-4.5 L-4.5,4.5" stroke="var(--d-warn)" strokeWidth="2" strokeLinecap="round" />
         </g>
-        <text className="t-tick t-warn" x="636" y="200" fontSize="8.5" textAnchor="middle">already spent</text>
+        <text className="t-tick t-warn" x="600" y="200" fontSize="8.5" textAnchor="middle">already spent</text>
 
         <g>
           <rect className="node" x="668" y="56" width="248" height="180" rx="14" />
@@ -636,7 +636,7 @@ export function ShieldQueueMachine() {
         <rect className="node-2" x="524" y="190" width="240" height="56" rx="13" />
         <text className="t-lab" x="644" y="214" fontSize="12" textAnchor="middle">Contested</text>
         <text className="t-tick t-faint" x="644" y="232" fontSize="8" textAnchor="middle">contestShield · VIGILANT_CITIZEN</text>
-        <text className="t-tick t-faint" x="300" y="180" fontSize="8">refund escrow + cap</text>
+        <text className="t-tick t-faint" x="404" y="182" fontSize="8">refund escrow + cap</text>
       </svg>
     </div>
   );

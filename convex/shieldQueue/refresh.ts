@@ -2,7 +2,12 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { action, internalAction, type ActionCtx } from "../_generated/server";
 import { alchemyUrl, rpc } from "../lib/alchemy";
-import { ALL_TOPICS, decodeLog, type RawLog } from "./events";
+import {
+  ALL_TOPICS,
+  classifySelector,
+  decodeLog,
+  type RawLog,
+} from "./events";
 import type { IndexerDeployment } from "./store";
 
 // Per-deployment shield-queue indexer. Fans out one polling pass per
@@ -143,7 +148,7 @@ async function indexOneDeployment(
     // Cache eth_getTransactionByHash results per tx hash within this
     // window — multiple resolution events from the same tx (rare but
     // possible) would otherwise duplicate the RPC.
-    const txFromCache = new Map<string, { from: string; blockTime: number }>();
+    const txFromCache = new Map<string, TxMeta>();
 
     for (const log of logs) {
       const decoded = decodeLog(log);
@@ -251,6 +256,53 @@ async function indexOneDeployment(
                 logIndex: Number(BigInt(log.logIndex)),
               },
             );
+            // Activity feed: attach a shortened payload preview to the tx's
+            // row (transfer / unshield only; shieldNative payloads classify
+            // as "shield"/"other" and are skipped).
+            {
+              const meta = await getTxMeta(
+                url,
+                log.transactionHash,
+                log.blockHash,
+                txFromCache,
+              );
+              const kind = classifySelector(meta.selector);
+              if (kind === "transfer" || kind === "unshield") {
+                await ctx.runMutation(internal.shieldQueue.store._upsertActivity, {
+                  deploymentId: d._id,
+                  txHash: log.transactionHash,
+                  kind,
+                  from: meta.from,
+                  blockNumber: Number(BigInt(log.blockNumber)),
+                  blockTime: meta.blockTime,
+                  payloadPreview: shortenPayload(decoded.encryptedPayload),
+                });
+              }
+            }
+            break;
+          }
+
+          case "NullifierUsed": {
+            // Universal private-spend signal — classify the tx and record
+            // (or confirm) its activity row. The bare `unshield` path emits
+            // no leaf/payload, so this is the only way it shows up.
+            const meta = await getTxMeta(
+              url,
+              log.transactionHash,
+              log.blockHash,
+              txFromCache,
+            );
+            const kind = classifySelector(meta.selector);
+            if (kind === "transfer" || kind === "unshield") {
+              await ctx.runMutation(internal.shieldQueue.store._upsertActivity, {
+                deploymentId: d._id,
+                txHash: log.transactionHash,
+                kind,
+                from: meta.from,
+                blockNumber: Number(BigInt(log.blockNumber)),
+                blockTime: meta.blockTime,
+              });
+            }
             break;
           }
         }
@@ -282,16 +334,26 @@ async function indexOneDeployment(
 
 // ─── tx-meta helpers ─────────────────────────────────────────────────────
 
+// First 6 + last 4 bytes of an ECIES blob, for the activity feed preview.
+function shortenPayload(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  if (hex.length <= 20) return "0x" + hex;
+  return "0x" + hex.slice(0, 12) + "…" + hex.slice(-8);
+}
+
+type TxMeta = { from: string; blockTime: number; selector: string };
+
 async function getTxMeta(
   url: string,
   txHash: string,
   blockHash: string,
-  cache: Map<string, { from: string; blockTime: number }>,
-): Promise<{ from: string; blockTime: number }> {
+  cache: Map<string, TxMeta>,
+): Promise<TxMeta> {
   const cached = cache.get(txHash);
   if (cached) return cached;
 
-  const tx = await rpc<{ from: string } | null>(
+  const tx = await rpc<{ from: string; input?: string } | null>(
     url,
     "eth_getTransactionByHash",
     [txHash],
@@ -309,9 +371,12 @@ async function getTxMeta(
     throw new Error(`eth_getBlockByHash returned null for ${blockHash}`);
   }
 
-  const meta = {
+  // 0x + 8 hex = the 4-byte function selector. Drives activity classification.
+  const selector = (tx.input ?? "0x").slice(0, 10);
+  const meta: TxMeta = {
     from: tx.from,
     blockTime: Number(BigInt(block.timestamp)),
+    selector,
   };
   cache.set(txHash, meta);
   return meta;

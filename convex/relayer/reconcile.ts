@@ -40,6 +40,28 @@ export const reconcileBalances = internalAction({
         // Transient RPC failure — leave the stale balance; next tick retries.
       }
     }
+
+    // Also refresh the compliance signer (Vigilant Citizen bot) per chain.
+    for (const [chainId, subdomain] of subByChain) {
+      const signer = await ctx.runQuery(
+        internal.compliance.store._complianceSignerForChain,
+        { chainId },
+      );
+      if (!signer) continue;
+      try {
+        const balHex = await rpc<string>(
+          alchemyUrl(subdomain),
+          "eth_getBalance",
+          [signer.address, "latest"],
+        );
+        await ctx.runMutation(
+          internal.compliance.store.setComplianceSignerBalance,
+          { chainId, balanceWei: BigInt(balHex).toString() },
+        );
+      } catch {
+        // Transient — next tick retries.
+      }
+    }
     return { reconciled };
   },
 });

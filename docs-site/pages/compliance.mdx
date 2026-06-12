@@ -1,0 +1,64 @@
+# Compliance
+
+Pampalo is **non-custodial**. The protocol never holds your funds: your keys
+are derived on your device from your passkey, and the server stores only
+ciphertext and public material. Pampalo cannot move, freeze, or seize a
+user's funds — and neither can anyone else.
+
+Within that constraint, Pampalo screens entry into the private pool and
+declines to admit funds from sanctioned or otherwise blocked sources.
+
+## How entry is screened
+
+Depositing into the pool ("shielding") is **permissionless** at the contract
+level — anyone can submit a valid shield. To make screening possible anyway,
+every shield enters a **holding period** before it becomes a private note:
+
+1. **Shield queued.** The deposit is escrowed by the contract. No private
+   note exists yet.
+2. **Holding period (default 1 hour).** During this window the deposit can be
+   **contested**. A contest cancels the pending shield and **refunds the full
+   amount to the depositor's public wallet** in the same transaction — no
+   funds are lost, and no user action is required to recover them.
+3. **Executed.** If the holding period passes without a contest, the note is
+   inserted into the pool and becomes spendable.
+
+Because entry is permissionless, this **post-hoc contest during the holding
+period is the enforcement point** — the protocol can't block a deposit at the
+moment it's made, but it can decline to admit it before it becomes private.
+
+## What gets blocked
+
+A backend process continuously screens every queued shield against a
+blocklist of EVM addresses and contests any match before its holding period
+elapses. The blocklist is assembled from multiple sources:
+
+- **Chainalysis on-chain sanctions oracle.** Pampalo indexes the oracle's
+  full history — every address it has ever flagged, from the oracle's first
+  day — by reading its `SanctionedAddressesAdded` / `SanctionedAddressesRemoved`
+  events on Ethereum mainnet. A sanctioned address is sanctioned on every
+  chain, so this list applies pool-wide. The index stays current
+  automatically.
+- **Published blocklists.** Additional vetted lists (e.g. OFAC SDN
+  addresses, and lists shared across privacy protocols such as Railgun) can
+  be ingested on a schedule from operator-configured sources.
+- **Manual entries.** Operators can add or remove specific addresses.
+
+Pampalo reuses the same screening infrastructure that established privacy
+protocols rely on, rather than inventing its own — the Chainalysis sanctions
+oracle is the shared, on-chain source of truth.
+
+## Refusing and pausing
+
+Pampalo never custodies any of its users' funds.
+
+Pampalo reserves the right to refuse entry to anyone — and can stop offering
+private money shielding at any time by calling the `weAreFull()` function.
+This disables shielding into the pool, but all users can still withdraw their
+funds; they just can't encrypt any more.
+
+---
+
+_Pampalo is experimental, currently unaudited, and in active development.
+Screening is best-effort and provided without warranty. See
+[Pampalo the Company](/pampalo-company)._

@@ -8,6 +8,11 @@ import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 import { AccountAvatar } from "@/components/pampalo/AccountAvatar";
 import { AssetRow, type AssetRowData } from "@/components/pampalo/AssetRow";
+import type { CancelRequest } from "@/components/pampalo/PendingShieldsList";
+import {
+  CancelShieldSheet,
+  type CancelShieldPayload,
+} from "@/components/pampalo/shield/CancelShieldSheet";
 import { warmShield } from "@/lib/shield-prep";
 import {
   usePrivateBalances,
@@ -221,6 +226,44 @@ function Dashboard({
     useState<ShieldConfirmPayload | null>(null);
   const [unshieldPayload, setUnshieldPayload] =
     useState<UnshieldConfirmPayload | null>(null);
+  const [cancelPayload, setCancelPayload] =
+    useState<CancelShieldPayload | null>(null);
+
+  // Resolve a queued pending shield's on-chain pendingId (from the user's
+  // shield-queue rows) + its deployment router, then open the cancel sheet.
+  const myShields = useQuery(
+    api.shieldQueue.store.byShielder,
+    addresses.evm ? { shielder: addresses.evm } : "skip",
+  );
+  const deploymentRows = useQuery(
+    api.shieldQueue.store.enabledDeployments,
+    {},
+  );
+  const pendingIdByLeaf = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of myShields ?? []) {
+      if (r.state === "queued") m.set(r.leafCommitment.toLowerCase(), r.pendingId);
+    }
+    return m;
+  }, [myShields]);
+  const handleCancelPending = (req: CancelRequest) => {
+    const pendingId = pendingIdByLeaf.get(req.leafCommitment.toLowerCase());
+    const dep = deploymentRows?.find((d) => d.chainId === req.chainId);
+    if (!pendingId || !dep) {
+      toast.error("Couldn't resolve this shield yet — tap Sync and try again.");
+      return;
+    }
+    setCancelPayload({
+      pendingId,
+      chainId: req.chainId,
+      pampaloAddress: dep.pampaloAddress,
+      amount: req.amount,
+      symbol: req.symbol,
+      decimals: req.decimals,
+      leafCommitment: req.leafCommitment,
+      priceUsd: req.priceUsd ?? null,
+    });
+  };
 
   // Per-(chain, asset) "tx confirming on-chain" set. While a row is
   // in here, AssetRow disables its slider + action buttons and shows
@@ -514,6 +557,7 @@ function Dashboard({
                     shieldableKeys={shieldableKeys}
                     onShield={setShieldPayload}
                     onUnshield={setUnshieldPayload}
+                    onCancelPending={handleCancelPending}
                     privateBuckets={privateBalances.perAsset}
                     pendingMoves={pendingMoves}
                   />
@@ -545,6 +589,14 @@ function Dashboard({
         onBroadcasted={(p) =>
           registerPendingMove("unshield", p.chainId, p.assetAddress, p.txHash)
         }
+      />
+      <CancelShieldSheet
+        open={cancelPayload !== null}
+        onOpenChange={(next) => {
+          if (!next) setCancelPayload(null);
+        }}
+        payload={cancelPayload}
+        evmAddress={addresses.evm}
       />
     </>
   );
@@ -829,6 +881,7 @@ function AssetGroupRow({
   shieldableKeys,
   onShield,
   onUnshield,
+  onCancelPending,
   privateBuckets,
   pendingMoves,
 }: {
@@ -839,6 +892,7 @@ function AssetGroupRow({
   shieldableKeys: Set<string>;
   onShield: (payload: ShieldConfirmPayload) => void;
   onUnshield: (payload: UnshieldConfirmPayload) => void;
+  onCancelPending: (req: CancelRequest) => void;
   privateBuckets: AssetBucket[];
   /** Wallet-level "tx confirming on-chain" set, keyed by
    *  `${chainId}:${assetAddress.toLowerCase()}`. */
@@ -977,6 +1031,7 @@ function AssetGroupRow({
       confirmingKind={confirmingMove?.kind ?? null}
       queuedNotes={queuedNotes}
       executableNotes={executableNotes}
+      onCancel={onCancelPending}
       onFinalise={(note) => {
         // Finalise CTA wiring lands in a follow-up — for now we
         // just point the user at /sentry where Sponsor finalise

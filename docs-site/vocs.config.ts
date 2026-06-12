@@ -21,6 +21,7 @@ export default defineConfig({
         { text: "CLI", link: "/building/cli" },
       ],
     },
+    { text: "Compliance", link: "/compliance" },
     { text: "Pampalo the Company", link: "/pampalo-company" },
   ],
   font: {
