@@ -120,7 +120,7 @@ export function SumInSumOut() {
 export function AnatomyOfANote() {
   return (
     <div className="pampdia">
-      <svg viewBox="0 0 960 414" role="img" aria-label="A note's four fields are hashed by poseidon2 into a single leaf commitment; the secret is the spend key and is never published. One recovery phrase derives three identities; the Poseidon identifier is the note's owner.">
+      <svg viewBox="0 0 960 424" role="img" aria-label="A note's four fields are hashed by poseidon2 into a single leaf commitment; the secret is the spend key and is never published. One recovery phrase derives three identities; the Poseidon identifier is the note's owner.">
         <g>
           <rect className="node" x="36" y="40" width="300" height="196" rx="12" />
           <text className="t-title" x="56" y="72" fontSize="17">Note</text>
@@ -170,31 +170,31 @@ export function AnatomyOfANote() {
         <line className="hair dash" x1="36" y1="266" x2="924" y2="266" />
         <text className="t-tick" x="36" y="294" fontSize="10">One recovery phrase → three identities</text>
 
-        <rect className="node-2" x="36" y="310" width="150" height="64" rx="12" />
-        <text className="t-mono" x="111" y="338" fontSize="11" textAnchor="middle">recovery</text>
-        <text className="t-mono" x="111" y="356" fontSize="11" textAnchor="middle">phrase</text>
+        <rect className="node-2" x="36" y="326" width="150" height="64" rx="12" />
+        <text className="t-mono" x="111" y="354" fontSize="11" textAnchor="middle">recovery</text>
+        <text className="t-mono" x="111" y="372" fontSize="11" textAnchor="middle">phrase</text>
 
-        <path className="flow" d="M186,330 C232,330 248,330 300,330" markerEnd="url(#pd-arrow)" />
-        <path className="flow" d="M186,342 C232,360 250,398 300,398" markerEnd="url(#pd-arrow)" />
-        <path className="flow-priv" d="M186,342 C300,420 360,330 442,330" markerEnd="url(#pd-arrow-priv)" />
+        <path className="flow-priv" d="M186,351 C243,351 243,316 300,316" markerEnd="url(#pd-arrow-priv)" />
+        <path className="flow" d="M186,358 H300" markerEnd="url(#pd-arrow)" />
+        <path className="flow" d="M186,365 C243,365 243,400 300,400" markerEnd="url(#pd-arrow)" />
 
         <g>
-          <rect className="node" x="300" y="312" width="190" height="36" rx="9" />
-          <text className="t-mono" x="316" y="334" fontSize="11.5">EVM address</text>
-          <text className="t-tick t-faint" x="474" y="334" fontSize="8" textAnchor="end">public · gas</text>
+          <rect className="node-priv" x="300" y="300" width="234" height="32" rx="9" />
+          <text className="t-mono t-priv" x="316" y="320" fontSize="11.5" fontWeight="600">Poseidon identifier</text>
+          <text className="t-tick t-priv" x="518" y="320" fontSize="8" textAnchor="end">= note owner</text>
         </g>
         <g>
-          <rect className="node" x="300" y="380" width="190" height="36" rx="9" />
-          <text className="t-mono" x="316" y="402" fontSize="11.5">Envelope key</text>
-          <text className="t-tick t-faint" x="474" y="402" fontSize="8" textAnchor="end">secp256k1</text>
+          <rect className="node" x="300" y="342" width="190" height="32" rx="9" />
+          <text className="t-mono" x="316" y="362" fontSize="11.5">EVM address</text>
+          <text className="t-tick t-faint" x="474" y="362" fontSize="8" textAnchor="end">public · gas</text>
         </g>
         <g>
-          <rect className="node-priv" x="500" y="312" width="234" height="36" rx="9" />
-          <text className="t-mono t-priv" x="516" y="334" fontSize="11.5" fontWeight="600">Poseidon identifier</text>
-          <text className="t-tick t-priv" x="718" y="334" fontSize="8" textAnchor="end">= note owner</text>
+          <rect className="node" x="300" y="384" width="190" height="32" rx="9" />
+          <text className="t-mono" x="316" y="404" fontSize="11.5">Envelope key</text>
+          <text className="t-tick t-faint" x="474" y="404" fontSize="8" textAnchor="end">secp256k1</text>
         </g>
 
-        <path className="flow-priv dash" d="M734,322 C812,300 812,184 270,184" markerEnd="url(#pd-arrow-priv)" opacity="0.7" />
+        <path className="flow-priv dash" d="M417,300 C417,240 370,184 270,184" markerEnd="url(#pd-arrow-priv)" opacity="0.7" />
       </svg>
     </div>
   );
