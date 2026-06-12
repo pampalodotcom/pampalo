@@ -1,4 +1,30 @@
-# Pampalo Smart Contracts
+# `@pampalo/contracts`
+
+Pampalo's core Solidity, published as importable source. Add it to any
+Hardhat/Foundry project to build contracts that **accept private payments**
+the way they accept an ERC-20.
+
+```bash
+npm install @pampalo/contracts
+```
+
+```solidity
+import {PrivatePaymentAcceptor} from "@pampalo/contracts/contracts/PrivatePaymentAcceptor.sol";
+import {PampaloPayments} from "@pampalo/contracts/contracts/PampaloPayments.sol";
+
+contract MyShop is PrivatePaymentAcceptor { /* ... */ }
+```
+
+The package ships raw `.sol` (no build step); `@openzeppelin/contracts` is the
+only dependency, and requires **solc ≥ 0.8.27**. Live Base Sepolia addresses
+ship in [`deployments/84532.json`](deployments/84532.json). Full guide: the
+Pampalo docs under **Building → Contracts**, and see
+[`contracts/mocks/MockShop.sol`](contracts/mocks/MockShop.sol) for a working
+reference storefront.
+
+---
+
+The rest of this README covers the protocol and this Hardhat workspace itself.
 
 This `contracts/` directory contains all source code used by pampalo to enable private money, and is a fork of commbank.eth's Private Unstoppable Money protocol, with some key differences. commbank.eth is essentially purely research, pampalo is its applied research (with a few other centralised services).
 

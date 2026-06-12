@@ -368,6 +368,16 @@ executable. Fast-tracking **skips the contest window**, so it is a
 deliberate "the operator vouches for this user this month" trust
 statement, not a convenience toggle. Resets each UTC month like the caps.
 
+**Booth drip**:
+A `BOOTH_OPERATOR_ROLE` event affordance for seeding attendees with a
+small amount of money fast. The operator scans an attendee's **shared
+address** QR and sends them **$1.00** — publicly (1 USDC to their EVM
+address) or privately ($1-worth of shielded ETH to their Poseidon /
+envelope). Surfaced as one-tap buttons on the otherwise-public
+[`/share`] page, shown only when the viewer holds the role on that
+deployment. Like **Fast-track**, it's a booth-operator power to onboard
+people quickly at an event, not a general user feature.
+
 **Monthly cap**:
 The per-address USD ceiling on shielded *and* unshielded volume per UTC
 month. Tracked on-chain as two independent buckets (`shieldUsage`,

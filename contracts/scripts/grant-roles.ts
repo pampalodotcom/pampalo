@@ -1,4 +1,5 @@
 import { network } from "hardhat";
+import { HDNodeWallet } from "ethers";
 import { readFile } from "node:fs/promises";
 
 // One-shot script: grants VIGILANT_CITIZEN_ROLE, FINANCE_MANAGER_ROLE,
@@ -62,6 +63,34 @@ async function main() {
     const tx = await pampalo.getFunction("grantRole")(role, TARGET);
     await tx.wait();
     console.log(`  ${name.padEnd(22)} granted (tx ${tx.hash})`);
+  }
+
+  // Compliance signer (index 5 of RELAYER_MNEMONIC) needs VIGILANT_CITIZEN
+  // to auto-contest on this deployment. Roles are per-contract, so re-grant
+  // on every redeploy. See ADR 0016/0017.
+  const mnemonic = process.env.RELAYER_MNEMONIC;
+  if (mnemonic) {
+    const compliance = HDNodeWallet.fromPhrase(
+      mnemonic,
+      undefined,
+      "m/44'/60'/0'/0/5",
+    ).address;
+    const role: string = await pampalo.getFunction("VIGILANT_CITIZEN_ROLE")();
+    const already: boolean = await pampalo.getFunction("hasRole")(
+      role,
+      compliance,
+    );
+    if (already) {
+      console.log(`  compliance signer ${compliance} already VIGILANT — skip`);
+    } else {
+      const tx = await pampalo.getFunction("grantRole")(role, compliance);
+      await tx.wait();
+      console.log(
+        `  VIGILANT_CITIZEN_ROLE → compliance signer ${compliance} (tx ${tx.hash})`,
+      );
+    }
+  } else {
+    console.log("  RELAYER_MNEMONIC not set — skipped compliance-signer grant.");
   }
 
   console.log("\n✓ Role grants complete.");

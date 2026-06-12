@@ -1,6 +1,6 @@
 {
-  "chainId": 84532,
-  "network": "baseSepolia",
+  "chainId": 8453,
+  "network": "base",
   "deployer": "0x77c2D739A68A086e359B6be91B72a2533c53f054",
   "pampalo": "0x86cC802B2d5a9EF41194E68ed69EeCC37AdAAf59",
   "poseidon2Huff": "0x55edf41867bA8F18f68c2E42614465f86C35AE4E",
@@ -17,5 +17,5 @@
     "usdc": "0xF1bCFbb62F3337295C2f33CCe0662574F4687b2A",
     "eth": "0x84A490A5f77C202aa89687c9105f8cf0e7485bE9"
   },
-  "timestamp": "2026-06-12T10:58:31.266Z"
+  "timestamp": "2026-06-12T11:28:38.926Z"
 }

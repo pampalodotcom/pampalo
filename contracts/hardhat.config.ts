@@ -48,6 +48,14 @@ function alchemyUrl(subdomain: string): string {
 // config still loads (read-only access via any network is fine).
 const hdAccounts = MNEMONIC ? { mnemonic: MNEMONIC } : [];
 
+// v2 deployer: MNEMONIC accounts[1]. Nonce-0 on both Base + Base Sepolia,
+// so deploying from it yields identical CREATE addresses across the two
+// chains. Base + baseSepolia use this; signers[0] on those networks is
+// therefore derivation index 1. See DEPLOYMENT.md / ADR 0017.
+const hdAccountsV2 = MNEMONIC
+  ? { mnemonic: MNEMONIC, initialIndex: 1, count: 10 }
+  : [];
+
 export default defineConfig({
   plugins: [hardhatToolboxMochaEthersPlugin, HardhatIgnitionEthersPlugin],
 
@@ -102,7 +110,7 @@ export default defineConfig({
     base: {
       type: "http",
       url: alchemyUrl("base-mainnet"),
-      accounts: hdAccounts,
+      accounts: hdAccountsV2,
       chainId: 8453,
     },
     sepolia: {
@@ -114,7 +122,7 @@ export default defineConfig({
     baseSepolia: {
       type: "http",
       url: alchemyUrl("base-sepolia"),
-      accounts: hdAccounts,
+      accounts: hdAccountsV2,
       chainId: 84532,
     },
   },
