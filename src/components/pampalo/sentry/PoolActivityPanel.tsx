@@ -1,5 +1,13 @@
+import { useMemo } from "react";
+import { formatUnits } from "ethers";
 import { useQuery } from "convex/react";
-import { ArrowLeftRight, ExternalLink, Sun, Waves } from "lucide-react";
+import {
+  ArrowLeftRight,
+  ExternalLink,
+  ShieldCheck,
+  Sun,
+  Waves,
+} from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import { txUrl } from "@/lib/explorer";
 import { cn } from "@/lib/utils";
@@ -41,8 +49,9 @@ function PanelShell({ children }: { children: React.ReactNode }) {
             Pool activity
           </h2>
           <p className="text-[11.5px] text-ink-mute">
-            Private transfers &amp; withdrawals. Amounts and recipients stay
-            hidden on-chain — only the transaction is public.
+            Confirmed deposits, private transfers &amp; withdrawals. Deposit
+            amounts are public; transfer &amp; withdrawal interiors stay hidden
+            on-chain.
           </p>
         </div>
       </header>
@@ -53,7 +62,26 @@ function PanelShell({ children }: { children: React.ReactNode }) {
 
 export function PoolActivityPanel({ filter }: { filter: NetworkFilter }) {
   const activity = useQuery(api.shieldQueue.store.recentActivity, { limit: 50 });
+  const tokens = useQuery(api.catalog.tokens.list, {});
+  const tokenMap = useMemo(() => {
+    const m = new Map<string, { symbol: string; decimals: number }>();
+    for (const t of tokens ?? [])
+      m.set(`${t.chainId}:${t.address.toLowerCase()}`, {
+        symbol: t.symbol,
+        decimals: t.decimals,
+      });
+    return m;
+  }, [tokens]);
   if (activity === undefined) return null;
+
+  // Confirmed deposits show a public amount (the ShieldQueued event); fall
+  // back to raw base units if the token isn't in the catalog.
+  const fmtAmount = (chainId: number, asset: string, amount: string): string => {
+    const t = tokenMap.get(`${chainId}:${asset.toLowerCase()}`);
+    if (!t) return amount;
+    const n = Number(formatUnits(amount, t.decimals));
+    return `${n.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${t.symbol}`;
+  };
 
   const rows =
     filter === "all"
@@ -68,7 +96,7 @@ export function PoolActivityPanel({ filter }: { filter: NetworkFilter }) {
     return (
       <PanelShell>
         <p className="rounded-2xl border border-line bg-paper-lo px-4 py-3 text-[12.5px] text-ink-soft">
-          No transfers or withdrawals on this network yet.
+          No pool activity on this network yet.
         </p>
       </PanelShell>
     );
@@ -79,6 +107,13 @@ export function PoolActivityPanel({ filter }: { filter: NetworkFilter }) {
       <ul className="flex flex-col gap-2">
         {rows.map((r) => {
           const isTransfer = r.kind === "transfer";
+          const isShield = r.kind === "shield";
+          const isUnshield = r.kind === "unshield";
+          const label = isShield
+            ? "Deposit"
+            : isTransfer
+              ? "Private transfer"
+              : "Withdrawal";
           const slug = networkSlugForChainId(r.chainId);
           const url = txUrl(r.chainId, r.txHash);
           return (
@@ -91,13 +126,15 @@ export function PoolActivityPanel({ filter }: { filter: NetworkFilter }) {
                 <span
                   className={cn(
                     "inline-flex size-7 shrink-0 items-center justify-center rounded-lg",
-                    isTransfer
-                      ? "bg-[var(--priv-soft)] text-[var(--priv)]"
-                      : "bg-[var(--pub-soft)] text-[var(--pub)]",
+                    isUnshield
+                      ? "bg-[var(--pub-soft)] text-[var(--pub)]"
+                      : "bg-[var(--priv-soft)] text-[var(--priv)]",
                   )}
                   aria-hidden
                 >
-                  {isTransfer ? (
+                  {isShield ? (
+                    <ShieldCheck className="size-3.5" />
+                  ) : isTransfer ? (
                     <ArrowLeftRight className="size-3.5" />
                   ) : (
                     <Sun className="size-3.5" />
@@ -106,26 +143,50 @@ export function PoolActivityPanel({ filter }: { filter: NetworkFilter }) {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-[13px] font-semibold text-ink">
-                      {isTransfer ? "Private transfer" : "Withdrawal"}
+                      {label}
                     </span>
                     {filter === "all" && slug && <NetworkChip network={slug} />}
                   </div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-ink-mute">
                     <span>{timeAgo(r.blockTime * 1000)}</span>
-                    <span aria-hidden>·</span>
-                    {r.relayerIndex !== null ? (
-                      <span className="inline-flex items-center rounded-full bg-paper px-1.5 py-0.5 font-semibold text-ink-soft">
-                        via relayer #{r.relayerIndex}
-                      </span>
+                    {isShield ? (
+                      <>
+                        {r.asset && r.amount && (
+                          <>
+                            <span aria-hidden>·</span>
+                            <span className="font-mono text-ink-soft">
+                              {fmtAmount(r.chainId, r.asset, r.amount)}
+                            </span>
+                          </>
+                        )}
+                        {r.shielder && (
+                          <>
+                            <span aria-hidden>·</span>
+                            <span className="font-mono">
+                              from {r.shielder.slice(0, 6)}…
+                              {r.shielder.slice(-4)}
+                            </span>
+                          </>
+                        )}
+                      </>
                     ) : (
-                      <span>self-broadcast</span>
-                    )}
-                    {r.payloadPreview && (
                       <>
                         <span aria-hidden>·</span>
-                        <span className="font-mono">
-                          payload {r.payloadPreview}
-                        </span>
+                        {r.relayerIndex !== null ? (
+                          <span className="inline-flex items-center rounded-full bg-paper px-1.5 py-0.5 font-semibold text-ink-soft">
+                            via relayer #{r.relayerIndex}
+                          </span>
+                        ) : (
+                          <span>self-broadcast</span>
+                        )}
+                        {r.payloadPreview && (
+                          <>
+                            <span aria-hidden>·</span>
+                            <span className="font-mono">
+                              payload {r.payloadPreview}
+                            </span>
+                          </>
+                        )}
                       </>
                     )}
                   </div>

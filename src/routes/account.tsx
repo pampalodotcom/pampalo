@@ -11,6 +11,7 @@ import { BeachScene } from "@/components/pampalo/BeachScene";
 import { MnemonicReveal } from "@/components/pampalo/MnemonicReveal";
 import { PageLayout } from "@/components/pampalo/PageLayout";
 import { PageLoading } from "@/components/pampalo/PageLoading";
+import { MonthlyCapCard } from "@/components/pampalo/MonthlyCapCard";
 import { PrimaryButton } from "@/components/pampalo/PrimaryButton";
 import { RetiredNotesHistory } from "@/components/pampalo/RetiredNotesHistory";
 import { ThemeToggle } from "@/components/pampalo/ThemeToggle";
@@ -231,6 +232,9 @@ function AccountPage() {
             )}
           </section>
         )}
+
+        {/* Per-network monthly shield/unshield limit usage (on-chain caps). */}
+        {addresses && <MonthlyCapCard evm={addresses.evm} />}
 
         {/* Read-only history of notes from redeployed-away contracts.
             Renders nothing unless the user holds retired notes (ADR 0018). */}

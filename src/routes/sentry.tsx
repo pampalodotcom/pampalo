@@ -35,6 +35,7 @@ import {
   ContestSheet,
   type ContestPayload,
 } from "@/components/pampalo/sentry/ContestSheet";
+import { ExplorerPanel } from "@/components/pampalo/sentry/ExplorerPanel";
 import { GasSponsorsPanel } from "@/components/pampalo/sentry/GasSponsorsPanel";
 import { PoolActivityPanel } from "@/components/pampalo/sentry/PoolActivityPanel";
 import { ComplianceSignerPanel } from "@/components/pampalo/sentry/ComplianceSignerPanel";
@@ -360,8 +361,9 @@ function Sentry() {
           )}
         </div>
 
-        {/* ─── Explorer: pool activity + gas sponsors — below the queue ─ */}
+        {/* ─── Explorer: lookup + pool activity + gas sponsors — below queue ─ */}
         <div className="mt-6">
+          <ExplorerPanel filter={filter} />
           <PoolActivityPanel filter={filter} />
           <GasSponsorsPanel filter={filter} />
           <ComplianceSignerPanel filter={filter} />

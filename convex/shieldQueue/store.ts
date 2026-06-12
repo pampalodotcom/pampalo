@@ -1,7 +1,12 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
-import { internalMutation, internalQuery, query } from "../_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  query,
+  type QueryCtx,
+} from "../_generated/server";
 import { lowerAddress } from "../lib/normalize";
 
 // Internal queries + mutations called by the indexer (`refresh.ts`) and
@@ -297,41 +302,58 @@ export const _upsertActivity = internalMutation({
 export type ActivityRow = {
   txHash: string;
   chainId: number;
-  kind: "transfer" | "unshield";
+  kind: "transfer" | "unshield" | "shield";
   blockTime: number;
   payloadPreview: string | null;
-  /** Relayer pool index when `from` is a known relayer account, else null
-   *  (self-broadcast). The user's own address is deliberately not surfaced
-   *  for self-broadcasts — the txHash links out for anyone who wants it. */
+  /** Relayer pool index when the broadcaster/finaliser is a known relayer
+   *  account, else null (self-broadcast). The user's own address is
+   *  deliberately not surfaced for self-broadcasts — the txHash links out. */
   relayerIndex: number | null;
+  // Public deposit detail — set only for kind === "shield". A confirmed
+  // deposit's asset/amount/shielder ARE public (the ShieldQueued event),
+  // unlike a transfer/unshield whose interior stays hidden.
+  asset?: string;
+  amount?: string;
+  shielder?: string;
 };
 
-/** Recent pool activity (newest first), classified transfer/unshield, with
+/** Recent pool activity (newest first): private spends (transfer/unshield)
+ *  PLUS confirmed deposits (executed shields), merged + time-sorted, with
  *  relayer attribution resolved against `relayerAccounts`. Public. */
 export const recentActivity = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args): Promise<ActivityRow[]> => {
     const limit = Math.min(args.limit ?? 50, 200);
-    const rows = await ctx.db
+
+    const spends = await ctx.db
       .query("pampaloActivity")
       .withIndex("by_block")
       .order("desc")
       .take(limit);
+    const deposits = await ctx.db
+      .query("shieldQueueEntries")
+      .withIndex("by_state", (q) => q.eq("state", "executed"))
+      .order("desc")
+      .take(limit);
 
-    // Resolve chainId per deployment + relayer addresses per chain, cached.
+    // Cached resolvers: deployment → chainId, chainId → relayer index map.
     const chainByDep = new Map<string, number | null>();
     const relayerByChain = new Map<number, Map<string, number>>();
-    const out: ActivityRow[] = [];
-    for (const r of rows) {
-      let chainId = chainByDep.get(r.deploymentId);
+    const resolveChain = async (
+      deploymentId: Id<"pampaloDeployments">,
+    ): Promise<number | null> => {
+      let chainId = chainByDep.get(deploymentId);
       if (chainId === undefined) {
-        const dep = await ctx.db.get(r.deploymentId);
+        const dep = await ctx.db.get(deploymentId);
         const net = dep ? await ctx.db.get(dep.networkId) : null;
         chainId = net?.chainId ?? null;
-        chainByDep.set(r.deploymentId, chainId);
+        chainByDep.set(deploymentId, chainId);
       }
-      if (chainId === null) continue;
-
+      return chainId;
+    };
+    const resolveRelayers = async (
+      chainId: number,
+    ): Promise<Map<string, number>> => {
       let relayers = relayerByChain.get(chainId);
       if (!relayers) {
         const accts = await ctx.db
@@ -341,6 +363,15 @@ export const recentActivity = query({
         relayers = new Map(accts.map((a) => [a.address, a.accountIndex]));
         relayerByChain.set(chainId, relayers);
       }
+      return relayers;
+    };
+
+    const out: ActivityRow[] = [];
+
+    for (const r of spends) {
+      const chainId = await resolveChain(r.deploymentId);
+      if (chainId === null) continue;
+      const relayers = await resolveRelayers(chainId);
       out.push({
         txHash: r.txHash,
         chainId,
@@ -350,7 +381,28 @@ export const recentActivity = query({
         relayerIndex: relayers.get(r.from) ?? null,
       });
     }
-    return out;
+
+    for (const s of deposits) {
+      const chainId = await resolveChain(s.deploymentId);
+      if (chainId === null) continue;
+      const relayers = await resolveRelayers(chainId);
+      // Execution block time anchors the merge; fall back to first-seen.
+      const blockTime = s.resolvedAt ?? Math.floor(s.queuedAt / 1000);
+      out.push({
+        txHash: s.resolvedTxHash ?? s.queuedTxHash,
+        chainId,
+        kind: "shield",
+        blockTime,
+        payloadPreview: null,
+        relayerIndex: s.resolvedBy ? (relayers.get(s.resolvedBy) ?? null) : null,
+        asset: s.asset,
+        amount: s.amount,
+        shielder: s.shielder,
+      });
+    }
+
+    out.sort((a, b) => b.blockTime - a.blockTime);
+    return out.slice(0, limit);
   },
 });
 
@@ -682,6 +734,189 @@ export const listArchivedDeployments = query({
         .collect();
     }
     return await ctx.db.query("archivedDeployments").order("desc").collect();
+  },
+});
+
+// ─── /sentry block-explorer lookups ──────────────────────────────────────
+// Cross-chain by design: each query searches every deployment and tags
+// results with their chain, mirroring `byShielder`. Only PUBLIC on-chain
+// material is exposed (shielder address, amounts at queue time, tx hashes,
+// leaf commitments) — never the private note interior, which isn't stored.
+
+export type ExplorerShield = {
+  chainId: number;
+  networkName: string;
+  pendingId: string;
+  shielder: string;
+  asset: string;
+  amount: string;
+  state: string;
+  unlockTime: number;
+  usdCentsCharged: number;
+  queuedTxHash: string;
+  resolvedTxHash?: string;
+  leafCommitment: string;
+  queuedAt: number;
+};
+
+export type ExplorerActivity = {
+  chainId: number;
+  networkName: string;
+  txHash: string;
+  kind: string;
+  from: string;
+  blockNumber: number;
+  blockTime: number;
+};
+
+export type ExplorerLeaf = {
+  chainId: number;
+  networkName: string;
+  epoch: number;
+  leafIndex: number;
+  leafCommitment: string;
+  insertedTxHash: string;
+};
+
+type ChainMeta = { chainId: number; networkName: string };
+
+async function deploymentChainMap(
+  ctx: QueryCtx,
+): Promise<Map<Id<"pampaloDeployments">, ChainMeta>> {
+  const deps = await ctx.db.query("pampaloDeployments").collect();
+  const map = new Map<Id<"pampaloDeployments">, ChainMeta>();
+  for (const d of deps) {
+    const net = await ctx.db.get(d.networkId);
+    if (net) map.set(d._id, { chainId: net.chainId, networkName: net.name });
+  }
+  return map;
+}
+
+function toExplorerShield(
+  r: Doc<"shieldQueueEntries">,
+  chains: Map<Id<"pampaloDeployments">, ChainMeta>,
+): ExplorerShield | null {
+  const meta = chains.get(r.deploymentId);
+  if (!meta) return null;
+  return {
+    chainId: meta.chainId,
+    networkName: meta.networkName,
+    pendingId: r.pendingId,
+    shielder: r.shielder,
+    asset: r.asset,
+    amount: r.amount,
+    state: r.state,
+    unlockTime: r.unlockTime,
+    usdCentsCharged: r.usdCentsCharged,
+    queuedTxHash: r.queuedTxHash,
+    resolvedTxHash: r.resolvedTxHash,
+    leafCommitment: r.leafCommitment,
+    queuedAt: r.queuedAt,
+  };
+}
+
+/** Address lookup: every shield this address has queued, newest first,
+ *  enriched with chain. (Public ShieldQueued material.) */
+export const lookupByAddress = query({
+  args: { address: v.string() },
+  handler: async (ctx, args): Promise<ExplorerShield[]> => {
+    const addr = lowerAddress(args.address);
+    const rows = await ctx.db
+      .query("shieldQueueEntries")
+      .withIndex("by_shielder", (q) => q.eq("shielder", addr))
+      .order("desc")
+      .take(100);
+    const chains = await deploymentChainMap(ctx);
+    return rows
+      .map((r) => toExplorerShield(r, chains))
+      .filter((s): s is ExplorerShield => s !== null);
+  },
+});
+
+/** Tx-hash lookup: shields queued at this tx + any pool-activity
+ *  (transfer/unshield) broadcast in it, across all chains. */
+export const lookupByTxHash = query({
+  args: { txHash: v.string() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ shields: ExplorerShield[]; activity: ExplorerActivity[] }> => {
+    const tx = args.txHash.toLowerCase();
+    const chains = await deploymentChainMap(ctx);
+
+    const shieldRows = await ctx.db
+      .query("shieldQueueEntries")
+      .withIndex("by_queuedTxHash", (q) => q.eq("queuedTxHash", tx))
+      .collect();
+    const shields = shieldRows
+      .map((r) => toExplorerShield(r, chains))
+      .filter((s): s is ExplorerShield => s !== null);
+
+    const activity: ExplorerActivity[] = [];
+    for (const [deploymentId, meta] of chains) {
+      const rows = await ctx.db
+        .query("pampaloActivity")
+        .withIndex("by_deployment_and_tx", (q) =>
+          q.eq("deploymentId", deploymentId).eq("txHash", tx),
+        )
+        .collect();
+      for (const a of rows) {
+        activity.push({
+          chainId: meta.chainId,
+          networkName: meta.networkName,
+          txHash: a.txHash,
+          kind: a.kind,
+          from: a.from,
+          blockNumber: a.blockNumber,
+          blockTime: a.blockTime,
+        });
+      }
+    }
+
+    return { shields, activity };
+  },
+});
+
+/** Leaf-commitment lookup: the leaf's tree position + the shield (if any)
+ *  that minted it, across all chains. */
+export const lookupByLeaf = query({
+  args: { leafCommitment: v.string() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ leaves: ExplorerLeaf[]; shields: ExplorerShield[] }> => {
+    const leaf = args.leafCommitment.toLowerCase();
+    const chains = await deploymentChainMap(ctx);
+
+    const leaves: ExplorerLeaf[] = [];
+    for (const [deploymentId, meta] of chains) {
+      const row = await ctx.db
+        .query("pampaloLeaves")
+        .withIndex("by_deployment_and_commitment", (q) =>
+          q.eq("deploymentId", deploymentId).eq("leafCommitment", leaf),
+        )
+        .unique();
+      if (row) {
+        leaves.push({
+          chainId: meta.chainId,
+          networkName: meta.networkName,
+          epoch: row.epoch,
+          leafIndex: row.leafIndex,
+          leafCommitment: row.leafCommitment,
+          insertedTxHash: row.insertedTxHash,
+        });
+      }
+    }
+
+    const shieldRows = await ctx.db
+      .query("shieldQueueEntries")
+      .withIndex("by_leafCommitment", (q) => q.eq("leafCommitment", leaf))
+      .collect();
+    const shields = shieldRows
+      .map((r) => toExplorerShield(r, chains))
+      .filter((s): s is ExplorerShield => s !== null);
+
+    return { leaves, shields };
   },
 });
 

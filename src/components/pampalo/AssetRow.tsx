@@ -480,6 +480,8 @@ export function AssetRow({
             queuedNotes={queuedNotes ?? []}
             executableNotes={executableNotes ?? []}
             onFinalise={onFinalise}
+            onCancel={onCancel}
+            priceUsd={asset.priceUsd}
             roundTo={asset.roundTo}
           />
         </div>
