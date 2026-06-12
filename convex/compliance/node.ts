@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import { HDNodeWallet, Interface } from "ethers";
 import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
-import { alchemyUrl, rpc } from "../lib/alchemy";
+import { alchemyUrl, rpc, suggestedPriorityFeeWei } from "../lib/alchemy";
 import type { BlockMatch } from "./store";
 
 // Automated compliance scan + contest (ADR 0016). Walks the still-queued
@@ -171,7 +171,7 @@ export const scanAndContest = internalAction({
           ["latest", false],
         );
         const baseFee = BigInt(block.baseFeePerGas ?? "0x0");
-        const maxPriorityFeePerGas = 1_000_000_000n;
+        const maxPriorityFeePerGas = await suggestedPriorityFeeWei(url);
         const maxFeePerGas = baseFee * 2n + maxPriorityFeePerGas;
         const signed = await signer().signTransaction({
           to: e.pampalo,

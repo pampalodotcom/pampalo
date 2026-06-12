@@ -77,3 +77,24 @@ export async function rpcBatch<T>(
   }
   return body;
 }
+
+// Bounded EIP-1559 priority fee (tip) for relayer / compliance-signer txs.
+// The old hardcoded 1 gwei tip was ~100x the real cost on Base — an L2 whose
+// sequencer needs almost no tip (a private transfer was costing ~$7). We take
+// the node's `eth_maxPriorityFeePerGas` suggestion, floored to a small
+// non-zero tip (so a 0 suggestion still lands) and capped so a spiky / bad
+// RPC value can't blow up fees.
+const PRIORITY_FLOOR_WEI = 1_000_000n; // 0.001 gwei
+const PRIORITY_CAP_WEI = 100_000_000n; // 0.1 gwei
+
+export async function suggestedPriorityFeeWei(url: string): Promise<bigint> {
+  let suggested: bigint;
+  try {
+    suggested = BigInt(await rpc<string>(url, "eth_maxPriorityFeePerGas", []));
+  } catch {
+    suggested = 0n; // node may not support it → fall back to the floor
+  }
+  if (suggested < PRIORITY_FLOOR_WEI) return PRIORITY_FLOOR_WEI;
+  if (suggested > PRIORITY_CAP_WEI) return PRIORITY_CAP_WEI;
+  return suggested;
+}

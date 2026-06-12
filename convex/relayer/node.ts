@@ -4,7 +4,7 @@ import { HDNodeWallet, Interface } from "ethers";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { action, internalAction } from "../_generated/server";
-import { alchemyUrl, rpc } from "../lib/alchemy";
+import { alchemyUrl, rpc, suggestedPriorityFeeWei } from "../lib/alchemy";
 import type { RelayerDeployment } from "./store";
 
 // Signing + broadcasting half of the gas-sponsoring relayer (TRANSFERS.md
@@ -172,7 +172,7 @@ export const relay = action({
         ["latest", false],
       );
       const baseFee = BigInt(block.baseFeePerGas ?? "0x0");
-      const maxPriorityFeePerGas = 1_000_000_000n; // 1 gwei
+      const maxPriorityFeePerGas = await suggestedPriorityFeeWei(url);
       const maxFeePerGas = baseFee * 2n + maxPriorityFeePerGas;
       const gasLimit = GAS_LIMIT[kind];
 
