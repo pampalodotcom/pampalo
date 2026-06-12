@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "name": "agent1",
+  "address": "0xf4E47839E75B49fa855f170F85e9C4EdC88Fa5d0",
+  "kdf": {
+    "name": "scrypt",
+    "n": 131072,
+    "r": 8,
+    "p": 1,
+    "saltHex": "433ef852214ebadb4b4e9a016d69f8f1d540b2c0718d7ef1320a25559c611038"
+  },
+  "cipher": "aes-256-gcm",
+  "ivHex": "c955cdb3ace9141adb05e7ad",
+  "ciphertextHex": "f6acea12d7dc8488be1cc77ba568a934dc34821156902dac87169478d097334981b880fac5c0e1ea6a27f68713c81251722ee82cb2d158081e2d57f05f87796d21fb3cf92070c28b868a",
+  "tagHex": "dfb6b24271ce79540369b6b24cb2ee4b"
+}
