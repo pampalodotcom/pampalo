@@ -1,11 +1,11 @@
-import { useMemo, useState, useSyncExternalStore } from "react";
-import { parseUnits } from "ethers";
-import { useQuery } from "convex/react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { formatEther, parseUnits } from "ethers";
+import { useAction, useQuery } from "convex/react";
 import { Loader2, Moon, Sun } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../../../convex/_generated/api";
 import { useAuth } from "@/lib/auth";
-import { useDeploymentRoles } from "@/lib/use-deployment-roles";
+import { usePublicBalance } from "@/lib/balances";
 import { useRpcClient } from "@/lib/rpc";
 import { useMerkleTree } from "@/lib/use-merkle-tree";
 import {
@@ -36,31 +36,66 @@ import { cn } from "@/lib/utils";
 //
 // Flow: a booth operator (on-chain BOOTH_OPERATOR_ROLE) scans an
 // attendee's share QR with their phone camera, landing on
-// /share?e=…&k=…&o=…&c=… while signed in. This bar then offers a
-// one-tap "$1.00" drip — public (1 USDC to their EVM address) or
-// private ($1-of-ETH shielded transfer to their Poseidon/envelope).
+// /share?e=…&k=…&o=…&c=… while signed in. This bar offers a one-tap
+// "$1.00" drip — public ($1 of ETH to their EVM address) or private ($1
+// of shielded ETH to their Poseidon/envelope).
+//
+// Both sends are $1-WORTH of ETH at the live eth/usd feed. The operator
+// can pick any chain they hold BOOTH_OPERATOR_ROLE on (Base, Base
+// Sepolia, …) — not just the chain encoded in the link.
 //
 // The send logic mirrors send/SendReviewStep.tsx's runPublic/runPrivate
-// faithfully (same gas/nonce/EIP-1559 handling, same prepareTransfer +
-// broadcastPrivate + optimistic IDB writes), but it's driven by toasts
-// instead of a review panel so the operator can clear a queue fast.
-//
-// Caveats baked into the UX:
-//   - "$1.00" public = 1 USDC. Private has no USDC shielding yet, so
-//     private = $1-WORTH of ETH at the live eth/usd feed, and needs a
-//     spendable shielded ETH note + a synced wallet.
-//   - Private self-broadcasts on non-sponsoring chains; Base Sepolia
-//     sponsors, so the booth's address stays off-chain there.
+// (same gas/nonce/EIP-1559 handling, same prepareTransfer +
+// broadcastPrivate + optimistic IDB writes), driven by toasts so the
+// operator can clear a queue fast. Private self-broadcasts on
+// non-sponsoring chains; sponsoring chains keep the booth's address off-
+// chain.
 
-const PUBLIC_SEND_GAS_LIMIT_ERC20 = 100_000n;
+const PUBLIC_SEND_GAS_LIMIT_NATIVE = 21_000n;
 const TRANSFER_GAS_LIMIT = 8_000_000n;
 
 type Triple = { evm: string; envelope: string; poseidon: string };
 type Target = { evm?: string; envelope?: string; poseidon?: string };
 
-/** Gate: only renders the (hook-heavy) buttons for a signed-in booth
- *  operator on the link's chain. Everyone else gets nothing, so the
- *  page stays the plain public share surface it was. */
+/** Resolve the set of chainIds (among `chains`) on which `evm` holds
+ *  BOOTH_OPERATOR_ROLE. Returns null while loading. One hasRoles probe
+ *  per chain — fine for the 1–2 chains we run. */
+function useBoothChains(
+  chains: number[],
+  evm: string | null,
+): Set<number> | null {
+  const fetcher = useAction(api.shieldQueue.proxy.hasRoles);
+  const [result, setResult] = useState<Set<number> | null>(null);
+  const key = chains.join(",");
+
+  useEffect(() => {
+    if (!evm || chains.length === 0) {
+      setResult(new Set());
+      return;
+    }
+    const controller = new AbortController();
+    void Promise.all(
+      chains.map((chainId) =>
+        fetcher({ chainId, user: evm })
+          .then((r) => ({ chainId, ok: Boolean(r?.boothOperator) }))
+          .catch(() => ({ chainId, ok: false })),
+      ),
+    ).then((rows) => {
+      if (controller.signal.aborted) return;
+      setResult(new Set(rows.filter((r) => r.ok).map((r) => r.chainId)));
+    });
+    return () => {
+      controller.abort();
+    };
+    // `key` is the chains array joined — re-probes when the set changes.
+  }, [key, evm, fetcher]);
+
+  return result;
+}
+
+/** Gate: only renders the (hook-heavy) booth panel for a signed-in
+ *  operator who holds the role on at least one enabled chain. Everyone
+ *  else gets nothing, so the page stays the plain public share surface. */
 export function BoothSendBar({
   chainId,
   target,
@@ -72,25 +107,119 @@ export function BoothSendBar({
   const addresses =
     auth.state.status === "authenticated" ? auth.state.addresses : null;
   const signedInEvm = addresses?.evm ?? null;
-  const roles = useDeploymentRoles(chainId, signedInEvm);
 
-  if (!addresses || chainId === null) return null;
-  if (!roles?.boothOperator) return null;
+  const deployments = useQuery(api.shieldQueue.store.enabledDeployments, {});
+  const chainIds = useMemo(
+    () => deployments?.map((d) => d.chainId) ?? [],
+    [deployments],
+  );
+  const boothChains = useBoothChains(chainIds, signedInEvm);
+
+  if (!addresses) return null;
+  if (!deployments || boothChains === null) return null; // loading
+  if (boothChains.size === 0) return null; // not a booth operator anywhere
 
   return (
-    <BoothSendButtons chainId={chainId} account={addresses} target={target} />
+    <BoothSendPanel
+      deployments={deployments}
+      boothChains={boothChains}
+      linkChainId={chainId}
+      account={addresses}
+      target={target}
+    />
+  );
+}
+
+type DeploymentRow = {
+  chainId: number;
+  networkName: string;
+  pampaloAddress: string;
+  sponsoringTxs: boolean;
+};
+
+function BoothSendPanel({
+  deployments,
+  boothChains,
+  linkChainId,
+  account,
+  target,
+}: {
+  deployments: DeploymentRow[];
+  boothChains: Set<number>;
+  linkChainId: number | null;
+  account: Triple;
+  target: Target;
+}) {
+  // Chains the operator can actually drip on, in catalog order.
+  const chains = useMemo(
+    () => deployments.filter((d) => boothChains.has(d.chainId)),
+    [deployments, boothChains],
+  );
+
+  // `chains` is non-empty here: the parent only renders BoothSendPanel when
+  // boothChains.size > 0, and boothChains ⊆ the deployment chainIds.
+  const [selected, setSelected] = useState<number>(() =>
+    linkChainId !== null && boothChains.has(linkChainId)
+      ? linkChainId
+      : chains[0].chainId,
+  );
+  // Keep the selection valid if the available set changes.
+  useEffect(() => {
+    if (!chains.some((c) => c.chainId === selected) && chains[0]) {
+      setSelected(chains[0].chainId);
+    }
+  }, [chains, selected]);
+
+  const deployment = chains.find((c) => c.chainId === selected) ?? null;
+  if (!deployment) return null;
+
+  return (
+    <div className="mt-5 border-t border-line pt-4">
+      <div className="mb-2.5 flex items-center justify-between">
+        <p className="eyebrow">Booth Operator</p>
+        <span className="text-[11px] text-ink-mute">Quick drip · $1.00</span>
+      </div>
+
+      {chains.length > 1 && (
+        <div className="mb-3 inline-flex rounded-full border border-line bg-card p-0.5">
+          {chains.map((c) => (
+            <button
+              key={c.chainId}
+              type="button"
+              onClick={() => setSelected(c.chainId)}
+              className={cn(
+                "rounded-full px-3 py-1 text-[12px] font-semibold transition-colors",
+                selected === c.chainId
+                  ? "bg-ink text-paper"
+                  : "text-ink-soft hover:text-ink",
+              )}
+            >
+              {c.networkName}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <BoothSendButtons
+        key={selected}
+        deployment={deployment}
+        account={account}
+        target={target}
+      />
+    </div>
   );
 }
 
 function BoothSendButtons({
-  chainId,
+  deployment,
   account,
   target,
 }: {
-  chainId: number;
+  deployment: DeploymentRow;
   account: Triple;
   target: Target;
 }) {
+  const chainId = deployment.chainId;
   const rpc = useRpcClient();
   const fallback = useSelfBroadcastFallback(account.evm);
 
@@ -100,19 +229,20 @@ function BoothSendButtons({
   const deployments = useQuery(api.shieldQueue.store.enabledDeployments, {});
   const gasQ = useQuery(api.prices.gas.latestForChain, { chainId });
   const prices = useQuery(api.prices.feeds.listLatest, {});
-  const tokens = useQuery(api.catalog.tokens.list, {});
   const merkle = useMerkleTree(chainId, hasPrivateTarget);
   const notes = useSyncExternalStore(subscribeNotes, getNotesSnapshot, () =>
     getNotesSnapshot(),
   );
-
-  const usdc = useMemo(
-    () =>
-      tokens?.find(
-        (t) => t.chainId === chainId && t.symbol.toUpperCase() === "USDC",
-      ) ?? null,
-    [tokens, chainId],
+  const ethToken = useMemo(
+    () => ({
+      chainId,
+      address: ETH_SENTINEL,
+      symbol: "ETH",
+      decimals: 18,
+    }),
+    [chainId],
   );
+  const publicBal = usePublicBalance(ethToken, account.evm);
 
   const ethUsd = useMemo<number | null>(() => {
     const feed = prices?.find((p) => p.shortId === "eth/usd");
@@ -120,13 +250,8 @@ function BoothSendButtons({
     return Number(feed.answer) / 10 ** feed.feedDecimals;
   }, [prices]);
 
-  const deployment = useMemo(
-    () => deployments?.find((d) => d.chainId === chainId) ?? null,
-    [deployments, chainId],
-  );
-
-  // $1 of ETH in wei, at the live feed price. Private has no USDC path.
-  const privateAmountWei = useMemo<bigint | null>(() => {
+  // $1 of ETH in wei, at the live feed price — the amount for BOTH sends.
+  const dripWei = useMemo<bigint | null>(() => {
     if (!ethUsd || ethUsd <= 0) return null;
     try {
       return parseUnits((1 / ethUsd).toFixed(18), 18);
@@ -135,46 +260,68 @@ function BoothSendButtons({
     }
   }, [ethUsd]);
 
-  // First spendable shielded ETH note that covers $1. Single-input
-  // only, same as the demo send path.
+  // Spendable shielded ETH on this chain's live deployment.
+  const privSpendableWei = useMemo<bigint>(() => {
+    if (!isNotesHydrated()) return 0n;
+    let sum = 0n;
+    for (const n of notes) {
+      if (
+        n.state === "spendable" &&
+        n.networkChainId === chainId &&
+        isNoteOnActiveDeployment(n, deployments) &&
+        n.asset === ETH_SENTINEL
+      ) {
+        sum += BigInt(n.amount);
+      }
+    }
+    return sum;
+  }, [notes, chainId, deployments]);
+
+  // First spendable shielded ETH note that covers $1 (single-input).
   const inputNote = useMemo(() => {
-    if (!hasPrivateTarget || privateAmountWei === null) return null;
+    if (!hasPrivateTarget || dripWei === null) return null;
     if (!isNotesHydrated()) return null;
     return (
       notes.find(
         (n) =>
           n.state === "spendable" &&
           n.networkChainId === chainId &&
-          // Retired-deployment notes are unspendable (ADR 0018).
           isNoteOnActiveDeployment(n, deployments) &&
           n.asset === ETH_SENTINEL &&
           n.leafIndex !== undefined &&
-          BigInt(n.amount) >= privateAmountWei,
+          BigInt(n.amount) >= dripWei,
       ) ?? null
     );
-  }, [hasPrivateTarget, privateAmountWei, notes, chainId, deployments]);
+  }, [hasPrivateTarget, dripWei, notes, chainId, deployments]);
+
+  const publicBalWei = publicBal.data?.balanceWei ?? null;
+  const publicAffordable =
+    publicBalWei !== null && dripWei !== null && publicBalWei >= dripWei;
 
   const [busy, setBusy] = useState<null | "public" | "private">(null);
 
   const sendPublic = async () => {
     if (busy) return;
     if (!target.evm) return void toast.error("No address on this link.");
-    if (!usdc) return void toast.error("USDC isn't configured on this chain.");
+    if (dripWei === null)
+      return void toast.error("ETH price not loaded yet — try again.");
     if (!gasQ?.gasPriceWei)
       return void toast.error("Gas price not loaded yet — try again.");
+    if (!publicAffordable)
+      return void toast.error("Not enough public ETH for a $1 drip.");
 
     const id = "booth-public";
     setBusy("public");
     toast.loading("Sending $1.00…", { id });
     try {
-      const amountWei = parseUnits("1", usdc.decimals);
       const nonceRes = await rpc.getNonce(chainId, account.evm);
       const useEip1559 = gasQ.priorityFeeWei !== undefined;
       const baseGasPriceWei = BigInt(gasQ.gasPriceWei);
+      // $1 of native ETH → a plain value transfer.
       const skeleton = buildSendTx({
-        tokenAddress: usdc.address,
+        tokenAddress: ETH_SENTINEL,
         recipient: target.evm.toLowerCase(),
-        amountWei,
+        amountWei: dripWei,
       });
       const signed = await signTransactionWithPasskey({
         chainId,
@@ -182,7 +329,7 @@ function BoothSendButtons({
         value: BigInt(skeleton.value),
         data: skeleton.data,
         nonce: Number(nonceRes.nonce),
-        gasLimit: PUBLIC_SEND_GAS_LIMIT_ERC20,
+        gasLimit: PUBLIC_SEND_GAS_LIMIT_NATIVE,
         gasPrice: useEip1559 ? undefined : baseGasPriceWei,
         maxFeePerGas: useEip1559 ? baseGasPriceWei : undefined,
         maxPriorityFeePerGas:
@@ -208,9 +355,7 @@ function BoothSendButtons({
     if (busy) return;
     if (!hasPrivateTarget || !target.poseidon || !target.envelope)
       return void toast.error("This link has no private identifier.");
-    if (!deployment)
-      return void toast.error("No Pampalo deployment for this chain.");
-    if (privateAmountWei === null)
+    if (dripWei === null)
       return void toast.error("ETH price not loaded yet — try again.");
     if (!gasQ?.gasPriceWei)
       return void toast.error("Gas price not loaded yet — try again.");
@@ -230,7 +375,7 @@ function BoothSendButtons({
     toast.loading("Preparing private $1.00…", { id });
     try {
       const noteAmount = BigInt(note.amount);
-      const sendAmount = privateAmountWei;
+      const sendAmount = dripWei;
       const change = noteAmount - sendAmount;
 
       const outputs = [
@@ -318,8 +463,7 @@ function BoothSendButtons({
             assetDecimals: note.assetDecimals,
             amount: out.amount,
             owner: out.owner,
-            secret:
-              "0x" + BigInt(out.secret).toString(16).padStart(64, "0"),
+            secret: "0x" + BigInt(out.secret).toString(16).padStart(64, "0"),
             networkChainId: chainId,
             deploymentAddress: deployment.pampaloAddress,
             leafCommitment: out.leafCommitment,
@@ -349,59 +493,77 @@ function BoothSendButtons({
 
   return (
     <>
-      <div className="mt-5 border-t border-line pt-4">
-        <div className="mb-2.5 flex items-center justify-between">
-          <p className="eyebrow">Booth Operator</p>
-          <span className="text-[11px] text-ink-mute">Quick drip · $1.00</span>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={sendPublic}
-            disabled={busy !== null || !hasPublicTarget}
-            className={cn(
-              "inline-flex h-[46px] items-center justify-center gap-2 rounded-full",
-              "bg-gradient-to-b from-[var(--pub-hi)] to-[var(--pub)]",
-              "text-[13px] font-bold text-white shadow-sm",
-              "transition-opacity hover:opacity-95",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-            )}
-          >
-            {busy === "public" ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Sun className="size-4" />
-            )}
-            Send $1.00 public
-          </button>
-          <button
-            type="button"
-            onClick={sendPrivate}
-            disabled={busy !== null || !hasPrivateTarget}
-            className={cn(
-              "inline-flex h-[46px] items-center justify-center gap-2 rounded-full",
-              "bg-gradient-to-b from-[var(--priv-hi)] to-[var(--priv)]",
-              "text-[13px] font-bold text-white shadow-sm",
-              "transition-opacity hover:opacity-95",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-            )}
-          >
-            {busy === "private" ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Moon className="size-4" />
-            )}
-            Send $1.00 private
-          </button>
-        </div>
-        <p className="mt-2 text-[11px] leading-snug text-ink-mute">
-          Public sends 1&nbsp;USDC to their address. Private sends $1 of
-          shielded ETH (needs a synced wallet with a spendable ETH note).
-        </p>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={sendPublic}
+          disabled={busy !== null || !hasPublicTarget || !publicAffordable}
+          className={cn(
+            "inline-flex h-[46px] items-center justify-center gap-2 rounded-full",
+            "bg-gradient-to-b from-[var(--pub-hi)] to-[var(--pub)]",
+            "text-[13px] font-bold text-white shadow-sm",
+            "transition-opacity hover:opacity-95",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+          )}
+        >
+          {busy === "public" ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Sun className="size-4" />
+          )}
+          Send $1.00 public
+        </button>
+        <button
+          type="button"
+          onClick={sendPrivate}
+          disabled={busy !== null || !hasPrivateTarget}
+          className={cn(
+            "inline-flex h-[46px] items-center justify-center gap-2 rounded-full",
+            "bg-gradient-to-b from-[var(--priv-hi)] to-[var(--priv)]",
+            "text-[13px] font-bold text-white shadow-sm",
+            "transition-opacity hover:opacity-95",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+          )}
+        >
+          {busy === "private" ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Moon className="size-4" />
+          )}
+          Send $1.00 private
+        </button>
       </div>
+
+      {/* Available-to-send per mode. Columns line up under the buttons. */}
+      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] leading-snug text-ink-mute">
+        <span>
+          {publicBal.isLoading || publicBalWei === null
+            ? "Public ETH: …"
+            : `Public: ${fmtEth(publicBalWei)} ETH${usdSuffix(publicBalWei, ethUsd)} available`}
+        </span>
+        <span>
+          {`Shielded: ${fmtEth(privSpendableWei)} ETH${usdSuffix(privSpendableWei, ethUsd)} spendable`}
+        </span>
+      </div>
+
+      <p className="mt-2 text-[11px] leading-snug text-ink-mute">
+        Each drip sends $1 of ETH — publicly to their address, or privately as
+        a shielded transfer (needs a synced wallet with a spendable ETH note).
+      </p>
       {fallback.element}
     </>
   );
+}
+
+function fmtEth(wei: bigint): string {
+  // 4 significant decimals is plenty for a $1-scale drip readout.
+  return Number(formatEther(wei)).toFixed(4);
+}
+
+function usdSuffix(wei: bigint, ethUsd: number | null): string {
+  if (!ethUsd || ethUsd <= 0) return "";
+  const usd = Number(formatEther(wei)) * ethUsd;
+  return ` (~$${usd.toFixed(2)})`;
 }
 
 function shortAddr(a: string): string {
