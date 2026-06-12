@@ -4,6 +4,7 @@ import { api } from "../../convex/_generated/api";
 import type { Doc } from "../../convex/_generated/dataModel";
 import {
   getNotesSnapshot,
+  isNoteRetired,
   isNotesHydrated,
   subscribeNotes,
   type StoredNote,
@@ -165,6 +166,9 @@ function aggregate(
     idbLeaves.add(n.leafCommitment.toLowerCase());
     if (n.state === "spent") continue;
     if (n.state === "cancelled" || n.state === "contested") continue;
+    // Notes from a redeployed-away contract are unspendable history; they
+    // don't count toward any live private balance bucket (ADR 0018).
+    if (isNoteRetired(n, deployments)) continue;
 
     const key = `${n.networkChainId}:${n.deploymentAddress}:${n.asset}`;
     let b = buckets.get(key);

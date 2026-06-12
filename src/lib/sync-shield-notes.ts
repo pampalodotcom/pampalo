@@ -63,6 +63,8 @@ export type SyncShieldNotesResult = {
   decryptFailed: number;
   /** Rows whose Convex `deploymentId` is no longer in `enabledDeployments`. */
   unknownDeployment: number;
+  /** Retired-deployment notes hydrated from the archive (ADR 0018). */
+  archivedAdded: number;
 };
 
 function emptyResult(): SyncShieldNotesResult {
@@ -72,6 +74,7 @@ function emptyResult(): SyncShieldNotesResult {
     skippedByCursor: 0,
     decryptFailed: 0,
     unknownDeployment: 0,
+    archivedAdded: 0,
   };
 }
 
@@ -79,6 +82,21 @@ function convexStateToIdb(
   s: "queued" | "executed" | "cancelled" | "contested",
 ): NoteState {
   return s === "executed" ? "spendable" : s;
+}
+
+// Archive rows store `state` as a free string; map tolerantly. Retired
+// notes are read-only history, so the exact spend-state is cosmetic.
+function archivedStateToIdb(s: string): NoteState {
+  switch (s) {
+    case "executed":
+      return "spendable";
+    case "queued":
+    case "cancelled":
+    case "contested":
+      return s;
+    default:
+      return "spendable";
+  }
 }
 
 // ─── Core ────────────────────────────────────────────────────────────────
@@ -213,7 +231,184 @@ export async function syncShieldNotesWithPrivKey(
     }
   }
 
+  // ─── Retired-deployment archive (ADR 0018) ──────────────────────────
+  // Hydrate read-only history for contracts we've redeployed away from,
+  // so the wallet's History panel shows the same retired notes on a fresh
+  // device. These land in IDB with their OLD deploymentAddress, so they
+  // derive as retired (idb-notes.isNoteRetired) and never reach the spend
+  // flow. Best-effort: a failure here must not poison live sync.
+  try {
+    await scanArchivedNotes(envelopePrivKey, evmAddress, tokens, result);
+  } catch (e) {
+    console.warn("[sync-shield-notes] archived scan failed", e);
+  }
+
   return result;
+}
+
+// Pull retired self-shields (by shielder) + retired received notes (per
+// archived chain) into IDB as read-only history. Mirrors the live paths
+// but reads the archive tables and tags notes with the OLD deployment
+// address. No cursor — relies on findNote() idempotency (archive sets are
+// small / testnet-scale).
+async function scanArchivedNotes(
+  envelopePrivKey: string,
+  evmAddress: string,
+  tokens: ReadonlyArray<TokenForDecimals>,
+  result: SyncShieldNotesResult,
+): Promise<void> {
+  const convex = getConvexClient();
+  if (!convex) return;
+
+  const [archivedShields, archivedDeployments] = await Promise.all([
+    convex.query(api.shieldQueue.store.archivedByShielder, {
+      shielder: evmAddress,
+    }),
+    convex.query(api.shieldQueue.store.listArchivedDeployments, {}),
+  ]);
+
+  const decimalsByChainAsset = new Map<string, number>();
+  for (const t of tokens) {
+    decimalsByChainAsset.set(
+      `${t.chainId}:${t.address.toLowerCase()}`,
+      t.decimals,
+    );
+  }
+
+  // Retired self-shields.
+  for (const row of archivedShields) {
+    const existing = await findNote(row.leafCommitment);
+    if (existing) {
+      result.skippedAlreadyPresent += 1;
+      continue;
+    }
+    let plain: {
+      secret: string;
+      owner: string;
+      asset_id: string;
+      asset_amount: string;
+    };
+    try {
+      const ciphertext = ciphertextToHex(row.encryptedPayload);
+      plain = await NoteDecryption.decryptNoteData(ciphertext, envelopePrivKey);
+    } catch {
+      result.decryptFailed += 1;
+      continue;
+    }
+    const asset = row.asset.toLowerCase();
+    const decimals =
+      decimalsByChainAsset.get(`${row.chainId}:${asset}`) ??
+      (asset === ETH_SENTINEL ? 18 : 0);
+    await appendNote({
+      asset,
+      assetDecimals: decimals,
+      amount: plain.asset_amount,
+      owner: "0x" + BigInt(plain.owner).toString(16).padStart(64, "0"),
+      secret: "0x" + BigInt(plain.secret).toString(16).padStart(64, "0"),
+      networkChainId: row.chainId,
+      deploymentAddress: row.archivedDeploymentAddress.toLowerCase(),
+      leafCommitment: row.leafCommitment,
+      origin: "shield",
+      state: archivedStateToIdb(row.state),
+      unlockTime: row.unlockTime,
+      queuedTxHash: row.queuedTxHash,
+    });
+    result.archivedAdded += 1;
+  }
+
+  // Retired received notes — one trial-decrypt pass per archived chain.
+  const archivedChains = new Set<number>(
+    archivedDeployments.map((d) => d.chainId),
+  );
+  for (const chainId of archivedChains) {
+    try {
+      await scanArchivedTransferNotesForChain(
+        envelopePrivKey,
+        chainId,
+        tokens,
+        result,
+      );
+    } catch (e) {
+      console.warn(
+        "[sync-shield-notes] archived transfer-in scan failed on chain",
+        chainId,
+        e,
+      );
+    }
+  }
+}
+
+async function scanArchivedTransferNotesForChain(
+  envelopePrivKey: string,
+  chainId: number,
+  tokens: ReadonlyArray<TokenForDecimals>,
+  result: SyncShieldNotesResult,
+): Promise<void> {
+  const convex = getConvexClient();
+  if (!convex) return;
+
+  const payloads = await convex.query(
+    api.shieldQueue.store.archivedNotePayloadsForChain,
+    { chainId },
+  );
+
+  const decimalsByAsset = new Map<string, number>();
+  for (const t of tokens) {
+    if (t.chainId !== chainId) continue;
+    decimalsByAsset.set(t.address.toLowerCase(), t.decimals);
+  }
+
+  for (const row of payloads) {
+    let plain: {
+      secret: string;
+      owner: string;
+      asset_id: string;
+      asset_amount: string;
+    };
+    try {
+      const ciphertext = ciphertextToHex(row.encryptedPayload);
+      plain = await NoteDecryption.decryptNoteData(ciphertext, envelopePrivKey);
+    } catch {
+      // Not ours — the common trial-decrypt miss. Quiet.
+      continue;
+    }
+
+    const leafBig = poseidon2Hash([
+      BigInt(plain.asset_id),
+      BigInt(plain.asset_amount),
+      BigInt(plain.owner),
+      BigInt(plain.secret),
+    ]);
+    const leafCommitment = "0x" + leafBig.toString(16).padStart(64, "0");
+
+    const existing = await findNote(leafCommitment);
+    if (existing) {
+      result.skippedAlreadyPresent += 1;
+      continue;
+    }
+
+    const assetBig = BigInt(plain.asset_id);
+    const assetLower =
+      ("0x" + assetBig.toString(16).padStart(40, "0")).toLowerCase();
+    const decimals =
+      decimalsByAsset.get(assetLower) ?? (assetLower === ETH_SENTINEL ? 18 : 0);
+
+    // Retired received note — no leafIndex (its tree is abandoned, never
+    // spent). It derives as retired from the old deployment address.
+    await appendNote({
+      asset: assetLower,
+      assetDecimals: decimals,
+      amount: plain.asset_amount,
+      owner: "0x" + BigInt(plain.owner).toString(16).padStart(64, "0"),
+      secret: "0x" + BigInt(plain.secret).toString(16).padStart(64, "0"),
+      networkChainId: chainId,
+      deploymentAddress: row.archivedDeploymentAddress.toLowerCase(),
+      leafCommitment,
+      origin: "transferIn",
+      state: "spendable",
+    });
+    result.archivedAdded += 1;
+  }
 }
 
 type TokenForDecimals = {
@@ -284,7 +479,7 @@ async function scanTransferInNotesForChain(
       owner: string;
       asset_id: string;
       asset_amount: string;
-    } | null = null;
+    };
     try {
       const ciphertext = ciphertextToHex(row.encryptedPayload);
       plain = await NoteDecryption.decryptNoteData(ciphertext, envelopePrivKey);
@@ -293,7 +488,6 @@ async function scanTransferInNotesForChain(
       // the common case in the trial-decrypt model.
       continue;
     }
-    if (!plain) continue;
 
     // Recompute the leaf commitment: poseidon2([asset_id, amount,
     // owner, secret]). Same layout as the circuits + shield-prep.

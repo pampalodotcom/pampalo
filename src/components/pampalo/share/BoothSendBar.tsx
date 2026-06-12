@@ -24,6 +24,7 @@ import { txUrl } from "@/lib/explorer";
 import {
   appendNote,
   getNotesSnapshot,
+  isNoteOnActiveDeployment,
   isNotesHydrated,
   patchNoteByLeaf,
   subscribeNotes,
@@ -144,12 +145,14 @@ function BoothSendButtons({
         (n) =>
           n.state === "spendable" &&
           n.networkChainId === chainId &&
+          // Retired-deployment notes are unspendable (ADR 0018).
+          isNoteOnActiveDeployment(n, deployments) &&
           n.asset === ETH_SENTINEL &&
           n.leafIndex !== undefined &&
           BigInt(n.amount) >= privateAmountWei,
       ) ?? null
     );
-  }, [hasPrivateTarget, privateAmountWei, notes, chainId]);
+  }, [hasPrivateTarget, privateAmountWei, notes, chainId, deployments]);
 
   const [busy, setBusy] = useState<null | "public" | "private">(null);
 

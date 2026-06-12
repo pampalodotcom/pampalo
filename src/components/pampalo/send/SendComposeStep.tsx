@@ -8,6 +8,7 @@ import { usePublicBalance } from "@/lib/balances";
 import { ETH_SENTINEL } from "@/lib/eth";
 import {
   getNotesSnapshot,
+  isNoteOnActiveDeployment,
   isNotesHydrated,
   subscribeNotes,
 } from "@/lib/idb-notes";
@@ -187,6 +188,9 @@ export function SendComposeStep({
   const notes = useSyncExternalStore(subscribeNotes, getNotesSnapshot, () =>
     getNotesSnapshot(),
   );
+  // Gate the spendable balance on the live deployment too — retired-
+  // deployment notes don't count toward what you can send (ADR 0018).
+  const deployments = useQuery(api.shieldQueue.store.enabledDeployments, {});
   const privSpendableWei = useMemo<bigint>(() => {
     if (mode !== "private" || chainId === null) return 0n;
     if (!isNotesHydrated()) return 0n;
@@ -195,13 +199,14 @@ export function SendComposeStep({
       if (
         n.state === "spendable" &&
         n.networkChainId === chainId &&
+        isNoteOnActiveDeployment(n, deployments) &&
         n.asset === ETH_SENTINEL
       ) {
         sum += BigInt(n.amount);
       }
     }
     return sum;
-  }, [mode, chainId, notes]);
+  }, [mode, chainId, notes, deployments]);
 
   const balanceWei =
     mode === "private"
@@ -221,6 +226,7 @@ export function SendComposeStep({
         if (
           n.state === "spendable" &&
           n.networkChainId === chainId &&
+          isNoteOnActiveDeployment(n, deployments) &&
           n.asset === ETH_SENTINEL
         ) {
           const w = BigInt(n.amount);
@@ -232,7 +238,7 @@ export function SendComposeStep({
     if (balanceWei === null) return 0n;
     const reserve = 5_000_000_000_000_000n; // 0.005 ETH gas buffer
     return balanceWei > reserve ? balanceWei - reserve : 0n;
-  }, [mode, chainId, notes, balanceWei]);
+  }, [mode, chainId, notes, balanceWei, deployments]);
 
   const onMax = () => {
     if (maxSpendable === 0n) return;

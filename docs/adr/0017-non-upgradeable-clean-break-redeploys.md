@@ -59,8 +59,9 @@ differs) and logs the counts.
   re-granted every redeploy (`scripts/grant-roles.ts`). Relayer/compliance
   EOAs are deterministic from `RELAYER_MNEMONIC`, so their funding persists.
 - **Clients hold stale local state.** A user's IDB still has old-tree
-  notes after a redeploy; they clear via `/clear`. (A future auto-detect-
-  and-clear on deployment change would smooth this.)
+  notes after a redeploy. **Superseded by ADR 0018:** those notes are no
+  longer cleared — they auto-retire (derived from the deployment address),
+  stay as read-only history, and `/clear` is not part of the cutover.
 - **Reversal cost:** adopting upgradeability later means re-architecting
   around a proxy + committing to storage-layout discipline forever. Staying
   non-upgradeable keeps each version a clean, auditable artifact.

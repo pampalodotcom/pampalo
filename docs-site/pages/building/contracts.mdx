@@ -121,25 +121,33 @@ What you get for free:
 without the public fallback. See `contracts/mocks/MockShop.sol` for the fuller
 storefront pattern (priced items, a `Delivered` event, per-item references).
 
-## Live deployment — Base Sepolia (84532)
+## Live deployments — Base & Base Sepolia
 
-The package bundles `deployments/84532.json`, so you can point at the running
-Pampalo without redeploying anything:
+The protocol and the `PampaloPayments` singleton are live on **Base mainnet
+(8453)** and **Base Sepolia (84532)** at the **same addresses on both chains**
+(the deploy is deterministic). The one address your acceptor needs is
+`PampaloPayments` — it's what you pass to the `PrivatePaymentAcceptor`
+constructor.
+
+| Contract | Address (identical on 8453 and 84532) |
+| --- | --- |
+| **`PampaloPayments`** (singleton) | `0x28A0f376e8e1B52514683c99DAD11AA489Bbb413` |
+| `Pampalo` (core protocol) | `0x86cC802B2d5a9EF41194E68ed69EeCC37AdAAf59` |
+| `RedeemVerifier` | `0x9bb517b3E01434575Ef41e77F04Ec102b49ff333` |
+| Test USDC (mintable mock) | `0x445b24Cf4Ac9AC20ecc417Ac41160Fdc8088520d` |
+
+The package also bundles these per chain, so you don't have to hardcode them:
 
 ```ts
-import addrs from "@pampalo/contracts/deployments/84532.json";
+import base from "@pampalo/contracts/deployments/8453.json"; // Base mainnet
+import baseSepolia from "@pampalo/contracts/deployments/84532.json"; // Base Sepolia
 
-addrs.pampalo; // 0x3E6dfc4c233486A44e26A548e191c839f069037f
-addrs.tokens.usdc; // mintable test USDC
+base.payments; // 0x28A0f376e8e1B52514683c99DAD11AA489Bbb413 → your acceptor's constructor arg
+base.pampalo; // 0x86cC802B2d5a9EF41194E68ed69EeCC37AdAAf59
 ```
 
-| Contract | Address |
-| --- | --- |
-| `Pampalo` | `0x3E6dfc4c233486A44e26A548e191c839f069037f` |
-| Test USDC | `0x4Fc9cc04f2A8d6Ff360352C61A4bb36Ab262Ae01` |
-
-Pair this with the [SDK](/building/sdk) to mint test USDC, shield it, and build
-the redeem proof your contract consumes.
+On Base Sepolia, pair this with the [SDK](/building/sdk) to mint test USDC,
+shield it, and build the redeem proof your contract consumes.
 
 :::warning[Deploying your own Pampalo]
 Most teams should build **against the live deployment above**, not redeploy the

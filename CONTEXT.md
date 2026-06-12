@@ -255,6 +255,19 @@ the Pampalo router on chain X?". Not to be confused with **Network**
 (the generic catalog entry that also serves balance lookups for chains
 where Pampalo isn't deployed).
 
+**Retired note**:
+A locally-stored note whose `deploymentAddress` is no longer the
+currently-enabled **Pampalo deployment** for its chain (i.e. it was
+shielded on a previous, redeployed contract version). Pampalo is
+non-upgradeable (ADR 0017), so a retired note's leaf lives in the old
+contract's abandoned tree and can never be spent against the current
+verifiers. Retirement is **derived, not stored** — a note is retired
+iff its `(networkChainId, deploymentAddress)` is absent from the live
+`enabledDeployments()` set — so no per-note flag or migration pass is
+needed, and any future vN redeploy retires vN-1 notes automatically.
+Retired notes are **retained and visible** (read-only history), never
+deleted; they are excluded from spendable-balance and the spend picker.
+
 **Shieldable asset**:
 A `(deployment, ERC-20 address)` pair currently registered in the
 deployment's on-chain `Pampalo.supportedAssets` mapping with

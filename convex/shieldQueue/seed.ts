@@ -48,6 +48,79 @@ async function wipeDeploymentChildren(
   return { leaves, queue, notes, activity };
 }
 
+// Copy the user-recoverable rows of a soon-to-be-wiped deployment into the
+// archive tables (ADR 0018) so a user's pre-redeploy notes survive
+// cross-device as read-only history. MUST run BEFORE wipeDeploymentChildren
+// and BEFORE the deployment row is replaced (we need the OLD address). Only
+// shieldQueueEntries (self-shields) + transferNotes (received notes) carry
+// envelope-decryptable material; leaves/activity are positional/public and
+// intentionally not archived. Testnet-scale only (collect-then-insert).
+async function archiveDeploymentChildren(
+  ctx: MutationCtx,
+  deploymentId: Id<"pampaloDeployments">,
+  chainId: number,
+  oldPampalo: string,
+  version: string | undefined,
+): Promise<{ shields: number; notes: number }> {
+  const archivedDeploymentAddress = lowerAddress(oldPampalo);
+  const now = Date.now();
+
+  const queue = await ctx.db
+    .query("shieldQueueEntries")
+    .withIndex("by_deployment_and_state", (q) =>
+      q.eq("deploymentId", deploymentId),
+    )
+    .collect();
+  for (const r of queue) {
+    await ctx.db.insert("archivedShieldQueue", {
+      chainId,
+      archivedDeploymentAddress,
+      shielder: r.shielder,
+      asset: r.asset,
+      amount: r.amount,
+      leafCommitment: r.leafCommitment,
+      encryptedPayload: r.encryptedPayload,
+      state: r.state,
+      unlockTime: r.unlockTime,
+      queuedTxHash: r.queuedTxHash,
+      queuedAt: r.queuedAt,
+    });
+  }
+
+  const notes = await ctx.db
+    .query("transferNotes")
+    .withIndex("by_deployment", (q) => q.eq("deploymentId", deploymentId))
+    .collect();
+  for (const r of notes) {
+    await ctx.db.insert("archivedTransferNotes", {
+      chainId,
+      archivedDeploymentAddress,
+      encryptedPayload: r.encryptedPayload,
+      txHash: r.txHash,
+      emittedAt: r.emittedAt,
+    });
+  }
+
+  // Identity marker — one row per retired deployment (idempotent on
+  // (chainId, address), so a re-seed doesn't duplicate it).
+  const existingMarker = await ctx.db
+    .query("archivedDeployments")
+    .withIndex("by_chain_and_address", (q) =>
+      q.eq("chainId", chainId).eq("pampalo", archivedDeploymentAddress),
+    )
+    .unique();
+  if (!existingMarker) {
+    await ctx.db.insert("archivedDeployments", {
+      chainId,
+      pampalo: archivedDeploymentAddress,
+      version,
+      retiredAt: now,
+    });
+  }
+
+  return { shields: queue.length, notes: notes.length };
+}
+
 // Gas-sponsoring defaults (TRANSFERS.md §2.4). Base Sepolia is the only
 // chain sponsoring at seed time; flipping another chain on is a manual
 // operator change. The min-balance floor is per-chain (gas prices vary).
@@ -307,14 +380,28 @@ export const seedAll = internalMutation({
 
       let deploymentId: Id<"pampaloDeployments">;
       if (existing) {
+        // Capture the OLD address before replace overwrites the row.
+        const oldPampalo = existing.pampalo;
         await ctx.db.replace(existing._id, deploymentPayload);
         deploymentId = existing._id;
         if (addressChanged) {
+          // Archive the user-recoverable rows BEFORE wiping (ADR 0018), so
+          // retired notes survive cross-device. Child rows are still keyed
+          // by the (reused) deploymentId, so they read fine post-replace.
+          const archived = await archiveDeploymentChildren(
+            ctx,
+            deploymentId,
+            d.chainId,
+            oldPampalo,
+            undefined, // on-chain VERSION not known server-side
+          );
           const wiped = await wipeDeploymentChildren(ctx, deploymentId);
           console.warn(
-            `[seed] redeploy on chain ${d.chainId}: wiped orphaned rows ` +
-              `(${wiped.leaves} leaves, ${wiped.queue} queue, ` +
-              `${wiped.notes} notes, ${wiped.activity} activity) + reset cursor.`,
+            `[seed] redeploy on chain ${d.chainId}: archived ` +
+              `(${archived.shields} shields, ${archived.notes} notes) from ` +
+              `${oldPampalo} then wiped orphaned rows (${wiped.leaves} leaves, ` +
+              `${wiped.queue} queue, ${wiped.notes} notes, ` +
+              `${wiped.activity} activity) + reset cursor.`,
           );
         }
       } else {

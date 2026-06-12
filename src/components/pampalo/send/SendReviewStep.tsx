@@ -21,6 +21,7 @@ import { txUrl } from "@/lib/explorer";
 import {
   appendNote,
   getNotesSnapshot,
+  isNoteOnActiveDeployment,
   isNotesHydrated,
   patchNoteByLeaf,
   subscribeNotes,
@@ -206,12 +207,14 @@ export function SendReviewStep({
         (n) =>
           n.state === "spendable" &&
           n.networkChainId === chainId &&
+          // Retired-deployment notes are unspendable (ADR 0018).
+          isNoteOnActiveDeployment(n, deployments) &&
           n.asset === ETH_SENTINEL &&
           n.leafIndex !== undefined &&
           BigInt(n.amount) >= amountWei,
       ) ?? null
     );
-  }, [mode, chainId, amountWei, notes]);
+  }, [mode, chainId, amountWei, notes, deployments]);
 
   const deployment = useMemo(() => {
     if (chainId === null || !deployments) return null;
