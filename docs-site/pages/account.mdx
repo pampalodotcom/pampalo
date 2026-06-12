@@ -1,9 +1,59 @@
+import { PampaloDefs, AccountIdentities } from "../components/diagrams";
+
 # Account
 
-When you create a pampalo account, you generate a secret on your device, then you create and store a passkey with PRF cabilities on your device, or in your selected password manager. 
+A Pampalo account is **one recovery phrase** that derives **three on-chain
+identities** — with the phrase itself encrypted on your device by a passkey.
+Pampalo's servers never hold anything they could use to spend, link, or
+impersonate you.
 
-Once set up, you use your passkey to decrypt your account secret to sign in, and authorise transactions. Pampalo stores only your encrypted secret in it's database against your passkey id. Your passkey ID is not traceable to you or your device, and only your passkey can decrypt that stored secret (time of writing is pre quantum).
+<PampaloDefs />
+<AccountIdentities />
 
-This means that if pampalo ever has it's database leaked or server compromised - all that is leaked is data encrypted with keys that you control.
+## One phrase, three identities
 
-This architecture doesn't remove all actor vectors, but pampalo is client side first with the intent of giving more power to all of its users, while removing 'honey pots' that occur in traditional web computing.
+When you create an account, your device generates a 12-word **recovery phrase**
+(a BIP-39 mnemonic). From it, Pampalo deterministically derives three
+identities, each with a distinct job:
+
+- **EVM address** — your public Ethereum address: the cleartext, on-chain
+  handle that pays gas and holds public balances. The only identity anyone
+  sees in the clear.
+- **Poseidon identifier** — the unlinkable owner of your private notes. It
+  proves ownership _inside_ a zero-knowledge proof without revealing your EVM
+  address, so private activity can't be traced back to you.
+- **Envelope key** — a secp256k1 key others encrypt to when they send you a
+  private note, so only you can read the note's secret off-chain.
+
+A handle like `alice.pampalo.eth` resolves to the Poseidon identifier and
+Envelope key — never the EVM address.
+
+## Your passkey holds the keys
+
+Your recovery phrase never leaves your device in the clear. It's encrypted once
+under a random **data key** (AES-256-GCM). Each **passkey** you register —
+stored on your device or in your password manager — produces a stable secret
+via the WebAuthn **PRF** extension; that secret derives a **wrapping key** that
+seals the data key. A passkey without PRF can't create or unlock a Pampalo
+account.
+
+To sign in or authorise a transaction, your passkey re-derives the wrapping
+key, unwraps the data key, and decrypts the recovery phrase — all on your
+device. The server is only ever handed:
+
+- your **encrypted recovery phrase** (ciphertext), and
+- the **public** WebAuthn material needed to verify a passkey ceremony,
+
+stored against an **opaque credential id** that isn't traceable to you or your
+device. Only your passkey can decrypt the stored secret (at time of writing,
+pre-quantum).
+
+## Why this matters
+
+If Pampalo's database leaks or a server is compromised, all an attacker gets is
+**ciphertext encrypted under keys you control** — no recovery phrases, no
+spendable secrets, and no link between an account and an EVM address.
+
+This doesn't remove every attack vector, but Pampalo is **client-side first**
+by design: it pushes power back to its users and removes the "honey pots" of
+plaintext user data that traditional web apps accumulate.

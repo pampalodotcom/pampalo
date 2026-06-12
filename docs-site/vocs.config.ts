@@ -10,7 +10,6 @@ export default defineConfig({
   sidebar: [
     { text: "Introduction", link: "/" },
     { text: "Account", link: "/account" },
-    { text: "Private Money", link: "/private-money" },
     { text: "How It Works", link: "/how-it-works" },
     {
       text: "Building on Pampalo",
