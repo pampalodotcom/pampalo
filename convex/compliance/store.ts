@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import { internalMutation, internalQuery, query } from "../_generated/server";
 import { lowerAddress } from "../lib/normalize";
+import { resolveMinBalanceWei } from "../lib/relayerFloor";
 
 // DB-side logic for the compliance blocklist + shield-queue screening
 // (ADR 0016). The signing/broadcasting half (auto-contest) lives in
@@ -291,7 +292,7 @@ export const getComplianceSigner = query({
     const minByChain = new Map<number, string>();
     for (const d of await ctx.db.query("pampaloDeployments").collect()) {
       const net = await ctx.db.get(d.networkId);
-      if (net) minByChain.set(net.chainId, d.minRelayerBalanceWei ?? "0");
+      if (net) minByChain.set(net.chainId, await resolveMinBalanceWei(ctx, d));
     }
     return rows.map((r) => {
       const min = minByChain.get(r.chainId) ?? "0";

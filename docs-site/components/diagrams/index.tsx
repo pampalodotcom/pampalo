@@ -622,7 +622,7 @@ export function SealedProof() {
 export function SendingASecret() {
   return (
     <div className="pampdia">
-      <svg viewBox="0 0 960 386" role="img" aria-label="The note creator encrypts the secret to the recipient's Envelope key. The ciphertext rides on-chain with the leaf; the server and relayer see only ciphertext. The recipient's wallet scans events, decrypts with its Envelope private key, and files the note locally. An inset shows alice.pampalo.eth resolving to an Envelope key and Poseidon identifier.">
+      <svg viewBox="0 0 960 232" role="img" aria-label="The note creator encrypts the secret to the recipient's Envelope key. The ciphertext rides on-chain with the leaf; the server and relayer see only ciphertext. The recipient's wallet scans events, decrypts with its Envelope private key, and files the note locally.">
         <text className="t-tick t-faint" x="24" y="34" fontSize="9">Sender · creator</text>
         <text className="t-tick t-faint" x="400" y="34" fontSize="9">On-chain · public</text>
         <text className="t-tick t-faint" x="588" y="34" fontSize="9">Recipient · wallet</text>
@@ -675,20 +675,6 @@ export function SendingASecret() {
         <rect className="node-priv" x="792" y="86" width="144" height="64" rx="12" />
         <text className="t-lab" x="864" y="114" fontSize="11" textAnchor="middle">file note locally</text>
         <text className="t-tick t-priv" x="864" y="132" fontSize="8.5" textAnchor="middle">IndexedDB</text>
-
-        <line className="hair dash" x1="24" y1="244" x2="936" y2="244" />
-        <text className="t-tick" x="24" y="268" fontSize="10">Human-readable handle</text>
-        <rect className="node-2" x="24" y="284" width="190" height="44" rx="12" />
-        <text className="t-mono" x="119" y="311" fontSize="12" textAnchor="middle">alice.pampalo.eth</text>
-        <path className="flow" d="M214,306 H262" markerEnd="url(#pd-arrow)" />
-        <text className="t-tick t-faint" x="238" y="298" fontSize="7.5" textAnchor="middle">resolves</text>
-        <rect className="node-priv" x="266" y="286" width="186" height="40" rx="10" />
-        <text className="t-mono t-priv" x="280" y="310" fontSize="11">Envelope key</text>
-        <rect className="node-priv" x="466" y="286" width="220" height="40" rx="10" />
-        <text className="t-mono t-priv" x="480" y="310" fontSize="11">Poseidon identifier</text>
-        <rect x="700" y="286" width="200" height="40" rx="10" fill="none" stroke="var(--d-line)" strokeWidth="1.2" strokeDasharray="4 3" />
-        <text className="t-mono t-faint" x="714" y="304" fontSize="10">EVM address</text>
-        <text className="t-tick t-faint" x="714" y="318" fontSize="7.5">deliberately not published</text>
       </svg>
     </div>
   );

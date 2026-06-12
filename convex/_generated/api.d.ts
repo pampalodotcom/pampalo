@@ -23,6 +23,7 @@ import type * as http from "../http.js";
 import type * as lib_alchemy from "../lib/alchemy.js";
 import type * as lib_evm from "../lib/evm.js";
 import type * as lib_normalize from "../lib/normalize.js";
+import type * as lib_relayerFloor from "../lib/relayerFloor.js";
 import type * as preferences_mutations from "../preferences/mutations.js";
 import type * as prices_feeds from "../prices/feeds.js";
 import type * as prices_gas from "../prices/gas.js";
@@ -63,6 +64,7 @@ declare const fullApi: ApiFromModules<{
   "lib/alchemy": typeof lib_alchemy;
   "lib/evm": typeof lib_evm;
   "lib/normalize": typeof lib_normalize;
+  "lib/relayerFloor": typeof lib_relayerFloor;
   "preferences/mutations": typeof preferences_mutations;
   "prices/feeds": typeof prices_feeds;
   "prices/gas": typeof prices_gas;

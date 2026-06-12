@@ -233,11 +233,17 @@ export default defineSchema({
     separateDerivationKey: v.optional(v.boolean()),
     // Gas-sponsoring relayer config (TRANSFERS.md 2.1, ADR 0010/0015).
     // sponsoringTxs gates whether `relayer.relay` accepts this chain;
-    // minRelayerBalanceWei is the per-account floor below which the
-    // acquire-lock mutation skips an account. Both optional for migration:
-    // undefined sponsoringTxs is treated as false (no sponsoring).
+    // the per-account funding floor (below which acquire-lock skips an
+    // account and the panel flags REFILL) is whichever of these is set:
+    //   • minRelayerBalanceUsdCents — preferred; converted to wei at
+    //     read-time via the live eth/usd price so the floor stays a fixed
+    //     USD value as ETH moves. Falls back to the wei floor if no price.
+    //   • minRelayerBalanceWei — static fallback (testnet, or no price).
+    // Both optional for migration: undefined sponsoringTxs is treated as
+    // false (no sponsoring).
     sponsoringTxs: v.optional(v.boolean()),
     minRelayerBalanceWei: v.optional(v.string()),
+    minRelayerBalanceUsdCents: v.optional(v.number()),
   }).index("by_networkId", ["networkId"]),
 
   // Relayer pool (gas sponsors). Five derived EOAs per sponsoring chain,

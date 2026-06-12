@@ -169,6 +169,11 @@ type SeedDeployment = {
   // to turn another chain's sponsoring on at seed time. Preserved across
   // re-seeds (an operator's later manual flip is never clobbered).
   sponsoringTxs?: boolean;
+  // Per-account funding floor as a fixed USD value (cents). Preferred over
+  // the static wei floor — resolved to wei at read-time via the live
+  // eth/usd price, so it stays a fixed dollar amount as ETH moves. Omit on
+  // testnet (valueless gas) to use the static wei fallback.
+  minRelayerBalanceUsdCents?: number;
   assets: Array<{
     tokenAddress: string;
     oracle: string;
@@ -236,6 +241,8 @@ const DEPLOYMENTS: SeedDeployment[] = [
     fromBlock: 47237162, // deploy block (mirrors sdk/src/deployments.ts)
     // Turn relayer sponsoring on for mainnet at seed time.
     sponsoringTxs: true,
+    // $10 of gas per account — resolved to wei via the live eth/usd price.
+    minRelayerBalanceUsdCents: 10_00,
     assets: [
       {
         // Native ETH sentinel.
@@ -466,6 +473,10 @@ export const seedAll = internalMutation({
           d.chainId === BASE_SEPOLIA_CHAIN_ID,
         minRelayerBalanceWei:
           existing?.minRelayerBalanceWei ?? DEFAULT_MIN_RELAYER_BALANCE_WEI,
+        // Preserve a manual USD-floor edit; else take the seed entry's value
+        // (undefined on testnet → static wei fallback is used).
+        minRelayerBalanceUsdCents:
+          existing?.minRelayerBalanceUsdCents ?? d.minRelayerBalanceUsdCents,
       };
 
       let deploymentId: Id<"pampaloDeployments">;
