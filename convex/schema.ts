@@ -432,6 +432,21 @@ export default defineSchema({
     .index("by_deployment_and_tx", ["deploymentId", "txHash"])
     .index("by_deployment", ["deploymentId"]),
 
+  // Spent-nullifier set, one row per `Pampalo.NullifierUsed(bytes32)`. This
+  // is PUBLIC on-chain material — the nullifier reveals nothing about the
+  // note it spent (unlinkable). Sync downloads the whole set for a
+  // deployment and checks its own notes' nullifiers against it CLIENT-SIDE,
+  // so the server never learns which nullifiers a user holds. There is
+  // deliberately no "is this nullifier used?" lookup. See ADR 0019.
+  pampaloNullifiers: defineTable({
+    deploymentId: v.id("pampaloDeployments"),
+    nullifier: v.string(), // lowercased 0x bytes32
+    blockNumber: v.number(),
+    txHash: v.string(), // lowercased
+  })
+    .index("by_deployment_and_nullifier", ["deploymentId", "nullifier"])
+    .index("by_deployment_and_block", ["deploymentId", "blockNumber"]),
+
   // Pool-activity feed for the /sentry explorer: one row per private-spend
   // tx (transfer / unshield), classified by the tx's function selector and
   // triggered by `NullifierUsed` (emitted by every spend). Shields live in
