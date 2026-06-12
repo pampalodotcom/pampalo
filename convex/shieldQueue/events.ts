@@ -34,6 +34,11 @@ const SIG_LEAF_INSERTED = "LeafInserted(uint256,uint256,bytes32)";
 // so the receiver-side trial-decrypt path (TRANSFERS.md §9.5) has one
 // table to walk for cross-recipient transfers.
 const SIG_NOTE_PAYLOAD = "NotePayload(bytes)";
+// NullifierUsed fires once per spent input on every transfer / unshield /
+// unshieldBundled — the universal "a private spend happened" signal the
+// pool-activity explorer keys on. The bare `shield` path never spends a
+// nullifier, so this cleanly separates private spends from shields.
+const SIG_NULLIFIER_USED = "NullifierUsed(bytes32)";
 
 export const TOPIC = {
   shieldQueued: id(SIG_SHIELD_QUEUED),
@@ -44,7 +49,32 @@ export const TOPIC = {
   assetDisabled: id(SIG_ASSET_DISABLED),
   leafInserted: id(SIG_LEAF_INSERTED),
   notePayload: id(SIG_NOTE_PAYLOAD),
+  nullifierUsed: id(SIG_NULLIFIER_USED),
 } as const;
+
+// Function selectors (first 4 bytes of keccak(signature)) used to classify
+// a private-spend tx in the activity feed. Same `id()` keccak as topics.
+export const SELECTOR = {
+  executeShield: id("executeShield(uint256)").slice(0, 10),
+  executeShieldImmediate: id("executeShieldImmediate(uint256)").slice(0, 10),
+  transfer: id("transfer(bytes,bytes32[],bytes[])").slice(0, 10),
+  unshield: id("unshield(bytes,bytes32[])").slice(0, 10),
+  unshieldBundled: id("unshieldBundled(bytes,bytes32[],bytes[])").slice(0, 10),
+} as const;
+
+export type ActivityKind = "transfer" | "unshield" | "shield" | "other";
+
+/** Classify a tx by its 0x-prefixed function selector (first 10 chars of
+ *  the tx input). Withdrawals via either entrypoint collapse to "unshield". */
+export function classifySelector(selector: string): ActivityKind {
+  const s = selector.toLowerCase();
+  if (s === SELECTOR.transfer) return "transfer";
+  if (s === SELECTOR.unshield || s === SELECTOR.unshieldBundled)
+    return "unshield";
+  if (s === SELECTOR.executeShield || s === SELECTOR.executeShieldImmediate)
+    return "shield";
+  return "other";
+}
 
 /** Every topic-0 we'd ask `eth_getLogs` to filter on. */
 export const ALL_TOPICS: readonly string[] = Object.values(TOPIC);
@@ -132,6 +162,11 @@ export type DecodedNotePayload = {
   encryptedPayload: ArrayBuffer; // raw ECIES bytes
 };
 
+export type DecodedNullifierUsed = {
+  kind: "NullifierUsed";
+  nullifier: string; // lowercased 0x… bytes32
+};
+
 export type DecodedEvent =
   | DecodedShieldQueued
   | DecodedShieldExecuted
@@ -140,7 +175,8 @@ export type DecodedEvent =
   | DecodedAssetSupported
   | DecodedAssetDisabled
   | DecodedLeafInserted
-  | DecodedNotePayload;
+  | DecodedNotePayload
+  | DecodedNullifierUsed;
 
 function hexToArrayBuffer(hex: string): ArrayBuffer {
   const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
@@ -251,6 +287,15 @@ export function decodeLog(log: RawLog): DecodedEvent | null {
       return {
         kind: "NotePayload",
         encryptedPayload: hexToArrayBuffer(ciphertextHex),
+      };
+    }
+
+    case TOPIC.nullifierUsed.toLowerCase(): {
+      // nullifier is the sole indexed topic; the value isn't needed for the
+      // activity feed (we only key on the tx), but we surface it anyway.
+      return {
+        kind: "NullifierUsed",
+        nullifier: lowerHash(log.topics[1] ?? "0x"),
       };
     }
 

@@ -170,6 +170,79 @@ _Distinct from_: "recovery integrations" in AUTH.md (the future
 umbrella for MPC / Shamir / social recovery). Recover account is the
 v1 mnemonic-on-paper variant of that family.
 
+### Headless accounts (CLI / SDK)
+
+**Agent account**:
+A Pampalo identity created and custodied outside the browser, for use by a
+CLI or a Node/TS script (an "agent"). Same on-chain shape as a web wallet —
+one **mnemonic** deterministically producing one **EVM address**, one
+**envelope key**, one **Poseidon identifier** — but it is created by the CLI
+(`pampalo init`) as a *fresh, distinct identity*, not the human's web
+wallet. An existing **recovery phrase** may be brought in with `pampalo
+import` (explicit opt-in); the default is a brand-new mnemonic so an agent
+never holds the keys that control the user's human wallet. The account has
+no Convex **wallet** row and no **credential** — it is unknown to the
+passkey auth model entirely. _Avoid_: "CLI wallet" (the noun is **account**,
+and it is the same identity primitive as a web wallet, just headlessly
+custodied).
+
+**Account keystore**:
+The encrypted-at-rest home for an **agent account**'s **mnemonic**, modelled
+on `~/.ssh/`: a scrypt + AES-GCM keystore file under `~/.pampalo/accounts/`
+(many accounts, like many SSH keys). Passphrase-protected by default;
+unlocked once per process by the SDK (`Account.load`) and held in memory for
+the run, or supplied via `PAMPALO_MNEMONIC` for ephemeral/CI use. This
+deliberately reintroduces the scrypt-passphrase scheme that ADR 0002 deleted
+for the web wallet — but only on the CLI surface, where there is no
+WebAuthn authenticator and therefore no PRF to derive a KEK from. An
+ssh-agent-style daemon for cross-invocation unlock reuse is deferred.
+
+**Account transport**:
+The pluggable channel an **agent account** uses to read chain state and
+broadcast. Reuses the web app's `RpcClient` seam (`src/lib/rpc.ts`): day-1
+is `DirectRpcClient` pointed at a user-supplied RPC URL; a Convex-backed
+client (public catalog reads now, relayer + note hydrate once API-key auth
+lands) sits behind the same interface later. Because the relayer is
+Convex-gated and unreachable from a sessionless CLI, day-1 **Transfer** and
+**Unshield** **self-broadcast** — linking the agent's EVM address to the
+on-chain event, the very linkage the relayer exists to break. Acceptable for
+a sandboxed agent identity in v1; closed once the Convex transport + relayer
+path is wired.
+
+**Proposal** (keyless agent → human account):
+A future capability, distinct from an **agent account**'s self-custody. An
+external agent holding a Pampalo **API key** writes a transaction *intent*
+("transfer X of asset Y to recipient Z") into a queue tied to a *human's*
+Pampalo wallet — it never holds key material. Because the agent cannot reach
+the human's **DEK**, the intent is **ECIES-encrypted to the human's envelope
+key** (public); Convex stores only that ciphertext. At approval time the
+human's web wallet decrypts the intent, does coin selection, generates the
+proof, and signs with the passkey — so the **privacy invariant** and ADR
+0004 (server never sees a pre-broadcast unsigned tx, only an encrypted
+intent) both hold. The agent proposes *blind* to the human's private balance;
+feasibility is checked client-side at approval. The day-1 SDK is built to
+**separate intent construction from sign+broadcast** (mirroring the web app's
+`transfer-prep` → `signTransactionWithPasskey`/`relay` split) so the same
+intent builder later feeds either local signing or remote proposal.
+_Distinct from_: a "scoped delegated key" where the agent itself signs within
+server-enforced limits — explicitly *not* the chosen model.
+
+**SDK distribution**:
+The headless stack ships as three MIT-licensed public npm packages —
+`@pampalo/shared` (protocol crypto — already in the repo), `@pampalo/sdk`
+(the **Agent account** core), and `@pampalo/cli` (the `pampalo` binary) —
+all published from the **existing monorepo** (`pampalodotcom/pampalo`, made
+public) via Changesets. They depend on one another with `workspace:*`;
+Changesets rewrites those to real versions at publish time and releases in
+dependency order `shared → sdk → cli`. The app keeps consuming `shared` via
+`workspace:*` unchanged — no extraction, no migration, workspace dev loop
+intact. The scope `@pampalo` is owned by the npm **user** `pampalo` (a user
+account, not an org — the two share a namespace, so an org named `pampalo`
+is blocked); public scoped packages publish free under it, and the account
+can later be converted to an org with no package renames. (Three separate
+repos and a dedicated SDK monorepo were both considered and rejected: once
+the app repo went public, a single monorepo was the least-ceremony option.)
+
 ### Multi-chain deployment catalog
 
 **Pampalo deployment**:
@@ -281,6 +354,30 @@ tree. During the wait the shielded asset is escrowed by the Pampalo
 contract; no on-chain note exists yet, so the shielder may cancel and
 recover the asset, and a **vigilant citizen** may contest.
 
+**Fast-track**:
+A `BOOTH_OPERATOR_ROLE` waiver of the **Shield wait** for a vetted user.
+Two on-chain forms: `executeShieldImmediate(id)` finalises one named
+**Pending shield** now; the per-user monthly flag (`fastTrackAllowed`
+keyed by `(user, monthKey)`) makes every shield that user queues this
+calendar month land with `unlockTime = block.timestamp` — immediately
+executable. Fast-tracking **skips the contest window**, so it is a
+deliberate "the operator vouches for this user this month" trust
+statement, not a convenience toggle. Resets each UTC month like the caps.
+
+**Monthly cap**:
+The per-address USD ceiling on shielded *and* unshielded volume per UTC
+month. Tracked on-chain as two independent buckets (`shieldUsage`,
+`unshieldUsage`), each charged at its respective op and each bounded by
+the same `effectiveCap` — the per-address override
+(`addressMonthlyCapUsdCents`) if set, else `defaultMonthlyCapUsdCents`
+(**$200.00**). So a user may shield up to $200 *and* unshield up to $200
+in the same month; the two don't net against each other. Charged in USD
+cents at the Chainlink-oracle price seen at op time; a **Contest** or
+`cancelShield` refunds the shield charge inline (subject to the
+same-month caveat in `_refundShieldCap`). Read via the `shieldBudget` /
+`unshieldBudget` views, which mirror the on-chain charge math (including
+the prior-month auto-reset) so the client slider and the contract agree.
+
 **Pending shield**:
 A queued shield awaiting unlock. Identified by an opaque `pendingId`;
 the shielder, asset, amount, and leaf commitment are all stored on-chain
@@ -301,6 +398,16 @@ A `VIGILANT_CITIZEN_ROLE` action that cancels a pending shield, refunding
 the shielder's escrow. Used for compliance review (e.g. OFAC-listed
 source addresses). Distinct from `cancelShield` which is the shielder's
 own opt-out during the wait.
+
+_Automated Contest_: a Convex cron indexes blocked addresses from
+external sources (the Chainalysis on-chain sanctions oracle; Railgun's
+published blocklist) into a Convex table, then scans the **Shield queue**
+for any **Pending shield** whose `shielder` is blocked and calls
+`contestShield(id, reason)` via the **Compliance signer** before the
+**Shield wait** elapses. Because on-chain `shield(...)` is permissionless
+(ADR 0007), this post-hoc contest during the wait window is the *only*
+mechanism for "programmatic refusal of entry" — entry can't be blocked
+at call time, only unwound before the note is inserted.
 
 _Refund is on-chain, push-style, at contest time_: `contestShield`
 calls `_refundEscrow(p.shielder, p.asset, p.amount)` inline, which
@@ -323,15 +430,35 @@ upstream-named because they're bytecode-bound.
 
 **Gas sponsor / Relayer account**:
 One of the EOAs the Pampalo backend uses to broadcast a user's
-**Transfer** without revealing their EVM address. Five accounts per
-**sponsoring chain**, derived from a single backend `RELAYER_MNEMONIC`
-at BIP44 path `m/44'/60'/0'/0/{0..4}`. The accounts are interchangeable
-and selected LRU among the idle, funded subset; concurrent transfers
-on the same chain never collide on the same account because the
-acquire/release flow is gated by an atomic Convex mutation. Pampalo's
-contract is permissionless on `transfer(...)`, so the relayer holds
-no on-chain role — its only privilege is "has ETH to spend on gas."
-See `TRANSFERS.md` and ADR 0010.
+**Transfer** or **Unshield** without revealing their EVM address. Five
+accounts per **sponsoring chain**, derived from a single backend
+`RELAYER_MNEMONIC` at BIP44 path `m/44'/60'/0'/0/{0..4}`. The accounts
+are interchangeable and selected LRU among the idle, funded subset;
+concurrent broadcasts on the same chain never collide on the same
+account because the acquire/release flow is gated by an atomic Convex
+mutation. Pampalo's contract is permissionless on `transfer(...)` and
+`unshield(...)`, so the relayer holds **no on-chain role** — its only
+privilege is "has ETH to spend on gas." Relaying an **Unshield** is the
+privacy win that justifies the expanded scope: the holder can withdraw
+to a brand-new, **unfunded** EVM address (the relayer pays gas) instead
+of needing that address to already hold ETH, which would link it. Every
+relay is gated to protect the sponsor's gas: the proof bytes must be
+non-empty / non-zero, a pre-broadcast `eth_call` simulation must not
+revert, and the move must be within the user's **monthly cap**. See
+`TRANSFERS.md` and ADR 0015 (which supersedes the transfer-only scope of
+ADR 0010).
+_Avoid_: granting the relayer pool any on-chain role — compliance
+contests are signed by the separate **Compliance signer**, never these
+accounts.
+
+**Compliance signer** (Sentry account):
+A single dedicated EOA the Pampalo backend uses to sign automated
+`contestShield(...)` calls. Derived from the **same** `RELAYER_MNEMONIC`
+but at a **distinct index past the relayer pool** (`m/44'/60'/0'/0/5`),
+and the only backend account granted `VIGILANT_CITIZEN_ROLE`. Kept
+separate from the **Relayer accounts** (0–4) so the gas-sponsor identity
+stays role-less and is never publicly linkable to compliance
+enforcement. Drives the **automated Contest** path. See ADR 0016.
 
 **Sponsoring chain**:
 A `pampaloDeployments` row with `sponsoringTxs = true`. Means the
@@ -350,6 +477,23 @@ EVM address is publicly linked to the on-chain transfer event —
 breaking the EOA-anonymity property the relayer otherwise provides.
 The UX always surfaces this with an explicit confirm dialog before
 proceeding; never silent.
+
+**Affordability preflight**:
+The client-side check that blocks a confirm/review button when the
+user's wallet can't cover a **self-broadcast**. A self-broadcast costs
+the user `value + gasLimit × maxFeePerGas` in native ETH — the exact
+amount the node reserves up-front (not an estimate; Pampalo uses fixed
+per-flow `gasLimit` constants, never `eth_estimateGas`, per ADR 0004).
+The preflight reads the chain's native balance (and, for an ERC-20
+send, the token balance) via `usePublicBalance` and disables submission
+with a specific "need ≈X, have Y" message when short. It applies to
+**public Send**, **Shield** (always self-signed), and the
+**self-broadcast fallback** of Transfer / Unshield — **never** the
+relayed path, which costs the user zero native ETH (a **sponsoring
+chain**'s relayer pays the gas). A broadcast-time error normaliser is
+the backstop for the residual race (30s-stale balance, gas spike):
+known RPC strings (`insufficient funds`, nonce conflicts) map to
+friendly copy, with the raw error kept behind a details toggle.
 
 ### Private payments (proof-of-payment)
 

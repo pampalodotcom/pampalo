@@ -1,0 +1,142 @@
+# CLI: `@pampalo/cli`
+
+The `pampalo` command-line tool, a thin wrapper over the
+[SDK](/building/sdk). Use it to create an agent account, sync it, check
+balances, and move money from a terminal or a shell script.
+
+## Install
+
+:::code-group
+
+```bash [pnpm]
+pnpm add -g @pampalo/cli
+```
+
+```bash [npm]
+npm install -g @pampalo/cli
+```
+
+```bash [npx]
+# run without installing
+npx @pampalo/cli@latest balance
+```
+
+:::
+
+Installing globally gives you the `pampalo` binary. Requires **Node 20+**.
+
+## Quickstart
+
+```bash
+# create a fresh agent account (prompts for a passphrase)
+pampalo init agent1
+
+# …fund the printed EVM address with some Base Sepolia ETH / test tokens…
+
+# scan the chain, then check balances
+pampalo sync    -a agent1
+pampalo balance -a agent1
+```
+
+```
+account 0x81889262e283DDE619a62A2503F2A25970494C33  (chain 84532)
+
+PUBLIC
+  ETH   0.01
+  USDC  25.0
+
+PRIVATE (spendable notes)
+  (none, run `pampalo sync`)
+
+SHIELDS
+  (none)
+```
+
+## Authentication
+
+Commands that touch the keystore need your passphrase. In order of precedence:
+
+1. `--passphrase <s>` flag
+2. `PAMPALO_PASSPHRASE` environment variable
+3. an interactive hidden prompt
+
+For unattended use, set `PAMPALO_MNEMONIC` to a recovery phrase; it runs the
+account directly, no keystore or passphrase needed.
+
+## RPC configuration
+
+Every on-chain command needs an RPC URL, resolved in this order:
+
+1. `--rpc <url>` flag
+2. `PAMPALO_RPC` environment variable
+3. `ALCHEMY_API_KEY`, from which the CLI builds the Alchemy URL for known chains
+   (Ethereum, Base, and their Sepolia testnets)
+
+The CLI also auto-loads a `.env` / `.env.local` from the current directory, so
+dropping `ALCHEMY_API_KEY=…` in a `.env.local` is enough to make `sync` and
+`balance` work.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `pampalo init [name]` | Create a fresh agent account + encrypted keystore |
+| `pampalo import [name]` | Import an existing recovery phrase into a keystore |
+| `pampalo address [name]` | Print the account's derived identifiers |
+| `pampalo balance` | Public + private balances and shield statuses |
+| `pampalo sync` | Scan the chain, rebuild notes + the merkle leaf set |
+| `pampalo send` | Public EVM transfer (native or ERC-20) |
+| `pampalo shield` | Public → private note (to self) |
+| `pampalo transfer` | Private note → private note |
+| `pampalo unshield` | Private note → public payout |
+
+### Global options
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `-a, --account <name>` | `default` | Which keystore to use |
+| `-c, --chain <id>` | `84532` | Chain id (Base Sepolia) |
+| `--rpc <url>` | (none) | RPC URL (else `PAMPALO_RPC` / `ALCHEMY_API_KEY`) |
+| `-p, --passphrase <s>` | (none) | Keystore passphrase (else prompt / env) |
+| `--json` | (none) | Machine-readable output (for agents) |
+
+### Moving money
+
+Amounts are in **human units** (e.g. `1.5`); the CLI resolves decimals from the
+asset. `--asset` accepts `native`, a known symbol (`usdc`), or a token address.
+
+```bash
+# public EVM transfer
+pampalo send --to 0x… --amount 0.01 --asset native
+
+# shield to yourself
+pampalo shield --amount 10 --asset usdc
+
+# private transfer to a recipient's identifiers
+pampalo transfer --amount 5 --asset usdc \
+  --poseidon 0x… --envelope 0x04…
+
+# unshield to a public address (defaults to your own)
+pampalo unshield --amount 3 --asset usdc --recipient 0x…
+```
+
+Add `--json` to any command for structured output that's easy for an agent to
+parse.
+
+:::warning[Privacy note]
+`transfer` and `unshield` currently **self-broadcast**: your account's EVM
+address is visible as the sender on-chain, linking it to the transaction. The
+relayer that breaks this linkage isn't reachable from the CLI yet, so a v1
+agent account has a weaker privacy floor than the web wallet. `shield` is to
+your own identity only in v1.
+:::
+
+## Files
+
+| Path | Contents |
+| --- | --- |
+| `~/.pampalo/accounts/<name>.json` | Encrypted keystore (scrypt + AES-256-GCM, mode `0600`) |
+| `~/.pampalo/pampalo.db` | SQLite note store + sync cursors |
+
+Everything private stays on your machine; the CLI talks only to your RPC and
+the public chain.

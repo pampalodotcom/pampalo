@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useConvex } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { getSessionToken } from "./keystore";
 
 // Single source of truth for "how do I read on-chain state for this user?"
 // All call sites depend on RpcClient — never on Convex actions or fetch
@@ -46,6 +47,20 @@ export type BroadcastResult = {
   txHash: string;
 };
 
+/** What the gas-sponsoring relayer can be asked to broadcast. */
+export type RelayKind = "transfer" | "unshield";
+
+/** Mirror of `api.relayer.node.relay`'s discriminated return. The client
+ *  switches on `reason` to decide: surface (WOULD_REVERT/BAD_PROOF) or
+ *  offer self-broadcast fallback (POOL_EXHAUSTED/CHAIN_NOT_SPONSORED). */
+export type RelayResult =
+  | { ok: true; chainId: number; txHash: string }
+  | { ok: false; reason: "WOULD_REVERT"; revertReason: string }
+  | { ok: false; reason: "POOL_EXHAUSTED" }
+  | { ok: false; reason: "CHAIN_NOT_SPONSORED" }
+  | { ok: false; reason: "BAD_PROOF" }
+  | { ok: false; reason: "UNKNOWN"; message: string };
+
 export type TxStatus = {
   chainId: number;
   txHash: string;
@@ -79,6 +94,20 @@ export interface RpcClient {
     rawTx: string,
   ) => Promise<BroadcastResult>;
   getTransactionStatus: (chainId: number, txHash: string) => Promise<TxStatus>;
+
+  /** Ask Pampalo's gas-sponsoring relayer to broadcast a transfer/unshield
+   *  so the user's EVM address never signs it. Convex-gated: a `direct`
+   *  (BYO-RPC) client has no pool and returns CHAIN_NOT_SPONSORED, so the
+   *  caller self-broadcasts. The relayer verifies the proof via simulation
+   *  before spending gas. See ADR 0015 / TRANSFERS.md §3. */
+  relay: (req: {
+    chainId: number;
+    kind: RelayKind;
+    proof: string;
+    publicInputs: readonly string[];
+    /** transfer only: ECIES NotePayload ciphertexts (0..3). */
+    payload?: readonly string[];
+  }) => Promise<RelayResult>;
 }
 
 // ─── Proxy client (current default) ──────────────────────────────────────
@@ -125,6 +154,32 @@ class ProxiedRpcClient implements RpcClient {
     return this.convex.action(api.send.proxy.getTransactionStatus, {
       chainId,
       txHash,
+    });
+  }
+
+  relay(req: {
+    chainId: number;
+    kind: RelayKind;
+    proof: string;
+    publicInputs: readonly string[];
+    payload?: readonly string[];
+  }): Promise<RelayResult> {
+    const sessionToken = getSessionToken();
+    if (!sessionToken) {
+      // No session → can't authenticate to the relayer. Treat as "not
+      // sponsored" so the caller self-broadcasts rather than hard-failing.
+      return Promise.resolve({
+        ok: false,
+        reason: "CHAIN_NOT_SPONSORED",
+      } as RelayResult);
+    }
+    return this.convex.action(api.relayer.node.relay, {
+      sessionToken,
+      chainId: req.chainId,
+      kind: req.kind,
+      proof: req.proof,
+      publicInputs: [...req.publicInputs],
+      payload: req.payload ? [...req.payload] : undefined,
     });
   }
 }
@@ -295,6 +350,16 @@ export class DirectRpcClient implements RpcClient {
       confirmations,
       fetchedAt: Date.now(),
     };
+  }
+
+  // BYO-RPC mode has no Pampalo relayer pool — the user signs and
+  // broadcasts from their own wallet. Report "not sponsored" so callers
+  // take the self-broadcast path.
+  relay(): Promise<RelayResult> {
+    return Promise.resolve({
+      ok: false,
+      reason: "CHAIN_NOT_SPONSORED",
+    } as RelayResult);
   }
 }
 

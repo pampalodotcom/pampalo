@@ -1,0 +1,184 @@
+# SDK: `@pampalo/sdk`
+
+The programmatic core for [agent accounts](/building). Import the `Account`
+class, point it at an RPC and a local store, and you can read balances, sync
+notes from chain, and move money, public or private.
+
+## Install
+
+:::code-group
+
+```bash [pnpm]
+pnpm add @pampalo/sdk
+```
+
+```bash [npm]
+npm install @pampalo/sdk
+```
+
+```bash [yarn]
+yarn add @pampalo/sdk
+```
+
+:::
+
+Requires **Node 20+** (22 recommended). `@pampalo/shared` is pulled in
+automatically.
+
+## Quickstart
+
+```ts
+import { Account } from "@pampalo/sdk";
+
+// 1. Create a fresh agent account (writes an encrypted keystore to
+//    ~/.pampalo/accounts/agent1.json)
+const account = await Account.create({
+  name: "agent1",
+  passphrase: process.env.PAMPALO_PASSPHRASE!,
+});
+
+console.log(account.addresses.evm); // fund this address to get started
+
+// 2. Wire up chain access + the local note store
+account
+  .useRpc({ 84532: "https://base-sepolia.g.alchemy.com/v2/<KEY>" })
+  .useStore(); // ~/.pampalo/pampalo.db
+
+// 3. Scan the chain for this account's notes + the merkle leaf set
+await account.sync({ chainId: 84532 });
+
+// 4. Read balances
+const pub = await account.balance({ chainId: 84532 });
+const priv = account.privateBalance({ chainId: 84532 });
+console.log("public ETH wei:", pub.native.wei);
+console.log("private notes:", priv.byAsset);
+```
+
+The chain id `84532` is **Base Sepolia**, the deployment the SDK ships with
+out of the box.
+
+## Accounts
+
+An account is unlocked once per process and held in memory for the run, with no
+per-call passphrase prompt.
+
+```ts
+// fresh identity → new keystore
+await Account.create({ name, passphrase });
+
+// existing recovery phrase → new keystore (explicit opt-in)
+await Account.import({ name, passphrase, mnemonic });
+
+// unlock an existing keystore (throws "wrong passphrase" on a bad key)
+await Account.load({ name, passphrase });
+
+// ephemeral, never touches disk (CI / one-shot agents)
+Account.fromMnemonic(process.env.PAMPALO_MNEMONIC!);
+```
+
+Every account exposes its public identifiers:
+
+```ts
+account.addresses;
+// {
+//   evm:              "0x…",  // public Ethereum address
+//   poseidon:         "0x…",  // unlinkable on-chain note identifier
+//   envelope:         "0x04…",// ECIES key others encrypt notes to
+//   envelopeIsolated: "0x04…",
+// }
+```
+
+:::tip[Custody]
+The recovery phrase is encrypted at rest with **scrypt + AES-256-GCM** and only
+ever lives in memory while the process runs. Pass the passphrase explicitly, or
+set `PAMPALO_PASSPHRASE`. For unattended agents, `Account.fromMnemonic` with
+`PAMPALO_MNEMONIC` skips the keystore entirely.
+:::
+
+## Transport and store
+
+```ts
+account.useRpc({ 84532: "https://…", 1: "https://…" }); // chainId → JSON-RPC URL
+account.useStore("/path/to/notes.db"); // optional; defaults to ~/.pampalo/pampalo.db
+```
+
+The store is SQLite. It holds your notes, the public merkle leaf set (needed to
+build proofs), and a per-chain sync cursor. `sync` is incremental; it resumes
+from the last block it scanned.
+
+```ts
+const result = await account.sync({ chainId: 84532 });
+// { fromBlock, toBlock, leavesIndexed, notesUpserted, spentMarked }
+```
+
+## Reading balances
+
+```ts
+// public, on-chain balances (native + the deployment's known tokens)
+await account.balance({ chainId: 84532 });
+
+// private balance: spendable notes summed per asset (from the local store)
+account.privateBalance({ chainId: 84532 });
+
+// shield lifecycle: queued → spendable, or cancelled / contested
+account.shields({ chainId: 84532 });
+```
+
+`privateBalance` and `shields` read the local store, so run `sync` first to
+make sure they're current.
+
+## Moving money
+
+All amounts are **`bigint` base units** (wei, or a token's smallest unit).
+
+```ts
+// public EVM transfer (native or ERC-20), no privacy
+await account.send({ chainId: 84532, to: "0x…", amount: 1_000_000_000_000_000n });
+await account.send({ chainId: 84532, to: "0x…", asset: "0x…USDC", amount: 5_000_000n });
+
+// shield: public → private note (to yourself)
+await account.shield({ chainId: 84532, amount: 1_000_000_000_000_000n });          // native
+await account.shield({ chainId: 84532, asset: "0x…USDC", amount: 5_000_000n });     // ERC-20
+
+// transfer: private note → private note
+await account.transfer({
+  chainId: 84532,
+  to: { poseidon: "0x…", envelope: "0x04…" }, // recipient's identifiers
+  asset: "0x…USDC",
+  amount: 2_000_000n,
+});
+
+// unshield: private note → public payout (defaults to your own EVM address)
+await account.unshield({ chainId: 84532, asset: "0x…USDC", amount: 3_000_000n, recipient: "0x…" });
+```
+
+Each returns `{ txHash }` (shield also returns `leafCommitment`). The store is
+updated optimistically; run `sync` afterwards to pick up confirmed state and
+the leaf indices new notes need before they can be spent.
+
+:::warning[Privacy note]
+Agent-account `transfer` and `unshield` currently **self-broadcast**: your EVM
+address is the visible `msg.sender` on the transaction, which links it to the
+on-chain event. That's the exact linkage Pampalo's relayer exists to break, and
+it isn't reachable from a headless account yet. Until it ships, an agent
+account has a weaker privacy floor than the web wallet. `shield` is to your own
+identity only in v1.
+:::
+
+## v1 limitations
+
+- **Transfers/unshields self-broadcast** (see above).
+- **Shield is to self only.**
+- **Single-note coin selection**: a spend uses one note that covers the
+  amount; if no single note is large enough, you'll get a clear error rather
+  than an automatic multi-note spend.
+- **One merkle epoch**: fine for current volume; multi-tree rollover lands
+  later.
+
+## TypeScript
+
+The package ships full type declarations. Useful exports beyond `Account`:
+`DEPLOYMENTS` / `getDeployment` (the chain catalog), `Store`, `RpcTransport`,
+`ETH_SENTINEL`, and the lower-level intent builders (`buildShield`,
+`buildTransfer`, `buildUnshield`, `buildTree`) if you want to construct a
+transaction without broadcasting it.
