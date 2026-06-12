@@ -351,8 +351,12 @@ shield event is what the protocol breaks.
 The mandatory holding period (default 1 hour) between a user calling
 `shield(...)` and the resulting note being inserted into the merkle
 tree. During the wait the shielded asset is escrowed by the Pampalo
-contract; no on-chain note exists yet, so the shielder may cancel and
-recover the asset, and a **vigilant citizen** may contest.
+contract; no on-chain note exists yet. The shielder may **cancel and
+recover the asset at any point before the shield is executed** —
+including after the wait elapses, since the funds stay escrowed until
+`executeShield` inserts the leaf (`cancelShield` has no unlock-time
+gate; once executed, the freed storage rejects a late cancel). A
+**vigilant citizen** may likewise contest up until execution.
 
 **Fast-track**:
 A `BOOTH_OPERATOR_ROLE` waiver of the **Shield wait** for a vetted user.

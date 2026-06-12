@@ -455,11 +455,16 @@ contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
     delete pendingShields[id];
   }
 
+  // The shielder can reclaim their escrow any time before the shield is
+  // executed — including after the wait elapses (the funds are still
+  // escrowed until `executeShield` inserts the leaf). No unlock-time gate:
+  // once executed, `delete pendingShields[id]` zeroes the shielder and the
+  // `not shielder` check below rejects a late cancel. Mirrors
+  // `contestShield`, which is likewise only bounded by execution.
   function cancelShield(uint256 id) external {
     PendingShield storage p = pendingShields[id];
     require(p.shielder == msg.sender, "not shielder");
     require(!p.cancelled, "already cancelled");
-    require(block.timestamp < p.unlockTime, "already executable");
 
     _refundEscrow(p.shielder, p.asset, p.amount);
     _refundShieldCap(p.shielder, p.usdCentsCharged);
