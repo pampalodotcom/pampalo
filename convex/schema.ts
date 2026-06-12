@@ -443,6 +443,61 @@ export default defineSchema({
     .index("by_deployment_and_block", ["deploymentId", "blockNumber"])
     .index("by_block", ["blockNumber"]),
 
+  // ── Retired-deployment archive (ADR 0018) ──────────────────────────
+  // A clean-break redeploy (ADR 0017) wipes the old deployment's indexed
+  // children for correctness (leaf-collision). Before that wipe, `seedAll`
+  // copies the *user-recoverable* material into these archive tables so a
+  // user's pre-redeploy notes survive cross-device as read-only history
+  // (wallet Settings → History → Previous deployments). Keyed by the OLD
+  // deployment's `(chainId, archivedDeploymentAddress)` rather than a
+  // `pampaloDeployments` FK, because the redeploy reuses that row's id for
+  // the NEW contract. Retirement itself is derived client-side (a note
+  // whose deploymentAddress is absent from `enabledDeployments()`); these
+  // tables exist only to repopulate a fresh device.
+
+  // One identity row per retired deployment — lets the History panel label
+  // a group `v1.x · retired <date>` instead of a bare address.
+  archivedDeployments: defineTable({
+    chainId: v.number(),
+    pampalo: v.string(), // lowercased old Pampalo address
+    version: v.optional(v.string()), // on-chain VERSION at retirement, if known
+    retiredAt: v.number(), // ms — when seedAll archived + wiped it
+  })
+    .index("by_chain", ["chainId"])
+    .index("by_chain_and_address", ["chainId", "pampalo"]),
+
+  // Snapshot of `shieldQueueEntries` for a retired deployment. The client
+  // queries by `shielder` and trial-decrypts `encryptedPayload` with the
+  // envelope key to reconstruct its own retired self-shields.
+  archivedShieldQueue: defineTable({
+    chainId: v.number(),
+    archivedDeploymentAddress: v.string(), // lowercased old Pampalo address
+    shielder: v.string(), // lowercased
+    asset: v.string(), // lowercased
+    amount: v.string(), // base units, decimal string
+    leafCommitment: v.string(), // hex
+    encryptedPayload: v.bytes(), // raw ECIES ciphertext from ShieldQueued
+    state: v.string(), // queued | executed | cancelled | contested (at wipe)
+    unlockTime: v.number(), // unix seconds
+    queuedTxHash: v.string(),
+    queuedAt: v.number(), // ms — original first-seen
+  })
+    .index("by_shielder", ["shielder"])
+    .index("by_chain_and_address", ["chainId", "archivedDeploymentAddress"]),
+
+  // Snapshot of `transferNotes` for a retired deployment. The client walks
+  // these by chain and trial-decrypts each ciphertext to find received
+  // (cross-recipient) retired notes.
+  archivedTransferNotes: defineTable({
+    chainId: v.number(),
+    archivedDeploymentAddress: v.string(), // lowercased old Pampalo address
+    encryptedPayload: v.bytes(), // raw ECIES blob from the event
+    txHash: v.string(),
+    emittedAt: v.number(), // ms — original first-seen
+  })
+    .index("by_chain", ["chainId"])
+    .index("by_chain_and_address", ["chainId", "archivedDeploymentAddress"]),
+
   // Cached Uniswap pool addresses. Pool addresses are deterministic
   // (CREATE2 from factory + tokens [+ fee for v3]) and can always be
   // recomputed on-chain via factory.getPair / factory.getPool, but

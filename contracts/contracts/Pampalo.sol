@@ -67,6 +67,12 @@ contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
   bytes32 public constant BOOTH_OPERATOR_ROLE =
     keccak256("BOOTH_OPERATOR_ROLE");
 
+  // Semantic contract version. Bumped on every deploy; a MAJOR bump means a
+  // breaking redeploy (new tree, no migration — see ADR 0017). Readable
+  // on-chain (pampalo.VERSION()) and surfaced on /sentry so "which contract
+  // is live" is auditable.
+  string public constant VERSION = "2.0.0";
+
   // ──────────────────────────────────────────────────────────────────────
   // Supported assets + price oracles
   // ──────────────────────────────────────────────────────────────────────
@@ -455,11 +461,16 @@ contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
     delete pendingShields[id];
   }
 
+  // The shielder can reclaim their escrow any time before the shield is
+  // executed — including after the wait elapses (the funds are still
+  // escrowed until `executeShield` inserts the leaf). No unlock-time gate:
+  // once executed, `delete pendingShields[id]` zeroes the shielder and the
+  // `not shielder` check below rejects a late cancel. Mirrors
+  // `contestShield`, which is likewise only bounded by execution.
   function cancelShield(uint256 id) external {
     PendingShield storage p = pendingShields[id];
     require(p.shielder == msg.sender, "not shielder");
     require(!p.cancelled, "already cancelled");
-    require(block.timestamp < p.unlockTime, "already executable");
 
     _refundEscrow(p.shielder, p.asset, p.amount);
     _refundShieldCap(p.shielder, p.usdCentsCharged);

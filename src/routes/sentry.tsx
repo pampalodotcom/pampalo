@@ -84,6 +84,7 @@ function Sentry() {
 
   const deployments = useDeploymentsList();
   const tokens = useQuery(api.catalog.tokens.list, {});
+  const prices = useQuery(api.prices.feeds.listLatest, {});
   const [filter, setFilter] = useState<NetworkFilter>("all");
 
   // Rows the user just submitted a finalise tx for. The row stays in
@@ -287,6 +288,7 @@ function Sentry() {
           results={paginated.results}
           deployments={deployments ?? []}
           tokens={tokens ?? []}
+          prices={prices ?? []}
           finalising={finalising}
           authed={auth.state.status === "authenticated"}
           rolesByChainId={rolesByChainId}
@@ -511,7 +513,23 @@ type TokenInfo = {
   name: string;
   symbol: string;
   decimals: number;
+  priceFeedShortId?: string;
 };
+
+type PriceInfo = { shortId: string; answer: string; feedDecimals: number };
+
+// USD per whole token. Stables (no feed) = $1; else the catalogue feed
+// (all quoted base/usd). Mirrors usdPriceFor in wallet.tsx.
+function priceUsdFor(
+  token: TokenInfo | undefined,
+  prices: PriceInfo[],
+): number | null {
+  if (!token) return null;
+  if (!token.priceFeedShortId) return 1;
+  const feed = prices.find((p) => p.shortId === token.priceFeedShortId);
+  if (!feed) return null;
+  return Number(feed.answer) / 10 ** feed.feedDecimals;
+}
 
 function QueueBody({
   isDesktop,
@@ -519,6 +537,7 @@ function QueueBody({
   results,
   deployments,
   tokens,
+  prices,
   finalising,
   authed,
   rolesByChainId,
@@ -531,6 +550,7 @@ function QueueBody({
   results: ShieldQueueEntry[];
   deployments: Deployment[];
   tokens: TokenInfo[];
+  prices: PriceInfo[];
 } & Omit<RowHandlers, "rolesByChainId" | "finalising"> & {
     rolesByChainId: Map<number, DeploymentRoles>;
     finalising: Set<string>;
@@ -555,6 +575,7 @@ function QueueBody({
         results={results}
         deployments={deployments}
         tokens={tokens}
+        prices={prices}
         handlers={handlers}
       />
     );
@@ -564,6 +585,7 @@ function QueueBody({
       results={results}
       deployments={deployments}
       tokens={tokens}
+      prices={prices}
       handlers={handlers}
     />
   );
@@ -619,11 +641,13 @@ function QueueTable({
   results,
   deployments,
   tokens,
+  prices,
   handlers,
 }: {
   results: ShieldQueueEntry[];
   deployments: Deployment[];
   tokens: TokenInfo[];
+  prices: PriceInfo[];
   handlers: RowHandlers;
 }) {
   const deploymentChainById = useMemo(() => {
@@ -644,22 +668,13 @@ function QueueTable({
       <Table>
         <TableHeader>
           <TableRow className="border-line">
-            {/* Network + Shielder share one column below lg — the
-                shielder address otherwise pushes the row past the
-                table's track and forces a horizontal scrollbar. Header
-                renders the stacked label pair to match. */}
             <TableHead className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mute">
-              <span className="hidden lg:inline">Network</span>
-              <span className="flex flex-col gap-0.5 leading-tight lg:hidden">
-                <span>Network</span>
-                <span>Shielder</span>
-              </span>
-            </TableHead>
-            <TableHead className="hidden lg:table-cell text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mute">
               Shielder
             </TableHead>
+            {/* Asset carries the network too (the standalone Network column
+                folded in here). */}
             <TableHead className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mute">
-              Amount
+              Asset
             </TableHead>
             <TableHead className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mute">
               Queued
@@ -685,26 +700,20 @@ function QueueTable({
                 key={row._id}
                 className="border-line [&>td]:py-4 [&>td:first-child]:pl-4 [&>td:last-child]:pr-4"
               >
-                <TableCell className="text-[12px] text-ink align-top">
-                  <NetworkCell
-                    chainId={dep?.chainId ?? null}
-                    name={dep?.networkName ?? null}
-                  />
-                  <div className="mt-1.5 lg:hidden">
-                    <ShielderCell
-                      address={row.shielder}
-                      chainId={dep?.chainId ?? null}
-                    />
-                  </div>
-                </TableCell>
-                <TableCell className="hidden lg:table-cell text-[12px] text-ink">
+                <TableCell className="text-[12px] text-ink">
                   <ShielderCell
                     address={row.shielder}
                     chainId={dep?.chainId ?? null}
                   />
                 </TableCell>
                 <TableCell className="text-[12px] text-ink">
-                  <AmountCell amount={row.amount} token={token} />
+                  <AmountCell
+                    amount={row.amount}
+                    token={token}
+                    prices={prices}
+                    chainId={dep?.chainId ?? null}
+                    networkName={dep?.networkName ?? null}
+                  />
                 </TableCell>
                 <TableCell className="text-[12px] text-ink-soft">
                   <QueuedCell
@@ -739,11 +748,13 @@ function QueueCards({
   results,
   deployments,
   tokens,
+  prices,
   handlers,
 }: {
   results: ShieldQueueEntry[];
   deployments: Deployment[];
   tokens: TokenInfo[];
+  prices: PriceInfo[];
   handlers: RowHandlers;
 }) {
   const deploymentChainById = useMemo(() => {
@@ -783,7 +794,12 @@ function QueueCards({
                   </div>
                 </div>
                 <div className="text-right">
-                  <AmountCell amount={row.amount} token={token} alignRight />
+                  <AmountCell
+                    amount={row.amount}
+                    token={token}
+                    prices={prices}
+                    alignRight
+                  />
                 </div>
               </div>
               <div className="mt-3 flex items-center justify-between text-[11.5px] text-ink-mute">
@@ -836,10 +852,18 @@ function NetworkCell({
 function AmountCell({
   amount,
   token,
+  prices,
+  chainId,
+  networkName,
   alignRight,
 }: {
   amount: string;
   token: TokenInfo | undefined;
+  prices: PriceInfo[];
+  /** When set, the network is shown inside this cell (desktop table, where
+   *  the standalone Network column has been folded in). */
+  chainId?: number | null;
+  networkName?: string | null;
   alignRight?: boolean;
 }) {
   // Fall back gracefully when the token isn't in the catalog yet (the
@@ -848,6 +872,17 @@ function AmountCell({
   const decimals = token?.decimals;
   const formatted =
     decimals !== undefined ? formatTokenAmount(amount, decimals) : amount;
+
+  // USD value of this pending shield = token amount × live price.
+  const priceUsd = priceUsdFor(token, prices);
+  const usd =
+    decimals !== undefined && priceUsd !== null
+      ? (Number(formatUnits(amount, decimals)) * priceUsd).toLocaleString(
+          "en-US",
+          { style: "currency", currency: "USD" },
+        )
+      : null;
+
   return (
     <span
       className={cn(
@@ -856,16 +891,37 @@ function AmountCell({
       )}
     >
       {token?.symbol && <AssetMark symbol={token.symbol} size={22} />}
-      <span className="flex flex-col leading-tight">
+      <span className="flex flex-col gap-0.5 leading-tight">
         <span className="font-mono text-[13px] font-semibold text-ink">
           {formatted}
           {token?.symbol && (
             <span className="ml-1 text-ink-soft">{token.symbol}</span>
           )}
         </span>
-        {token?.name && (
-          <span className="text-[10.5px] text-ink-mute">{token.name}</span>
-        )}
+        {/* Sub-line: USD value, then the network (when this cell owns it).
+            Falls back to the asset name when no network is shown. */}
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5 text-[10.5px] text-ink-mute",
+            alignRight && "justify-end",
+          )}
+        >
+          {usd && <span>{usd}</span>}
+          {chainId != null ? (
+            <>
+              {usd && <span aria-hidden>·</span>}
+              <NetworkLogo chainId={chainId} size={13} />
+              <span>{networkName ?? `chain ${chainId}`}</span>
+            </>
+          ) : (
+            token?.name && (
+              <>
+                {usd && <span aria-hidden>·</span>}
+                <span>{token.name}</span>
+              </>
+            )
+          )}
+        </span>
       </span>
     </span>
   );

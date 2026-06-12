@@ -1,8 +1,125 @@
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
-import { internalMutation } from "../_generated/server";
+import { internalMutation, type MutationCtx } from "../_generated/server";
 import { lowerAddress } from "../lib/normalize";
 import { ETH_ADDRESS } from "../catalog/seed";
+
+// Delete every indexed child row tied to a deployment — used when a
+// redeploy abandons the old contract (ADR 0017). Returns per-table counts.
+// Testnet-scale only; a high-volume deployment would need batched deletes.
+async function wipeDeploymentChildren(
+  ctx: MutationCtx,
+  deploymentId: Id<"pampaloDeployments">,
+): Promise<{ leaves: number; queue: number; notes: number; activity: number }> {
+  const del = async (
+    rows: Array<{ _id: Id<"pampaloLeaves" | "shieldQueueEntries" | "transferNotes" | "pampaloActivity"> }>,
+  ) => {
+    for (const r of rows) await ctx.db.delete(r._id);
+    return rows.length;
+  };
+  const leaves = await del(
+    await ctx.db
+      .query("pampaloLeaves")
+      .withIndex("by_deployment", (q) => q.eq("deploymentId", deploymentId))
+      .collect(),
+  );
+  const queue = await del(
+    await ctx.db
+      .query("shieldQueueEntries")
+      .withIndex("by_deployment_and_state", (q) =>
+        q.eq("deploymentId", deploymentId),
+      )
+      .collect(),
+  );
+  const notes = await del(
+    await ctx.db
+      .query("transferNotes")
+      .withIndex("by_deployment", (q) => q.eq("deploymentId", deploymentId))
+      .collect(),
+  );
+  const activity = await del(
+    await ctx.db
+      .query("pampaloActivity")
+      .withIndex("by_deployment_and_tx", (q) =>
+        q.eq("deploymentId", deploymentId),
+      )
+      .collect(),
+  );
+  return { leaves, queue, notes, activity };
+}
+
+// Copy the user-recoverable rows of a soon-to-be-wiped deployment into the
+// archive tables (ADR 0018) so a user's pre-redeploy notes survive
+// cross-device as read-only history. MUST run BEFORE wipeDeploymentChildren
+// and BEFORE the deployment row is replaced (we need the OLD address). Only
+// shieldQueueEntries (self-shields) + transferNotes (received notes) carry
+// envelope-decryptable material; leaves/activity are positional/public and
+// intentionally not archived. Testnet-scale only (collect-then-insert).
+async function archiveDeploymentChildren(
+  ctx: MutationCtx,
+  deploymentId: Id<"pampaloDeployments">,
+  chainId: number,
+  oldPampalo: string,
+  version: string | undefined,
+): Promise<{ shields: number; notes: number }> {
+  const archivedDeploymentAddress = lowerAddress(oldPampalo);
+  const now = Date.now();
+
+  const queue = await ctx.db
+    .query("shieldQueueEntries")
+    .withIndex("by_deployment_and_state", (q) =>
+      q.eq("deploymentId", deploymentId),
+    )
+    .collect();
+  for (const r of queue) {
+    await ctx.db.insert("archivedShieldQueue", {
+      chainId,
+      archivedDeploymentAddress,
+      shielder: r.shielder,
+      asset: r.asset,
+      amount: r.amount,
+      leafCommitment: r.leafCommitment,
+      encryptedPayload: r.encryptedPayload,
+      state: r.state,
+      unlockTime: r.unlockTime,
+      queuedTxHash: r.queuedTxHash,
+      queuedAt: r.queuedAt,
+    });
+  }
+
+  const notes = await ctx.db
+    .query("transferNotes")
+    .withIndex("by_deployment", (q) => q.eq("deploymentId", deploymentId))
+    .collect();
+  for (const r of notes) {
+    await ctx.db.insert("archivedTransferNotes", {
+      chainId,
+      archivedDeploymentAddress,
+      encryptedPayload: r.encryptedPayload,
+      txHash: r.txHash,
+      emittedAt: r.emittedAt,
+    });
+  }
+
+  // Identity marker — one row per retired deployment (idempotent on
+  // (chainId, address), so a re-seed doesn't duplicate it).
+  const existingMarker = await ctx.db
+    .query("archivedDeployments")
+    .withIndex("by_chain_and_address", (q) =>
+      q.eq("chainId", chainId).eq("pampalo", archivedDeploymentAddress),
+    )
+    .unique();
+  if (!existingMarker) {
+    await ctx.db.insert("archivedDeployments", {
+      chainId,
+      pampalo: archivedDeploymentAddress,
+      version,
+      retiredAt: now,
+    });
+  }
+
+  return { shields: queue.length, notes: notes.length };
+}
 
 // Gas-sponsoring defaults (TRANSFERS.md §2.4). Base Sepolia is the only
 // chain sponsoring at seed time; flipping another chain on is a manual
@@ -49,13 +166,15 @@ type SeedDeployment = {
 const DEPLOYMENTS: SeedDeployment[] = [
   {
     chainId: 84532,
-    pampalo: "0x3E6dfc4c233486A44e26A548e191c839f069037f",
-    poseidon2Huff: "0x090Fd81205Da513803a78FB2628f032385564998",
+    // v2.0.0 — deployed 2026-06-12 from index-1 (0x77c2…f054). See
+    // contracts/deployments/84532.json + DEPLOYMENT.md ledger.
+    pampalo: "0x86cC802B2d5a9EF41194E68ed69EeCC37AdAAf59",
+    poseidon2Huff: "0x55edf41867bA8F18f68c2E42614465f86C35AE4E",
     verifiers: {
-      deposit: "0xB656b7358c9Ef0CccC698405cFb090C854BC8460",
-      transfer: "0x819CDE597613a12FCF2Ce8fc3fCAF25dfF585B71",
-      withdraw: "0xA6C469Ceba94A8549a0692b85b68390549D23Bd7",
-      transferExternal: "0xc729DfAAde6e9deE6BA95A04772d27bf45EcdDBD",
+      deposit: "0x04D2D2B7D4345714D0451D4446E5C2dca049Ce33",
+      transfer: "0xEDE22DBb1C48FAb78079924e60038b0E74c51357",
+      withdraw: "0x09e3f6f4A67F5C8818c634137AeA181acCa392A3",
+      transferExternal: "0x98f54Fb3fB1BA577344aFfd9222B5100aCB35e1D",
     },
     // Mirror the on-chain constants — re-read by the catalog-refresh
     // cron once that lands. Tightening these doesn't break anything;
@@ -68,14 +187,14 @@ const DEPLOYMENTS: SeedDeployment[] = [
       {
         // Native ETH sentinel — matches the Pampalo contract's ETH_ADDRESS.
         tokenAddress: ETH_ADDRESS,
-        oracle: "0x6aCC11a076eAE4236d734E2050E568B375944AB8",
+        oracle: "0x84A490A5f77C202aa89687c9105f8cf0e7485bE9",
         assetDecimals: 18,
       },
       {
         // USDC mock — respins with every deploy. Update alongside the
         // address in catalog/seed.ts TOKENS.
-        tokenAddress: "0x4Fc9cc04f2A8d6Ff360352C61A4bb36Ab262Ae01",
-        oracle: "0x1d787703FAAF8677Ac43784d6eC7875127f8BFF9",
+        tokenAddress: "0x445b24Cf4Ac9AC20ecc417Ac41160Fdc8088520d",
+        oracle: "0xF1bCFbb62F3337295C2f33CCe0662574F4687b2A",
         assetDecimals: 6,
       },
     ],
@@ -225,6 +344,14 @@ export const seedAll = internalMutation({
         .withIndex("by_networkId", (q) => q.eq("networkId", network._id))
         .unique();
 
+      // A changed Pampalo address means a clean-break redeploy (no proxy,
+      // fresh tree). The old contract's indexed children are now orphaned —
+      // and `pampaloLeaves` would COLLIDE on (epoch,leafIndex) with the new
+      // tree (both restart at 0,0), corrupting the client's tree mirror and
+      // breaking proofs. So wipe them + reset the cursor. See ADR 0017.
+      const addressChanged =
+        !!existing && existing.pampalo !== lowerAddress(d.pampalo);
+
       const deploymentPayload = {
         networkId: network._id,
         pampalo: lowerAddress(d.pampalo),
@@ -238,8 +365,9 @@ export const seedAll = internalMutation({
         shieldWaitSeconds: d.shieldWaitSeconds,
         defaultMonthlyCapUsdCents: d.defaultMonthlyCapUsdCents,
         confirmationDepth: d.confirmationDepth,
-        // Preserve cursor on re-seed; fresh rows start at 0.
-        lastIndexedBlock: existing?.lastIndexedBlock ?? 0,
+        // Reset the cursor on a redeploy (cold-start re-scan from head);
+        // otherwise preserve it. Fresh rows start at 0.
+        lastIndexedBlock: addressChanged ? 0 : (existing?.lastIndexedBlock ?? 0),
         enabled: true,
         // Preserve an operator's manual sponsoring flip on re-seed; default
         // to on only for Base Sepolia. relayerAccounts rows are seeded
@@ -252,8 +380,30 @@ export const seedAll = internalMutation({
 
       let deploymentId: Id<"pampaloDeployments">;
       if (existing) {
+        // Capture the OLD address before replace overwrites the row.
+        const oldPampalo = existing.pampalo;
         await ctx.db.replace(existing._id, deploymentPayload);
         deploymentId = existing._id;
+        if (addressChanged) {
+          // Archive the user-recoverable rows BEFORE wiping (ADR 0018), so
+          // retired notes survive cross-device. Child rows are still keyed
+          // by the (reused) deploymentId, so they read fine post-replace.
+          const archived = await archiveDeploymentChildren(
+            ctx,
+            deploymentId,
+            d.chainId,
+            oldPampalo,
+            undefined, // on-chain VERSION not known server-side
+          );
+          const wiped = await wipeDeploymentChildren(ctx, deploymentId);
+          console.warn(
+            `[seed] redeploy on chain ${d.chainId}: archived ` +
+              `(${archived.shields} shields, ${archived.notes} notes) from ` +
+              `${oldPampalo} then wiped orphaned rows (${wiped.leaves} leaves, ` +
+              `${wiped.queue} queue, ${wiped.notes} notes, ` +
+              `${wiped.activity} activity) + reset cursor.`,
+          );
+        }
       } else {
         deploymentId = await ctx.db.insert(
           "pampaloDeployments",

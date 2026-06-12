@@ -8,6 +8,7 @@ import {
 } from "@/components/pampalo/AccountAvatar";
 import { AddressWell } from "@/components/pampalo/AddressWell";
 import { BeachScene } from "@/components/pampalo/BeachScene";
+import { BoothSendBar } from "@/components/pampalo/share/BoothSendBar";
 import { QRCanvas } from "@/components/pampalo/deposit/QRCanvas";
 import { ThemeToggle } from "@/components/pampalo/ThemeToggle";
 import { useClipboard } from "@/lib/use-clipboard";
@@ -256,6 +257,19 @@ function SharePage() {
                   Share link
                 </button>
               </div>
+
+              {/* Booth-operator quick-drip. Renders only when the viewer
+                  is signed in AND holds BOOTH_OPERATOR_ROLE on this
+                  link's chain — otherwise this stays the plain public
+                  share surface. */}
+              <BoothSendBar
+                chainId={search.chainId ?? null}
+                target={{
+                  evm: search.evm,
+                  envelope: search.envelope,
+                  poseidon: search.poseidon,
+                }}
+              />
             </>
           ) : (
             <div className="flex flex-col gap-2 text-[13.5px] text-ink-soft">

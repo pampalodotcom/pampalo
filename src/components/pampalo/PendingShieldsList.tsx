@@ -147,19 +147,44 @@ export function PendingShieldsList({
                 </span>
                 <ExplorerLink note={n} />
               </span>
-              <button
-                type="button"
-                onClick={() => onFinalise?.(n)}
-                disabled={!onFinalise}
-                className={cn(
-                  "inline-flex h-7 items-center gap-1 rounded-full px-3",
-                  "bg-[var(--priv)] text-white text-[11.5px] font-semibold",
-                  "transition-opacity hover:opacity-90",
-                  "disabled:cursor-not-allowed disabled:opacity-50",
+              <span className="inline-flex shrink-0 items-center gap-1.5">
+                {onCancel && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onCancel({
+                        leafCommitment: n.leafCommitment,
+                        chainId: n.chainId,
+                        amount: n.amount,
+                        symbol,
+                        decimals,
+                        priceUsd: priceUsd ?? null,
+                      })
+                    }
+                    className={cn(
+                      "inline-flex h-7 items-center rounded-full px-3",
+                      "border border-line bg-paper text-[11.5px] font-semibold text-ink",
+                      "transition-colors hover:bg-paper-lo",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-faint",
+                    )}
+                  >
+                    Cancel
+                  </button>
                 )}
-              >
-                Finalise
-              </button>
+                <button
+                  type="button"
+                  onClick={() => onFinalise?.(n)}
+                  disabled={!onFinalise}
+                  className={cn(
+                    "inline-flex h-7 items-center gap-1 rounded-full px-3",
+                    "bg-[var(--priv)] text-white text-[11.5px] font-semibold",
+                    "transition-opacity hover:opacity-90",
+                    "disabled:cursor-not-allowed disabled:opacity-50",
+                  )}
+                >
+                  Finalise
+                </button>
+              </span>
             </li>
           ))}
           {queuedNotes.map((n) => (

@@ -1,6 +1,6 @@
 {
   "name": "@pampalo/sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Headless Pampalo agent accounts for Node/TS. Custody, sync, and private transfers without a browser.",
   "license": "MIT",

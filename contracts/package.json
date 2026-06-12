@@ -1,8 +1,32 @@
 {
   "name": "@pampalo/contracts",
-  "version": "0.0.1",
-  "private": true,
+  "version": "0.1.0",
   "type": "module",
+  "description": "Pampalo's core Solidity contracts — import the private-payment protocol and acceptor into any Hardhat/Foundry project.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pampalodotcom/pampalo.git",
+    "directory": "contracts"
+  },
+  "keywords": [
+    "pampalo",
+    "solidity",
+    "ethereum",
+    "privacy",
+    "zk",
+    "hardhat",
+    "smart-contracts"
+  ],
+  "files": [
+    "contracts/**/*.sol",
+    "contracts/**/*.json",
+    "deployments/*.json",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
@@ -14,13 +38,13 @@
     "verify:base-sepolia": "hardhat ignition verify pampalo --network baseSepolia"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^5.1.0",
-    "@pampalo/shared": "workspace:*",
-    "@zkpassport/poseidon2": "^0.6.2",
-    "eciesjs": "^0.4.16"
+    "@openzeppelin/contracts": "^5.1.0"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^3.0.5",
+    "@pampalo/shared": "workspace:*",
+    "@zkpassport/poseidon2": "^0.6.2",
+    "eciesjs": "^0.4.16",
     "@nomicfoundation/hardhat-ignition-ethers": "^3.0.5",
     "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.1",
     "@types/chai": "^4.3.20",

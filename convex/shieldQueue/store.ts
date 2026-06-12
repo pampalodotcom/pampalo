@@ -619,6 +619,72 @@ export const byShielder = query({
   },
 });
 
+// ─── Retired-deployment archive reads (ADR 0018) ────────────────────────
+// Repopulate a fresh device's retired-note history. Mirror the live
+// byShielder / notePayloadsForChain shapes, but read the archive tables
+// keyed by the OLD deployment's (chainId, address). Retirement is derived
+// client-side, so these just hand back decryptable material + the labels.
+
+/** Retired self-shields for a shielder across all past deployments. The
+ *  client trial-decrypts `encryptedPayload` with its envelope key. */
+export const archivedByShielder = query({
+  args: { shielder: v.string() },
+  handler: async (ctx, args): Promise<Doc<"archivedShieldQueue">[]> => {
+    const addr = lowerAddress(args.shielder);
+    return await ctx.db
+      .query("archivedShieldQueue")
+      .withIndex("by_shielder", (q) => q.eq("shielder", addr))
+      .order("desc")
+      .take(500);
+  },
+});
+
+/** Retired NotePayload ciphertexts for a chain (all past deployments).
+ *  The client walks these and trial-decrypts to recover received notes. */
+export const archivedNotePayloadsForChain = query({
+  args: { chainId: v.number() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    Array<{
+      _id: Id<"archivedTransferNotes">;
+      archivedDeploymentAddress: string;
+      encryptedPayload: ArrayBuffer | string;
+      txHash: string;
+    }>
+  > => {
+    const rows = await ctx.db
+      .query("archivedTransferNotes")
+      .withIndex("by_chain", (q) => q.eq("chainId", args.chainId))
+      .order("asc")
+      .take(1000);
+    return rows.map((r) => ({
+      _id: r._id,
+      archivedDeploymentAddress: r.archivedDeploymentAddress,
+      encryptedPayload: r.encryptedPayload,
+      txHash: r.txHash,
+    }));
+  },
+});
+
+/** Identity markers for retired deployments — the History panel uses
+ *  these to label a group (`v1.x · retired <date>`) by address. */
+export const listArchivedDeployments = query({
+  args: { chainId: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<Doc<"archivedDeployments">[]> => {
+    if (args.chainId !== undefined) {
+      const chainId = args.chainId;
+      return await ctx.db
+        .query("archivedDeployments")
+        .withIndex("by_chain", (q) => q.eq("chainId", chainId))
+        .order("desc")
+        .collect();
+    }
+    return await ctx.db.query("archivedDeployments").order("desc").collect();
+  },
+});
+
 /**
  * Per-chain Pampalo deployment metadata for any enabled deployment.
  * Consumed by the wallet's shield-confirm sheet so it can resolve

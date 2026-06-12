@@ -99,6 +99,18 @@ const CHAINLINK_FEEDS: Record<
       maxAge: 172800,
     },
   },
+  // Base mainnet (verified on-chain: ETH/USD heartbeat ~1200s,
+  // USDC/USD ~86400s; maxAge ~2× heartbeat with headroom).
+  8453: {
+    eth: {
+      feed: "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70",
+      maxAge: 7200,
+    },
+    usdc: {
+      feed: "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B",
+      maxAge: 172800,
+    },
+  },
 };
 
 async function main() {

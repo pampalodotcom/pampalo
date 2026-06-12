@@ -241,7 +241,33 @@ describe("shield wait queue", () => {
     await pampalo.setShieldWaitTime(3600);
   });
 
-  it("cancelShield fails after the unlock window — must use executeShield instead", async () => {
+  it("cancelShield succeeds after the unlock window — shielder reclaims escrow before finalise", async () => {
+    const { assetId, proof } = await buildShield();
+    await usdcDeployment.approve(await pampalo.getAddress(), assetAmount);
+
+    const usdcBefore = await usdcDeployment.balanceOf(Signers[0].address);
+
+    const id_ = (await pampalo.nextPendingId()) as bigint;
+    await pampalo.shield(
+      assetId,
+      assetAmount,
+      proof.proof,
+      proof.publicInputs,
+      "0x",
+    );
+
+    // Past the wait — still cancellable (funds are escrowed until execute).
+    await advanceSeconds(3601);
+    await pampalo.cancelShield(id_);
+
+    const usdcAfter = await usdcDeployment.balanceOf(Signers[0].address);
+    expect(usdcAfter).to.equal(usdcBefore); // fully refunded
+
+    const pending = await pampalo.pendingShields(id_);
+    expect(pending.cancelled).to.equal(true);
+  });
+
+  it("cancelShield reverts once the shield has been executed", async () => {
     const { assetId, proof } = await buildShield();
     await usdcDeployment.approve(await pampalo.getAddress(), assetAmount);
 
@@ -255,12 +281,9 @@ describe("shield wait queue", () => {
     );
 
     await advanceSeconds(3601);
-
-    await expect(pampalo.cancelShield(id_)).to.be.revertedWith(
-      "already executable",
-    );
-
-    // Clean up
     await pampalo.executeShield(id_);
+
+    // Pending storage is freed on execute → cancel can't find the shielder.
+    await expect(pampalo.cancelShield(id_)).to.be.revertedWith("not shielder");
   });
 });

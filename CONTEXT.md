@@ -255,6 +255,19 @@ the Pampalo router on chain X?". Not to be confused with **Network**
 (the generic catalog entry that also serves balance lookups for chains
 where Pampalo isn't deployed).
 
+**Retired note**:
+A locally-stored note whose `deploymentAddress` is no longer the
+currently-enabled **Pampalo deployment** for its chain (i.e. it was
+shielded on a previous, redeployed contract version). Pampalo is
+non-upgradeable (ADR 0017), so a retired note's leaf lives in the old
+contract's abandoned tree and can never be spent against the current
+verifiers. Retirement is **derived, not stored** — a note is retired
+iff its `(networkChainId, deploymentAddress)` is absent from the live
+`enabledDeployments()` set — so no per-note flag or migration pass is
+needed, and any future vN redeploy retires vN-1 notes automatically.
+Retired notes are **retained and visible** (read-only history), never
+deleted; they are excluded from spendable-balance and the spend picker.
+
 **Shieldable asset**:
 A `(deployment, ERC-20 address)` pair currently registered in the
 deployment's on-chain `Pampalo.supportedAssets` mapping with
@@ -351,8 +364,12 @@ shield event is what the protocol breaks.
 The mandatory holding period (default 1 hour) between a user calling
 `shield(...)` and the resulting note being inserted into the merkle
 tree. During the wait the shielded asset is escrowed by the Pampalo
-contract; no on-chain note exists yet, so the shielder may cancel and
-recover the asset, and a **vigilant citizen** may contest.
+contract; no on-chain note exists yet. The shielder may **cancel and
+recover the asset at any point before the shield is executed** —
+including after the wait elapses, since the funds stay escrowed until
+`executeShield` inserts the leaf (`cancelShield` has no unlock-time
+gate; once executed, the freed storage rejects a late cancel). A
+**vigilant citizen** may likewise contest up until execution.
 
 **Fast-track**:
 A `BOOTH_OPERATOR_ROLE` waiver of the **Shield wait** for a vetted user.
@@ -363,6 +380,16 @@ calendar month land with `unlockTime = block.timestamp` — immediately
 executable. Fast-tracking **skips the contest window**, so it is a
 deliberate "the operator vouches for this user this month" trust
 statement, not a convenience toggle. Resets each UTC month like the caps.
+
+**Booth drip**:
+A `BOOTH_OPERATOR_ROLE` event affordance for seeding attendees with a
+small amount of money fast. The operator scans an attendee's **shared
+address** QR and sends them **$1.00** — publicly (1 USDC to their EVM
+address) or privately ($1-worth of shielded ETH to their Poseidon /
+envelope). Surfaced as one-tap buttons on the otherwise-public
+[`/share`] page, shown only when the viewer holds the role on that
+deployment. Like **Fast-track**, it's a booth-operator power to onboard
+people quickly at an event, not a general user feature.
 
 **Monthly cap**:
 The per-address USD ceiling on shielded *and* unshielded volume per UTC
@@ -494,6 +521,71 @@ chain**'s relayer pays the gas). A broadcast-time error normaliser is
 the backstop for the residual race (30s-stale balance, gas spike):
 known RPC strings (`insufficient funds`, nonce conflicts) map to
 friendly copy, with the raw error kept behind a details toggle.
+
+### Private payments (proof-of-payment)
+
+**Private payment**:
+A purchase where the buyer pays a merchant with a Pampalo note instead
+of a public ERC-20 transfer, and a consuming contract accepts that
+payment the way it would accept an ERC-20. Two-step and non-atomic
+(model A): (1) the buyer issues an ordinary **Transfer** creating one
+note owned by the merchant's **Poseidon identifier** for `(asset,
+amount)`; (2) after the note is indexed the buyer builds a **payment
+proof** that the note exists in a known root, and the consuming contract
+settles it. The merchant genuinely receives a spendable note; the proof
+is a separate single-use coupon that gates the good. _Distinct from_
+**Transfer** (the payment leg itself) and **Unshield** (value out to a
+public address). _Avoid_ "redemption" as the feature name — that reads
+as NFT-specific; the mechanism is generic payment acceptance.
+
+**Payment proof** (redeem circuit):
+The membership proof a buyer generates to spend a private payment. Built
+by the `redeem` circuit (`circuits/redeem/`) — a single-input, no-
+balance, no-spend cousin of `withdraw`. Eight public inputs, in order:
+`root`, `redeem_nullifier`, `merchant_id`, `asset_id`, `asset_amount`,
+`recipient`, `consumer`, `reference`. The buyer can build it because
+they *created* the merchant's note (they know its `secret`), but can
+never *spend* it (they don't know the merchant's `owner_secret`).
+
+**Redeem nullifier**:
+The nullifier burned when a private payment is settled. Domain-separated
+from the spend **Nullifier** (`REDEEM_DOMAIN =
+keccak256("PAMPALO_REDEEM_V1") mod p`, mirrored in
+`pum_lib::compute_redeem_nullifier` and `shared/constants/zk.ts`) so a
+redeem cannot grief the merchant's later spend of the same note, or vice
+versa. Deliberately **excludes** `recipient`, `consumer` and
+`reference`, so one payment note is redeemable at most **once, ever,
+globally**.
+
+**Payments singleton** (`PampaloPayments`):
+A permissionless, standalone contract that is the shared registry of
+**redeem nullifiers**. Its `verifyAndBurn` checks the root via the live
+Pampalo deployment's `isKnownRoot`, verifies the payment proof against a
+dedicated `RedeemVerifier`, binds every public input to the caller's
+expectations, and burns the redeem nullifier — all on behalf of any
+consuming contract. It **never moves value** and never writes to the
+Pampalo core (reads roots only). The shared registry is what makes a
+payment single-use across *all* consumers, not just one storefront.
+
+**Private payment acceptor**:
+The inheritable base (`PrivatePaymentAcceptor`) that lets any contract
+accept a private payment in one line at the top of its purchase flow
+(`_acceptPayment(...)` / `_acceptPrivatePayment(...)`), mirroring how it
+would pull an ERC-20. Holds the vendor's `merchantId` config and the
+`privateEnabled` **kill switch**: the deploying vendor (the
+`privatePaymentAdmin`) can disable private payments at any time, after
+which the private branch reverts and only the public ERC-20 branch
+works.
+
+**Consumer binding**:
+The `consumer` public input on a **payment proof**, pinned to the
+contract allowed to settle it. The **payments singleton** requires
+`msg.sender == consumer`, which is what defeats a mempool watcher
+copying the proof and calling `verifyAndBurn` directly to burn the
+nullifier without delivering (a DoS the atomic Pampalo paths can't
+suffer). Paired with `recipient` (delivery target, frontrun-safe) and
+`reference` (an opaque vendor-defined field — item id, cart hash — that
+blocks same-price item-swap griefing).
 
 ### Naming / directory (Ethereum L1 / ENS)
 

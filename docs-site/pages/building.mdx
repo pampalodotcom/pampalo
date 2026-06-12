@@ -5,7 +5,7 @@ and operate Pampalo identities **without a browser**: no passkey, no web
 wallet. Everything the web app does (shield, transfer, unshield, sync) runs in
 plain nodejs, with zero-knowledge proofs generated locally.
 
-It comes as two packages:
+The off-chain toolkit comes as two packages:
 
 - **[`@pampalo/sdk`](/building/sdk)**: the programmatic core. An `Account`
   class that custodies keys, reads balances, syncs notes from chain, and
@@ -15,6 +15,13 @@ It comes as two packages:
 
 Both sit on `@pampalo/shared`, the protocol cryptography (notes, proofs, ECIES,
 the Poseidon merkle tree), which is published too.
+
+On the on-chain side:
+
+- **[`@pampalo/contracts`](/building/contracts)**: Pampalo's core Solidity as
+  importable source. Inherit `PrivatePaymentAcceptor` to let your own contract
+  take a private payment the way it takes an ERC-20 — settling against the live
+  protocol. This is the on-chain counterpart to the SDK.
 
 ## Agent accounts
 

@@ -212,15 +212,6 @@ importers:
       '@openzeppelin/contracts':
         specifier: ^5.1.0
         version: 5.6.1
-      '@pampalo/shared':
-        specifier: workspace:*
-        version: link:../shared
-      '@zkpassport/poseidon2':
-        specifier: ^0.6.2
-        version: 0.6.2
-      eciesjs:
-        specifier: ^0.4.16
-        version: 0.4.18
     devDependencies:
       '@nomicfoundation/hardhat-ignition':
         specifier: ^3.0.5
@@ -231,6 +222,9 @@ importers:
       '@nomicfoundation/hardhat-toolbox-mocha-ethers':
         specifier: ^3.0.1
         version: 3.0.6(72f67ec76fd5fd399fc3dfe34f6d641e)
+      '@pampalo/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@types/chai':
         specifier: ^4.3.20
         version: 4.3.20
@@ -243,12 +237,18 @@ importers:
       '@types/node':
         specifier: ^22.10.2
         version: 22.19.19
+      '@zkpassport/poseidon2':
+        specifier: ^0.6.2
+        version: 0.6.2
       chai:
         specifier: ^5.3.3
         version: 5.3.3
       dotenv:
         specifier: ^16.5.0
         version: 16.6.1
+      eciesjs:
+        specifier: ^0.4.16
+        version: 0.4.18
       ethers:
         specifier: ^6.16.0
         version: 6.16.0

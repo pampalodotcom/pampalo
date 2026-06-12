@@ -29,7 +29,7 @@
 import { del, get, set } from "idb-keyval";
 
 // IDB is keyed per-wallet so two passkeys registered on the same
-// browser profile (e.g. ben@hooper.link + a test account) never see
+// browser profile (e.g. ben@name.com+ a test account) never see
 // each other's notes. The key embeds the wallet's lowercased EVM
 // address; reads return EMPTY until `setActiveWallet` is called on
 // sign-in. See AUTH.md threat model + the per-wallet scoping notes.
@@ -83,6 +83,51 @@ export type StoredNote = {
   // Local-only UI state — see SHIELD_FLOW.md §3.1. Never synced.
   acknowledgedAt?: number; // ms — set when user dismisses a red row
 };
+
+// ─── Deployment status (ADR 0018) ───────────────────────────────────────
+// A note's spendability is gated on its `deploymentAddress` still being the
+// live Pampalo contract for its chain. After a clean-break redeploy the old
+// contract's notes are *retired* — retained as read-only history, never
+// offered for spend (their leaf lives in an abandoned tree). Retirement is
+// DERIVED here from the enabled-deployment set, not stored on the note.
+//
+// `deployments` is `null` while the `enabledDeployments` query is in flight;
+// status is then "unknown" — neither active (so spend pickers won't offer
+// the note) nor retired (so the History panel won't show it prematurely).
+
+type DeploymentRef = { chainId: number; pampaloAddress: string };
+
+export function noteDeploymentStatus(
+  note: StoredNote,
+  deployments: ReadonlyArray<DeploymentRef> | null | undefined,
+): "active" | "retired" | "unknown" {
+  if (!deployments) return "unknown";
+  const here = note.deploymentAddress.toLowerCase();
+  const onActive = deployments.some(
+    (d) =>
+      d.chainId === note.networkChainId &&
+      d.pampaloAddress.toLowerCase() === here,
+  );
+  return onActive ? "active" : "retired";
+}
+
+/** True only once deployments have loaded AND the note is on the live
+ *  contract for its chain. Use to gate spendability + balance. */
+export function isNoteOnActiveDeployment(
+  note: StoredNote,
+  deployments: ReadonlyArray<DeploymentRef> | null | undefined,
+): boolean {
+  return noteDeploymentStatus(note, deployments) === "active";
+}
+
+/** True only once deployments have loaded AND the note belongs to a
+ *  no-longer-enabled deployment. Use to populate the History panel. */
+export function isNoteRetired(
+  note: StoredNote,
+  deployments: ReadonlyArray<DeploymentRef> | null | undefined,
+): boolean {
+  return noteDeploymentStatus(note, deployments) === "retired";
+}
 
 type Record = {
   notes: StoredNote[];

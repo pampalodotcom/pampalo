@@ -141,6 +141,9 @@ type SeedNetwork = {
   nativeDecimals: number;
   isNative: boolean;
   lzEndpointId?: number;
+  // false → backend-only (kept for price feeds / compliance oracle) but
+  // hidden from the user-facing network list + RPC actions. Defaults true.
+  enabled?: boolean;
 };
 
 type SeedToken = {
@@ -163,6 +166,9 @@ const NETWORKS: SeedNetwork[] = [
     nativeDecimals: 18,
     isNative: true,
     lzEndpointId: 30101,
+    // Backend-only: hosts the Chainlink price feeds + the Chainalysis
+    // sanctions oracle. Hidden from the user-facing network list.
+    enabled: false,
   },
   {
     chainId: 8453,
@@ -181,6 +187,7 @@ const NETWORKS: SeedNetwork[] = [
     nativeDecimals: 18,
     isNative: true,
     lzEndpointId: 40101,
+    enabled: false, // dropped from the user-facing set (Base only)
   },
   {
     chainId: 421614,
@@ -190,6 +197,7 @@ const NETWORKS: SeedNetwork[] = [
     nativeDecimals: 18,
     isNative: true,
     lzEndpointId: 40231,
+    enabled: false, // dropped from the user-facing set (Base only)
   },
   {
     chainId: 84532,
@@ -301,7 +309,8 @@ const TOKENS: SeedToken[] = [
   },
   {
     chainId: 84532,
-    address: "0x4Fc9cc04f2A8d6Ff360352C61A4bb36Ab262Ae01",
+    // v2.0.0 USDC mock (deployed 2026-06-12). Matches shieldQueue/seed.ts.
+    address: "0x445b24Cf4Ac9AC20ecc417Ac41160Fdc8088520d",
     name: "USD Coin",
     symbol: "USDC",
     decimals: 6,
@@ -508,7 +517,7 @@ export const seedAll = internalMutation({
         nativeDecimals: n.nativeDecimals,
         isNative: n.isNative,
         lzEndpointId: n.lzEndpointId,
-        enabled: true,
+        enabled: n.enabled ?? true,
       };
       if (existing) {
         await ctx.db.replace(existing._id, payload);

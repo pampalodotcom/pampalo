@@ -24,17 +24,39 @@ export const DEPLOYMENTS: Record<number, Deployment> = {
   84532: {
     chainId: 84532,
     name: "Base Sepolia",
-    pampalo: "0x3e6dfc4c233486a44e26a548e191c839f069037f",
-    fromBlock: 42126146,
+    pampalo: "0x86cc802b2d5a9ef41194e68ed69eecc37adaaf59",
+    fromBlock: 42746800,
     separateDerivationKey: false,
     tokens: [
       {
-        address: "0x4Fc9cc04f2A8d6Ff360352C61A4bb36Ab262Ae01",
+        address: "0x445b24Cf4Ac9AC20ecc417Ac41160Fdc8088520d",
         decimals: 6,
         symbol: "USDC",
       },
       {
-        address: "0x79422adD613c2963389101D220E029594Ac60A00",
+        address: "0xd9954D447721e9dF218dDF668E8c5f92846CEEff",
+        decimals: 4,
+        symbol: "4DEC",
+      },
+    ],
+  },
+  8453: {
+    chainId: 8453,
+    name: "Base",
+    // Deterministic CREATE address from the v2 deployer (nonce 0), so it
+    // matches Base Sepolia. Verified live on-chain.
+    pampalo: "0x86cc802b2d5a9ef41194e68ed69eecc37adaaf59",
+    fromBlock: 47237162,
+    // Mainnet identities use the isolated (slot-420) envelope key.
+    separateDerivationKey: true,
+    tokens: [
+      {
+        address: "0x445b24Cf4Ac9AC20ecc417Ac41160Fdc8088520d",
+        decimals: 6,
+        symbol: "USDC",
+      },
+      {
+        address: "0xd9954D447721e9dF218dDF668E8c5f92846CEEff",
         decimals: 4,
         symbol: "4DEC",
       },

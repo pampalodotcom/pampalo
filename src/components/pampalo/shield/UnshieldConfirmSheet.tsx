@@ -9,6 +9,7 @@ import { ETH_SENTINEL } from "@/lib/eth";
 import {
   appendNote,
   getNotesSnapshot,
+  isNoteOnActiveDeployment,
   isNotesHydrated,
   patchNoteByLeaf,
   subscribeNotes,
@@ -180,12 +181,14 @@ export function UnshieldConfirmSheet({
         (n) =>
           n.state === "spendable" &&
           n.networkChainId === payload.chainId &&
+          // Retired-deployment notes are unspendable (ADR 0018).
+          isNoteOnActiveDeployment(n, deployments) &&
           n.asset === ETH_SENTINEL &&
           n.leafIndex !== undefined &&
           BigInt(n.amount) >= payload.amount,
       ) ?? null
     );
-  }, [payload, notes]);
+  }, [payload, notes, deployments]);
 
   const onConfirm = async () => {
     if (!payload || !deployment) return;

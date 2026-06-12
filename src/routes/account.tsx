@@ -12,6 +12,7 @@ import { MnemonicReveal } from "@/components/pampalo/MnemonicReveal";
 import { PageLayout } from "@/components/pampalo/PageLayout";
 import { PageLoading } from "@/components/pampalo/PageLoading";
 import { PrimaryButton } from "@/components/pampalo/PrimaryButton";
+import { RetiredNotesHistory } from "@/components/pampalo/RetiredNotesHistory";
 import { ThemeToggle } from "@/components/pampalo/ThemeToggle";
 import { exportMnemonic, PrfNotSupportedError } from "@/lib/auth-flow";
 import { useAuth } from "@/lib/auth";
@@ -230,6 +231,10 @@ function AccountPage() {
             )}
           </section>
         )}
+
+        {/* Read-only history of notes from redeployed-away contracts.
+            Renders nothing unless the user holds retired notes (ADR 0018). */}
+        <RetiredNotesHistory />
       </div>
     </PageLayout>
   );
