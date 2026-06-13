@@ -128,11 +128,17 @@ export function deriveEnvelopePrivKeys(mnemonic: string): string[] {
 /** Pick the right envelope public key for a deployment. Receive UI calls
  *  this with the deployment's `separateDerivationKey` flag. Returns null
  *  when the isolated envelope is needed but hasn't been derived yet —
- *  the caller should trigger a PRF unlock to populate the cache. */
+ *  the caller should trigger a PRF unlock to populate the cache.
+ *
+ *  Canonical default: an unset flag means the **isolated** envelope
+ *  (`!== false`), matching the Convex schema comment and ReceiveQRStep.
+ *  Only an explicit `false` (Base Sepolia) selects the shared envelope.
+ *  Note this only decides which key a recipient *publishes* — Sync always
+ *  trial-decrypts both, so receipt never depends on getting this right. */
 export function envelopeForDeployment(
   addrs: DerivedAddresses,
-  separateDerivationKey: boolean,
+  separateDerivationKey: boolean | undefined,
 ): string | null {
-  if (!separateDerivationKey) return addrs.envelope;
+  if (separateDerivationKey === false) return addrs.envelope;
   return addrs.envelopeIsolated ?? null;
 }

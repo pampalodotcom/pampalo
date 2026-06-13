@@ -104,7 +104,7 @@ default for an unset value: **isolated** (`!== false`). Every note-scanning
 **Sync** trial-decrypts against *both* envelope private keys regardless of
 this flag, so a wallet recovers notes no matter which envelope a sender
 used — the flag only decides which key a *recipient publishes* and a
-*sender encrypts to*.
+*sender encrypts to*. See ADR 0021.
 
 **Poseidon identifier**:
 `poseidon2([BigInt(privateKey)])` over BN254, zero-padded to 64 hex chars.
