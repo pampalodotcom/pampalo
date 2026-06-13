@@ -19,7 +19,7 @@ import {
   importDekBytes,
   zeroBytes,
 } from "./crypto";
-import { deriveAllAddresses } from "./derive-addresses";
+import { deriveAllAddresses, deriveEnvelopePrivKeys } from "./derive-addresses";
 import type { DerivedAddresses } from "./derive-addresses";
 import {
   base64UrlToBuffer,
@@ -399,7 +399,7 @@ export async function reAuthenticate(): Promise<ReAuthOutcome> {
     // Trigger (a'): cross-device shield-note hydration. Uses the
     // wallet that's already in scope — no extra PRF prompt. Failures
     // are swallowed inside the sync module.
-    await syncShieldNotesOnSignIn(wallet.privateKey, addresses.evm);
+    await syncShieldNotesOnSignIn(deriveEnvelopePrivKeys(mnemonic), wallet.address);
     t.finish();
     return { addresses };
   } finally {
@@ -556,7 +556,7 @@ export async function withUnlockedWallet<T>(
     // with a captured copy of address + privKey (scrubbed in
     // `finally` below doesn't reach them — they live in the spawned
     // promise's closure until it resolves, then GC).
-    void syncShieldNotesOnSignIn(wallet.privateKey, wallet.address);
+    void syncShieldNotesOnSignIn(deriveEnvelopePrivKeys(mnemonic), wallet.address);
     return result;
   } finally {
     new Uint8Array(dekBytes).fill(0);
@@ -655,8 +655,8 @@ export async function signTransactionWithPasskey(
     // that we capture before scrubbing. Errors are swallowed inside
     // syncShieldNotesOnSignIn.
     const addressForSync = wallet.address;
-    const privKeyForSync = wallet.privateKey;
-    void syncShieldNotesOnSignIn(privKeyForSync, addressForSync);
+    const envelopeKeysForSync = deriveEnvelopePrivKeys(mnemonic);
+    void syncShieldNotesOnSignIn(envelopeKeysForSync, addressForSync);
     return signed;
   } finally {
     new Uint8Array(dekBytes).fill(0);
@@ -771,7 +771,7 @@ async function unlockAfterAssertion(
     // See CLIENT_SIDE_FIRST.md. Failures are swallowed inside the sync
     // module — they must not abort sign-in.
     await syncOnSignInComplete(dekKey, sessionToken);
-    await syncShieldNotesOnSignIn(wallet.privateKey, addresses.evm);
+    await syncShieldNotesOnSignIn(deriveEnvelopePrivKeys(mnemonic), wallet.address);
     if (!parentTiming) t.finish();
     return { addresses, sessionToken };
   } finally {

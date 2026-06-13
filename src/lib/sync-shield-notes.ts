@@ -8,18 +8,25 @@
 // ECIES-decrypting `encryptedPayload` with the user's envelope private
 // key.
 //
+// Notes can be encrypted to EITHER envelope key — the shared path-0 key
+// (Base Sepolia) or the isolated slot-420 key (mainnets, where the
+// deployment sets separateDerivationKey: true). So every decrypt is a
+// trial-decrypt across the full set from `deriveEnvelopePrivKeys`. A wallet
+// that only tried path-0 silently dropped every mainnet note (the "private
+// transfer never arrives" bug). The set is threaded as `envelopePrivKeys`.
+//
 // Three entry points, mirroring `preferences-sync.ts`:
 //
-//   syncShieldNotesOnSignIn(privKey, evmAddress)
+//   syncShieldNotesOnSignIn(envelopePrivKeys, evmAddress)
 //     Called from auth-flow's sign-in/re-auth path while the wallet is
 //     briefly alive. Best-effort; swallows errors so a failed sync
 //     never blocks sign-in.
 //
 //   syncShieldNotesExplicit()
-//     User-tapped (Sync button). Runs its own PRF ceremony, derives the
-//     envelope private key, runs the same core, then scrubs.
+//     User-tapped (Sync button). Runs its own PRF ceremony, derives both
+//     envelope private keys, runs the same core, then scrubs.
 //
-//   syncShieldNotesWithPrivKey(privKey, evmAddress) — internal core.
+//   syncShieldNotesWithKeys(envelopePrivKeys, evmAddress) — internal core.
 //
 // Cursor: per idb-sync-cursor.ts, we track `shieldQueueLastQueuedAt` —
 // the highest `queuedAt` (ms) we've seen. Rows older than the cursor
@@ -31,6 +38,7 @@ import { ethers, Wallet } from "ethers";
 import { poseidon2Hash } from "@zkpassport/poseidon2";
 import { api } from "../../convex/_generated/api";
 import { NoteDecryption } from "../../shared/classes/Note";
+import { deriveEnvelopePrivKeys } from "./derive-addresses";
 import {
   aesGcmDecrypt,
   deriveKekFromPrfOutput,
@@ -106,8 +114,33 @@ function archivedStateToIdb(s: string): NoteState {
 
 // ─── Core ────────────────────────────────────────────────────────────────
 
-export async function syncShieldNotesWithPrivKey(
-  envelopePrivKey: string,
+type PlainNote = {
+  secret: string;
+  owner: string;
+  asset_id: string;
+  asset_amount: string;
+};
+
+/** Trial-decrypt one ECIES blob against every candidate envelope key,
+ *  newest scheme first. Returns the plaintext from the first key that
+ *  works, or null if none do (blob is for someone else, or for an
+ *  envelope path we don't derive). Mirrors sdk/src/sync.ts `tryDecrypt`. */
+async function tryDecryptNote(
+  ciphertext: string,
+  envelopePrivKeys: string[],
+): Promise<PlainNote | null> {
+  for (const k of envelopePrivKeys) {
+    try {
+      return await NoteDecryption.decryptNoteData(ciphertext, k);
+    } catch {
+      // wrong key → not ours under this envelope; try the next.
+    }
+  }
+  return null;
+}
+
+export async function syncShieldNotesWithKeys(
+  envelopePrivKeys: string[],
   evmAddress: string,
 ): Promise<SyncShieldNotesResult> {
   const convex = getConvexClient();
@@ -163,24 +196,12 @@ export async function syncShieldNotesWithPrivKey(
       continue;
     }
 
-    let plain: {
-      secret: string;
-      owner: string;
-      asset_id: string;
-      asset_amount: string;
-    };
-    try {
-      // Convex `v.bytes()` can surface as ArrayBuffer or base64url string
-      // depending on runtime version. Normalize before hexlifying so the
-      // decrypt path always sees `0x…`.
-      const ciphertext = ciphertextToHex(row.encryptedPayload);
-      plain = await NoteDecryption.decryptNoteData(ciphertext, envelopePrivKey);
-    } catch (e) {
-      console.warn(
-        "[sync-shield-notes] decrypt failed for leaf",
-        row.leafCommitment,
-        e,
-      );
+    // Convex `v.bytes()` can surface as ArrayBuffer or base64url string
+    // depending on runtime version. Normalize before hexlifying so the
+    // decrypt path always sees `0x…`.
+    const ciphertext = ciphertextToHex(row.encryptedPayload);
+    const plain = await tryDecryptNote(ciphertext, envelopePrivKeys);
+    if (!plain) {
       result.decryptFailed += 1;
       continue;
     }
@@ -221,7 +242,7 @@ export async function syncShieldNotesWithPrivKey(
   for (const dep of deployments) {
     try {
       await scanTransferInNotesForChain(
-        envelopePrivKey,
+        envelopePrivKeys,
         dep.chainId,
         dep.pampaloAddress.toLowerCase(),
         tokens,
@@ -256,7 +277,7 @@ export async function syncShieldNotesWithPrivKey(
   // derive as retired (idb-notes.isNoteRetired) and never reach the spend
   // flow. Best-effort: a failure here must not poison live sync.
   try {
-    await scanArchivedNotes(envelopePrivKey, evmAddress, tokens, result);
+    await scanArchivedNotes(envelopePrivKeys, evmAddress, tokens, result);
   } catch (e) {
     console.warn("[sync-shield-notes] archived scan failed", e);
   }
@@ -330,7 +351,7 @@ async function reconcileSpentNotes(
 // address. No cursor — relies on findNote() idempotency (archive sets are
 // small / testnet-scale).
 async function scanArchivedNotes(
-  envelopePrivKey: string,
+  envelopePrivKeys: string[],
   evmAddress: string,
   tokens: ReadonlyArray<TokenForDecimals>,
   result: SyncShieldNotesResult,
@@ -360,16 +381,9 @@ async function scanArchivedNotes(
       result.skippedAlreadyPresent += 1;
       continue;
     }
-    let plain: {
-      secret: string;
-      owner: string;
-      asset_id: string;
-      asset_amount: string;
-    };
-    try {
-      const ciphertext = ciphertextToHex(row.encryptedPayload);
-      plain = await NoteDecryption.decryptNoteData(ciphertext, envelopePrivKey);
-    } catch {
+    const ciphertext = ciphertextToHex(row.encryptedPayload);
+    const plain = await tryDecryptNote(ciphertext, envelopePrivKeys);
+    if (!plain) {
       result.decryptFailed += 1;
       continue;
     }
@@ -401,7 +415,7 @@ async function scanArchivedNotes(
   for (const chainId of archivedChains) {
     try {
       await scanArchivedTransferNotesForChain(
-        envelopePrivKey,
+        envelopePrivKeys,
         chainId,
         tokens,
         result,
@@ -417,7 +431,7 @@ async function scanArchivedNotes(
 }
 
 async function scanArchivedTransferNotesForChain(
-  envelopePrivKey: string,
+  envelopePrivKeys: string[],
   chainId: number,
   tokens: ReadonlyArray<TokenForDecimals>,
   result: SyncShieldNotesResult,
@@ -437,16 +451,9 @@ async function scanArchivedTransferNotesForChain(
   }
 
   for (const row of payloads) {
-    let plain: {
-      secret: string;
-      owner: string;
-      asset_id: string;
-      asset_amount: string;
-    };
-    try {
-      const ciphertext = ciphertextToHex(row.encryptedPayload);
-      plain = await NoteDecryption.decryptNoteData(ciphertext, envelopePrivKey);
-    } catch {
+    const ciphertext = ciphertextToHex(row.encryptedPayload);
+    const plain = await tryDecryptNote(ciphertext, envelopePrivKeys);
+    if (!plain) {
       // Not ours — the common trial-decrypt miss. Quiet.
       continue;
     }
@@ -496,7 +503,7 @@ type TokenForDecimals = {
 };
 
 async function scanTransferInNotesForChain(
-  envelopePrivKey: string,
+  envelopePrivKeys: string[],
   chainId: number,
   pampaloAddress: string,
   tokens: ReadonlyArray<TokenForDecimals>,
@@ -552,16 +559,9 @@ async function scanTransferInNotesForChain(
   }
 
   for (const row of payloads) {
-    let plain: {
-      secret: string;
-      owner: string;
-      asset_id: string;
-      asset_amount: string;
-    };
-    try {
-      const ciphertext = ciphertextToHex(row.encryptedPayload);
-      plain = await NoteDecryption.decryptNoteData(ciphertext, envelopePrivKey);
-    } catch {
+    const ciphertext = ciphertextToHex(row.encryptedPayload);
+    const plain = await tryDecryptNote(ciphertext, envelopePrivKeys);
+    if (!plain) {
       // Decrypt failed → payload is for someone else. Quiet: this is
       // the common case in the trial-decrypt model.
       continue;
@@ -646,11 +646,11 @@ function decodeB64Url(s: string): ArrayBuffer {
 // ─── On-sign-in hook ─────────────────────────────────────────────────────
 
 export async function syncShieldNotesOnSignIn(
-  envelopePrivKey: string,
+  envelopePrivKeys: string[],
   evmAddress: string,
 ): Promise<void> {
   try {
-    await syncShieldNotesWithPrivKey(envelopePrivKey, evmAddress);
+    await syncShieldNotesWithKeys(envelopePrivKeys, evmAddress);
   } catch (e) {
     // Never block sign-in; the user can retry via the Sync button.
     console.warn("[sync-shield-notes] sign-in sync failed", e);
@@ -745,7 +745,12 @@ export async function syncShieldNotesExplicit(): Promise<SyncShieldNotesResult> 
 
   try {
     const wallet = Wallet.fromPhrase(mnemonic);
-    return await syncShieldNotesWithPrivKey(wallet.privateKey, wallet.address);
+    // Both envelope keys (path-0 + isolated slot-420) so the Sync button
+    // recovers mainnet notes, not just Base Sepolia ones.
+    return await syncShieldNotesWithKeys(
+      deriveEnvelopePrivKeys(mnemonic),
+      wallet.address,
+    );
   } finally {
     new Uint8Array(dekBytes).fill(0);
     new Uint8Array(mnemonicBuf).fill(0);

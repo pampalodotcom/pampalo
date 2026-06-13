@@ -77,10 +77,34 @@ encryption target when another user sends this user a note. Specifically,
 the **note secret** of every note addressed to a Poseidon identifier is
 ECIES-encrypted to the recipient's envelope key so the recipient — and
 only the recipient — can later read the secret out of public emit data,
-store it locally, and use it to spend the note. Derived on a dedicated
-HD path (separate from the EVM signing path) so the corresponding private
-key can be cached in memory for background note-scanning without also
-giving an attacker the ability to sign Pampalo writes. See ADR 0009.
+store it locally, and use it to spend the note. A mnemonic has **two**
+envelope keys — the **shared envelope** and the **isolated envelope** —
+and which one a chain uses is fixed per deployment by
+**`separateDerivationKey`** (see below). _Avoid_: "envelope address" (it
+is a public key, not an address).
+
+**Shared envelope**:
+The envelope key at BIP44 path 0 (`m/44'/60'/0'/0/0`) — the *same* key as
+the **EVM address**. Used on deployments where `separateDerivationKey` is
+false (today: Base Sepolia, the testnet demo). "Shared" because the ECIES
+target and the EVM signing identity are one key.
+
+**Isolated envelope**:
+The envelope key at the Pampalo isolated path (`m/44'/60'/0'/0/420`,
+"slot 420") — a dedicated leaf independent of the EVM key. Used on
+deployments where `separateDerivationKey` is true (mainnets). Isolating it
+means a future "hot Sync" compromise of the testnet shared key cannot
+decrypt mainnet notes. Because it post-dates earlier wallets, a sign-in
+predating it derives it lazily on the next PRF unlock (`deriveAllAddresses`).
+
+**`separateDerivationKey`**:
+The per-deployment boolean that selects which envelope a chain uses:
+false → **shared envelope**, true → **isolated envelope**. Canonical
+default for an unset value: **isolated** (`!== false`). Every note-scanning
+**Sync** trial-decrypts against *both* envelope private keys regardless of
+this flag, so a wallet recovers notes no matter which envelope a sender
+used — the flag only decides which key a *recipient publishes* and a
+*sender encrypts to*.
 
 **Poseidon identifier**:
 `poseidon2([BigInt(privateKey)])` over BN254, zero-padded to 64 hex chars.
@@ -359,6 +383,43 @@ arbitrary EVM address (the holder's own, or a third party's). Verified
 by the `transfer_external` ZK circuit. The recipient EVM address is
 public on-chain; the link from that address back to the original
 shield event is what the protocol breaks.
+
+**Private swap**:
+Private note of asset A → private note of asset B, with the trade
+executing against **public Uniswap v4 liquidity** in one atomic call
+(`privateSwap` → `poolManager.unlock` → `unlockCallback`). Pampalo is a
+**caller** of the v4 `PoolManager`, not a hook author. The privacy
+model is **ownership-private, amount-public**: the nullifier breaks the
+input note's lineage and the output note's owner is hidden, but
+`(assetA, assetB, amount)` is observable at the AMM — the only model
+achievable against public liquidity. Value never leaves the shield (no
+external recipient), so **no Monthly cap is charged** — extraction stays
+gated at **Unshield**. Broadcast is **relayer-sponsored** like
+**Transfer** / **Unshield** (ADR 0015) so the spender's EVM address isn't
+linked to the swap; unlike those, a swap can genuinely revert on
+`realized < T` if price moves before inclusion. v1 routes **ERC-20 pools
+only** — native-ETH (`0xEeee…eEeE`) notes must wrap to WETH first; v4's
+native `address(0)` legs are deferred. Verified by a new `swap` ZK
+circuit, which mints the asset-B output note at **Target output** `T`
+plus an optional same-asset asset-A change note (multi-hop routes are
+supported; the path is untrusted calldata, safe only because
+`input_asset`, `output_asset`, and `T` are bound in the proof).
+_Avoid_: bare "Swap" — reserved for the client-side public EVM-layer
+swap (`uniswap-swap.ts`), no privacy.
+
+**Target output (`T`)**:
+The fixed output-note amount a **Private swap** mints, chosen by the
+spender at proof time and bound into the output commitment by the swap
+circuit. Because the realized AMM output doesn't exist at proof time, it
+**cannot** be committed in the proof; instead the swap is exact-input,
+the contract requires `realized >= T` (so `T` doubles as the slippage /
+sandwich floor — there is no separate `minOut`), and the **forfeited
+surplus** `realized − T` stays in the contract's pooled asset-B balance,
+unowned by any note. Consequence: a swap forfeits not just slippage but
+all favourable price movement above `T`; downside is revert-protected,
+upside is donated to reserves. This avoids any on-chain Poseidon — the
+commitment is still computed in-circuit. See ADR for the trade-off
+against on-chain note construction.
 
 **Shield wait**:
 The mandatory holding period (default 1 hour) between a user calling
