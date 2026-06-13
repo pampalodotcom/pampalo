@@ -284,13 +284,36 @@ A locally-stored note whose `deploymentAddress` is no longer the
 currently-enabled **Pampalo deployment** for its chain (i.e. it was
 shielded on a previous, redeployed contract version). Pampalo is
 non-upgradeable (ADR 0017), so a retired note's leaf lives in the old
-contract's abandoned tree and can never be spent against the current
-verifiers. Retirement is **derived, not stored** — a note is retired
-iff its `(networkChainId, deploymentAddress)` is absent from the live
+contract's tree and can never be **spent within** the protocol
+(transferred, or re-inserted) against the current verifiers.
+Retirement is **derived, not stored** — a note is retired iff its
+`(networkChainId, deploymentAddress)` is absent from the live
 `enabledDeployments()` set — so no per-note flag or migration pass is
 needed, and any future vN redeploy retires vN-1 notes automatically.
-Retired notes are **retained and visible** (read-only history), never
-deleted; they are excluded from spendable-balance and the spend picker.
+Retired notes are **retained and visible** history, never deleted, and
+excluded from spendable-balance and the (current-deployment) spend
+picker. They are **not** read-only, though: a retired note can still be
+**withdrawn** to public — see **Retired-note withdrawal** (ADR 0022).
+
+**Retired-note withdrawal** ("Withdraw to wallet"):
+The one path that still acts on a **Retired note**: a client-side
+`unshield` against the *old* contract, exiting the note's full amount
+to the user's own public EVM address. It is **not** a migration and
+touches no new contract surface — the old contract is immutable and its
+only value-exit is `unshield`, so withdrawal routes through the public
+layer (re-shielding into the current deployment is then the user's
+normal Shield flow). Surfaced as a **Withdraw** button on the
+**Previous deployments** card. Three constraints define it (ADR 0022):
+(1) the web client rebuilds the *old* tree from chain (`LeafInserted`
+events from the old contract's `fromBlock`), since the Convex leaf
+mirror was wiped at cutover (ADR 0017); (2) it is offered **only** when
+the old deployment's withdraw-circuit vk matches the client's bundled
+circuit (circuit-compatible bump) — a circuit-breaking redeploy leaves
+its notes read-only; (3) the old contract is put into **retirement
+wind-down** at cutover (`weAreFull()` halts further deposits;
+`setDefaultMonthlyCap(huge)` lifts the unshield cap so any-size note
+exits), so the only remaining limit is the circuit's ≤3 input notes per
+proof.
 
 **Shieldable asset**:
 A `(deployment, ERC-20 address)` pair currently registered in the
