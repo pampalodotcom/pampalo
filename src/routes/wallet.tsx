@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRpcClient } from "@/lib/rpc";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { Loader2, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
@@ -17,7 +17,12 @@ import { warmShield } from "@/lib/shield-prep";
 import {
   usePrivateBalances,
   type AssetBucket,
+  type PendingNote,
 } from "@/lib/use-private-balances";
+import {
+  ActionConfirmSheet,
+  type ActionConfirmPayload,
+} from "@/components/pampalo/sentry/ActionConfirmSheet";
 import { useShieldBudget } from "@/lib/use-shield-budget";
 import { useShieldQueueSync } from "@/lib/use-shield-queue-sync";
 import {
@@ -228,6 +233,12 @@ function Dashboard({
     useState<UnshieldConfirmPayload | null>(null);
   const [cancelPayload, setCancelPayload] =
     useState<CancelShieldPayload | null>(null);
+  const [finalisePayload, setFinalisePayload] =
+    useState<ActionConfirmPayload | null>(null);
+  // Lowercased leafCommitments whose executeShield was just broadcast — the
+  // row shows a "Finalising…" pill until the indexer drops it or a timeout.
+  const [finalising, setFinalising] = useState<Set<string>>(new Set());
+  const refreshIndexer = useAction(api.shieldQueue.refresh.refreshShieldQueueNow);
 
   // Resolve a queued pending shield's on-chain pendingId (from the user's
   // shield-queue rows) + its deployment router, then open the cancel sheet.
@@ -264,6 +275,59 @@ function Dashboard({
       priceUsd: req.priceUsd ?? null,
     });
   };
+
+  // Finalise a ready (unlock-elapsed) pending shield of the user's own —
+  // the same `executeShield(id)` the sentry "Sponsor finalise" runs, just
+  // initiated by the shielder. Look up the full queue row (we already hold
+  // the user's `byShielder` rows) and hand it to the shared confirm sheet.
+  const handleFinalisePending = (note: PendingNote) => {
+    const row = myShields?.find(
+      (r) =>
+        r.leafCommitment.toLowerCase() === note.leafCommitment.toLowerCase(),
+    );
+    if (!row) {
+      toast.error("Couldn't resolve this shield yet — tap Sync and try again.");
+      return;
+    }
+    setFinalisePayload({ kind: "sponsor", row });
+  };
+
+  // After executeShield is broadcast, optimistically mark the leaf
+  // "finalising" so its row swaps the buttons for a progress pill. Cleared
+  // two ways: (a) server confirmation — the useEffect below drops it once
+  // the indexer flips the queue row out of `queued`; (b) a 90s safety
+  // timeout, so a reverted / never-indexed finalise falls back to buttons.
+  const markFinalising = (leafCommitment: string) => {
+    const key = leafCommitment.toLowerCase();
+    setFinalising((prev) => new Set(prev).add(key));
+    // Nudge the indexer so executeShield lands sooner than the ~30s cron.
+    void refreshIndexer({}).catch(() => undefined);
+    window.setTimeout(() => {
+      setFinalising((prev) => {
+        if (!prev.has(key)) return prev;
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }, 90_000);
+  };
+  // Server confirmation: `pendingIdByLeaf` only holds still-`queued` shields,
+  // so when a finalising leaf leaves it, the indexer has confirmed the
+  // finalise — clear the pill.
+  useEffect(() => {
+    setFinalising((prev) => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Set(prev);
+      for (const leaf of prev) {
+        if (!pendingIdByLeaf.has(leaf)) {
+          next.delete(leaf);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [pendingIdByLeaf]);
 
   // Per-(chain, asset) "tx confirming on-chain" set. While a row is
   // in here, AssetRow disables its slider + action buttons and shows
@@ -558,6 +622,8 @@ function Dashboard({
                     onShield={setShieldPayload}
                     onUnshield={setUnshieldPayload}
                     onCancelPending={handleCancelPending}
+                    onFinalisePending={handleFinalisePending}
+                    finalising={finalising}
                     privateBuckets={privateBalances.perAsset}
                     pendingMoves={pendingMoves}
                   />
@@ -597,6 +663,18 @@ function Dashboard({
         }}
         payload={cancelPayload}
         evmAddress={addresses.evm}
+      />
+      <ActionConfirmSheet
+        open={finalisePayload !== null}
+        onOpenChange={(next) => {
+          if (!next) setFinalisePayload(null);
+        }}
+        payload={finalisePayload}
+        evmAddress={addresses.evm}
+        deployments={deploymentRows ?? []}
+        onSubmitted={() => {
+          if (finalisePayload) markFinalising(finalisePayload.row.leafCommitment);
+        }}
       />
     </>
   );
@@ -882,6 +960,8 @@ function AssetGroupRow({
   onShield,
   onUnshield,
   onCancelPending,
+  onFinalisePending,
+  finalising,
   privateBuckets,
   pendingMoves,
 }: {
@@ -893,6 +973,8 @@ function AssetGroupRow({
   onShield: (payload: ShieldConfirmPayload) => void;
   onUnshield: (payload: UnshieldConfirmPayload) => void;
   onCancelPending: (req: CancelRequest) => void;
+  onFinalisePending: (note: PendingNote) => void;
+  finalising: Set<string>;
   privateBuckets: AssetBucket[];
   /** Wallet-level "tx confirming on-chain" set, keyed by
    *  `${chainId}:${assetAddress.toLowerCase()}`. */
@@ -1032,13 +1114,8 @@ function AssetGroupRow({
       queuedNotes={queuedNotes}
       executableNotes={executableNotes}
       onCancel={onCancelPending}
-      onFinalise={(note) => {
-        // Finalise CTA wiring lands in a follow-up — for now we
-        // just point the user at /sentry where Sponsor finalise
-        // already works for any unlocked shield.
-        toast("Finalise on /sentry for now — wallet-side CTA lands next.");
-        console.log("[finalise]", note);
-      }}
+      onFinalise={onFinalisePending}
+      finalising={finalising}
       onMove={(payload) => {
         // Resolve the on-chain asset address for the active chain.
         // The slider/AssetRow only knows about chainId + symbol; the

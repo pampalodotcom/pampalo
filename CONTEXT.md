@@ -371,6 +371,15 @@ including after the wait elapses, since the funds stay escrowed until
 gate; once executed, the freed storage rejects a late cancel). A
 **vigilant citizen** may likewise contest up until execution.
 
+**Finalise**:
+Moving a ready pending shield — one whose **Shield wait** has elapsed —
+into the pool by calling `executeShield(id)`, inserting its leaf so the
+note becomes spendable. **Permissionless**: the shielder finalises their
+own from the wallet, or anyone "sponsors" a finalise on **Sentry** (the
+same on-chain call, a different caller paying gas). Distinct from
+**Fast-track**, which _skips_ the wait rather than waiting it out.
+_Avoid_: "execute" (the contract verb, not the user-facing one).
+
 **Fast-track**:
 A `BOOTH_OPERATOR_ROLE` waiver of the **Shield wait** for a vetted user.
 Two on-chain forms: `executeShieldImmediate(id)` finalises one named
