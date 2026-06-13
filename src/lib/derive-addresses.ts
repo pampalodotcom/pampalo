@@ -108,6 +108,23 @@ export function deriveEnvelopeIsolatedPrivateKey(mnemonic: string): string {
   return wallet.privateKey;
 }
 
+/** Every envelope private key a note could have been encrypted to, newest
+ *  scheme first. Sync trial-decrypts each blob against all of these so a
+ *  wallet picks up notes regardless of which envelope the sender used:
+ *
+ *    [0] path-0   (m/44'/60'/0'/0/0)   — shared envelope (Base Sepolia)
+ *    [1] slot-420 (m/44'/60'/0'/0/420) — isolated envelope (mainnets)
+ *
+ *  Keep this the single source of truth for "which keys can decrypt our
+ *  notes" — both the web Sync (sync-shield-notes.ts) and any future caller
+ *  derive the set here so a new envelope path is added in exactly one place. */
+export function deriveEnvelopePrivKeys(mnemonic: string): string[] {
+  return [
+    Wallet.fromPhrase(mnemonic).privateKey,
+    deriveEnvelopeIsolatedPrivateKey(mnemonic),
+  ];
+}
+
 /** Pick the right envelope public key for a deployment. Receive UI calls
  *  this with the deployment's `separateDerivationKey` flag. Returns null
  *  when the isolated envelope is needed but hasn't been derived yet —

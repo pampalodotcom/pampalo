@@ -3,6 +3,7 @@ import {
   ChevronDown,
   Clock3,
   ExternalLink,
+  Loader2,
   Moon,
   Sparkles,
 } from "lucide-react";
@@ -46,6 +47,10 @@ type Props = {
   /** Cancel a still-queued shield (refunds the shielder). Wired to a
    *  confirm sheet at the wallet level. */
   onCancel?: (req: CancelRequest) => void;
+  /** Lowercased leafCommitments whose finalise tx was just broadcast — the
+   *  row shows a "Finalising…" pill (buttons hidden) until the indexer drops
+   *  it or a safety timeout elapses. */
+  finalising?: Set<string>;
   /** USD price per whole token, for the per-row USD value. */
   priceUsd?: number | null;
   /** Roughly how many display digits to show for the amount column. */
@@ -65,6 +70,7 @@ export function PendingShieldsList({
   executableNotes,
   onFinalise,
   onCancel,
+  finalising,
   priceUsd,
   roundTo,
 }: Props) {
@@ -147,44 +153,57 @@ export function PendingShieldsList({
                 </span>
                 <ExplorerLink note={n} />
               </span>
-              <span className="inline-flex shrink-0 items-center gap-1.5">
-                {onCancel && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onCancel({
-                        leafCommitment: n.leafCommitment,
-                        chainId: n.chainId,
-                        amount: n.amount,
-                        symbol,
-                        decimals,
-                        priceUsd: priceUsd ?? null,
-                      })
-                    }
-                    className={cn(
-                      "inline-flex h-7 items-center rounded-full px-3",
-                      "border border-line bg-paper text-[11.5px] font-semibold text-ink",
-                      "transition-colors hover:bg-paper-lo",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-faint",
-                    )}
-                  >
-                    Cancel
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => onFinalise?.(n)}
-                  disabled={!onFinalise}
+              {finalising?.has(n.leafCommitment.toLowerCase()) ? (
+                <span
                   className={cn(
-                    "inline-flex h-7 items-center gap-1 rounded-full px-3",
-                    "bg-[var(--priv)] text-white text-[11.5px] font-semibold",
-                    "transition-opacity hover:opacity-90",
-                    "disabled:cursor-not-allowed disabled:opacity-50",
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-full",
+                    "bg-[var(--priv-soft)] px-3 py-1.5",
+                    "text-[11.5px] font-semibold text-[var(--priv)]",
                   )}
                 >
-                  Finalise
-                </button>
-              </span>
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  Finalising…
+                </span>
+              ) : (
+                <span className="inline-flex shrink-0 items-center gap-1.5">
+                  {onCancel && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onCancel({
+                          leafCommitment: n.leafCommitment,
+                          chainId: n.chainId,
+                          amount: n.amount,
+                          symbol,
+                          decimals,
+                          priceUsd: priceUsd ?? null,
+                        })
+                      }
+                      className={cn(
+                        "inline-flex h-7 items-center rounded-full px-3",
+                        "border border-line bg-paper text-[11.5px] font-semibold text-ink",
+                        "transition-colors hover:bg-paper-lo",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-faint",
+                      )}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onFinalise?.(n)}
+                    disabled={!onFinalise}
+                    className={cn(
+                      "inline-flex h-7 items-center gap-1 rounded-full px-3",
+                      "bg-[var(--priv)] text-white text-[11.5px] font-semibold",
+                      "transition-opacity hover:opacity-90",
+                      "disabled:cursor-not-allowed disabled:opacity-50",
+                    )}
+                  >
+                    Finalise
+                  </button>
+                </span>
+              )}
             </li>
           ))}
           {queuedNotes.map((n) => (

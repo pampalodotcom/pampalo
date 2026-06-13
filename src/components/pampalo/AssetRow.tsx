@@ -114,6 +114,8 @@ export function AssetRow({
   onFinalise,
   /** Cancel a still-queued pending shield (refunds the shielder). */
   onCancel,
+  /** Lowercased leafCommitments whose finalise tx is in flight. */
+  finalising,
   className,
 }: {
   asset: AssetRowData;
@@ -125,6 +127,7 @@ export function AssetRow({
   executableNotes?: PendingNote[];
   onFinalise?: (note: PendingNote) => void;
   onCancel?: (req: CancelRequest) => void;
+  finalising?: Set<string>;
   className?: string;
 }) {
   const dp = asset.roundTo ?? DEFAULT_ROUND_TO[asset.symbol] ?? 4;
@@ -440,6 +443,7 @@ export function AssetRow({
           executableNotes={executableNotes ?? []}
           onFinalise={onFinalise}
           onCancel={onCancel}
+          finalising={finalising}
           priceUsd={asset.priceUsd}
           roundTo={asset.roundTo}
         />
@@ -481,6 +485,7 @@ export function AssetRow({
             executableNotes={executableNotes ?? []}
             onFinalise={onFinalise}
             onCancel={onCancel}
+            finalising={finalising}
             priceUsd={asset.priceUsd}
             roundTo={asset.roundTo}
           />
