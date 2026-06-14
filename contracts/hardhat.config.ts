@@ -97,6 +97,20 @@ export default defineConfig({
           : {}),
       },
     },
+    // In-process Base mainnet fork — used to dry-run the swap-venue
+    // deploy (scripts/deploy-swap.ts) and the forked-liquidity swap
+    // tests against real Base Uniswap before any live deploy. Keyless
+    // funded signers; no real ETH spent.
+    baseFork: {
+      type: "edr-simulated",
+      chainId: 8453,
+      forking: {
+        url: alchemyUrl("base-mainnet"),
+        ...(process.env.FORK_BLOCK
+          ? { blockNumber: Number(process.env.FORK_BLOCK) }
+          : {}),
+      },
+    },
     // Mainnet + Base + Sepolia mirror the chains the wallet half of
     // this project supports (see convex/uniswap.ts UNISWAP_ADDRESSES
     // and convex/seed.ts NETWORKS). Subdomains match convex's
