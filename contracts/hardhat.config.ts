@@ -123,7 +123,12 @@ export default defineConfig({
     },
     base: {
       type: "http",
-      url: alchemyUrl("base-mainnet"),
+      // BASE_RPC_URL overrides the Alchemy URL. Alchemy's
+      // eth_getTransactionCount lags a just-submitted tx by a few
+      // seconds, which trips Ignition's strict nonce manager mid-deploy;
+      // pointing at the Base sequencer RPC (https://mainnet.base.org)
+      // for deploys avoids that.
+      url: process.env.BASE_RPC_URL || alchemyUrl("base-mainnet"),
       accounts: hdAccountsV2,
       chainId: 8453,
     },

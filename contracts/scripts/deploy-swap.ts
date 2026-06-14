@@ -1,4 +1,4 @@
-import { ContractFactory, type Provider } from "ethers";
+import { ContractFactory } from "ethers";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import hre from "hardhat";
@@ -25,25 +25,6 @@ const ETH_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 const STEP_SLEEP_MS = 3000;
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
-
-const waitForNonce = async (
-  provider: Provider,
-  address: string,
-  expected: number,
-  timeoutMs = 120_000,
-): Promise<void> => {
-  const start = Date.now();
-  let last = -1;
-  while (Date.now() - start < timeoutMs) {
-    const actual = await provider.getTransactionCount(address, "latest");
-    if (actual >= expected) return;
-    last = actual;
-    await sleep(2000);
-  }
-  throw new Error(
-    `waitForNonce timeout for ${address}: expected ${expected}, last seen ${last}`,
-  );
-};
 
 // Per-chain real-token + venue + Chainlink-feed config. WETH reuses the
 // ETH/USD feed (WETH tracks ETH 1:1 for oracle purposes).
@@ -85,13 +66,8 @@ async function deployVenue(args: {
   >[number];
 }): Promise<Record<string, unknown>> {
   const { connection, venue, cfg, chainId, deployer } = args;
-  const provider = deployer.provider!;
 
   console.log(`\n=== Deploying Pampalo${venue.toUpperCase()} ===`);
-  const nonceBefore = await provider.getTransactionCount(
-    deployer.address,
-    "latest",
-  );
 
   const venueAddr = venue === "v3" ? cfg.v3Router : cfg.v4PoolManager;
   const result =
@@ -107,7 +83,6 @@ async function deployVenue(args: {
   const pampaloAddress = await pampalo.getAddress();
   console.log(`  Pampalo${venue.toUpperCase()} : ${pampaloAddress}`);
   console.log(`  venue (${venue})       : ${venueAddr}`);
-  await waitForNonce(provider, deployer.address, nonceBefore + 1);
   await sleep(STEP_SLEEP_MS);
 
   // Poseidon hasher.
@@ -117,15 +92,24 @@ async function deployVenue(args: {
     poseidon2HuffAddress = existingHasher;
     console.log(`  Poseidon already set: ${existingHasher}`);
   } else {
+    // Explicit gasLimits on every direct tx so hardhat-ethers skips
+    // eth_estimateGas — the Base sequencer RPC (used for deploys to dodge
+    // Alchemy's nonce-read lag) has a flaky estimateGas that spuriously
+    // reverts on CREATE. These limits are generous; Base gas is cheap and
+    // unused gas is refunded.
     const factory = new ContractFactory(
       [],
       Poseidon2HuffJson.bytecode,
       deployer,
     );
-    const poseidon2Huff = await factory.deploy();
+    const poseidon2Huff = await factory.deploy({ gasLimit: 3_000_000n });
     await poseidon2Huff.waitForDeployment();
     poseidon2HuffAddress = await poseidon2Huff.getAddress();
-    await (await pampalo.setPoseidon(poseidon2HuffAddress)).wait();
+    // setPoseidon computes the 12 zero-subtree roots (11 hasher calls +
+    // storage writes), so it needs far more than a simple setter.
+    await (
+      await pampalo.setPoseidon(poseidon2HuffAddress, { gasLimit: 2_000_000n })
+    ).wait();
     console.log(`  Poseidon set: ${poseidon2HuffAddress}`);
     await sleep(STEP_SLEEP_MS);
   }
@@ -136,6 +120,7 @@ async function deployVenue(args: {
   const usdcOracle = await ChainlinkOracleFactory.deploy(
     cfg.feeds.usdc.feed,
     cfg.feeds.usdc.maxAge,
+    { gasLimit: 1_000_000n },
   );
   await usdcOracle.waitForDeployment();
   const usdcOracleAddress = await usdcOracle.getAddress();
@@ -143,6 +128,7 @@ async function deployVenue(args: {
   const ethOracle = await ChainlinkOracleFactory.deploy(
     cfg.feeds.eth.feed,
     cfg.feeds.eth.maxAge,
+    { gasLimit: 1_000_000n },
   );
   await ethOracle.waitForDeployment();
   const ethOracleAddress = await ethOracle.getAddress();
@@ -161,7 +147,9 @@ async function deployVenue(args: {
       continue;
     }
     await (
-      await pampalo.addSupportedAsset(a.address, a.oracle, a.decimals)
+      await pampalo.addSupportedAsset(a.address, a.oracle, a.decimals, {
+        gasLimit: 200_000n,
+      })
     ).wait();
     console.log(`  ${a.name.padEnd(5)} registered`);
     await sleep(STEP_SLEEP_MS);
