@@ -33,6 +33,9 @@ export function PampaloDefs() {
         <marker id="pd-arrow-priv" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
           <polygon points="0,0 10,5 0,10 2.4,5" />
         </marker>
+        <marker id="pd-arrow-dang" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+          <polygon points="0,0 10,5 0,10 2.4,5" />
+        </marker>
       </defs>
     </svg>
   );
@@ -918,6 +921,507 @@ export function FullJourney() {
         <path className="flow-priv dash" d="M644,102 H676" markerEnd="url(#pd-arrow-priv)" opacity="0.7" />
 
         <text className="t-sub" x="480" y="362" fontSize="11" textAnchor="middle">No server ever sees a plaintext note, a secret, or the link between Alice's and Bob's addresses.</text>
+      </svg>
+    </div>
+  );
+}
+
+/* ==========================================================================
+   Private-swap diagrams
+   --------------------------------------------------------------------------
+   Seven self-contained inline-SVG figures for the "Private Swaps" page,
+   sharing the same theme system as the protocol diagrams above. Two rails:
+   PRIVATE (calm green/teal) and PUBLIC (warm amber/orange), with a sparing
+   REVERT red (.t-dang / .node-dang / .flow-dang) for the all-or-nothing
+   failure path. Render <PampaloDefs /> once near the top of the page.
+   ========================================================================== */
+
+/** PS·01 · The big picture: private notes in, public trade, private note out */
+export function PrivateSwapBigPicture() {
+  return (
+    <div className="pampdia">
+      <svg viewBox="0 0 960 430" role="img" aria-label="A private note of token A is spent and retired into a private swap, which trades against public Uniswap v4 or v3 liquidity and mints a fresh private note of token B. The note ends stay on the cool private rail; only the trade dips down to the warm public rail.">
+        {/* rail bands */}
+        <rect x="20" y="78" width="920" height="146" rx="16" fill="var(--d-priv-soft)" opacity="0.5" />
+        <rect x="296" y="288" width="368" height="112" rx="16" fill="var(--d-pub-soft)" opacity="0.55" />
+        <text className="t-tick t-priv" x="40" y="70" fontSize="9.5">Pampalo.sol · privateSwap()</text>
+        <text className="t-tick t-pub" x="312" y="282" fontSize="9.5">Public rail · Uniswap AMM</text>
+
+        {/* Note A (frosted) */}
+        <g>
+          <path className="node-priv" d="M44,90 H220 a8,8 0 0 1 8,8 V202 a8,8 0 0 1 -8,8 H52 a8,8 0 0 1 -8,-8 V90 Z" />
+          <path d="M206,90 H228 V112 Z" fill="var(--d-surface)" stroke="var(--d-priv-line)" strokeWidth="1.2" />
+          <g className="frost"><line x1="56" y1="150" x2="216" y2="150" /><line x1="56" y1="168" x2="216" y2="168" /></g>
+          <text className="t-tick t-priv" x="62" y="116" fontSize="10">Private note</text>
+          <text className="t-mono" x="62" y="146" fontSize="22" fontWeight="600">Token A</text>
+          <rect x="62" y="176" width="120" height="20" rx="6" fill="var(--d-priv-line)" opacity="0.5" />
+          <text className="t-tick" x="68" y="190" fontSize="8.5" fill="var(--d-surface)">owner hidden</text>
+        </g>
+
+        {/* Private swap hexagon */}
+        <polygon className="node-2" points="404,150 442,92 518,92 556,150 518,208 442,208" />
+        <text className="t-title" x="480" y="146" fontSize="16" textAnchor="middle">Private swap</text>
+        <text className="t-tick" x="480" y="168" fontSize="8.5" textAnchor="middle">one atomic tx</text>
+
+        {/* Note B (frosted) */}
+        <g>
+          <path className="node-priv" d="M720,90 H896 a8,8 0 0 1 8,8 V202 a8,8 0 0 1 -8,8 H728 a8,8 0 0 1 -8,-8 V90 Z" />
+          <path d="M882,90 H904 V112 Z" fill="var(--d-surface)" stroke="var(--d-priv-line)" strokeWidth="1.2" />
+          <g className="frost"><line x1="732" y1="150" x2="892" y2="150" /><line x1="732" y1="168" x2="892" y2="168" /></g>
+          <text className="t-tick t-priv" x="738" y="116" fontSize="10">Private note</text>
+          <text className="t-mono" x="738" y="146" fontSize="22" fontWeight="600">Token B</text>
+          <rect x="738" y="176" width="120" height="20" rx="6" fill="var(--d-priv-line)" opacity="0.5" />
+          <text className="t-tick" x="744" y="190" fontSize="8.5" fill="var(--d-surface)">owner hidden</text>
+        </g>
+
+        {/* Uniswap cylinder */}
+        <g>
+          <path d="M400,306 V370 A80,14 0 0 0 560,370 V306" className="node-pub" />
+          <ellipse cx="480" cy="306" rx="80" ry="14" className="node-pub" />
+          <text className="t-mono t-pub" x="480" y="346" fontSize="13" textAnchor="middle" fontWeight="600">Uniswap v4 / v3</text>
+          <text className="t-tick t-pub" x="480" y="364" fontSize="8" textAnchor="middle">public liquidity</text>
+        </g>
+
+        {/* flows */}
+        <path className="flow-priv m-flow" d="M236,150 H404" markerEnd="url(#pd-arrow-priv)" />
+        <text className="t-tick t-priv" x="320" y="138" fontSize="8.5" textAnchor="middle">spend &amp; retire</text>
+        <circle className="m-token ps-tA" r="5" fill="var(--d-priv)" />
+        <path className="flow-priv m-flow" d="M556,150 H720" markerEnd="url(#pd-arrow-priv)" />
+        <text className="t-tick t-priv" x="638" y="138" fontSize="8.5" textAnchor="middle">mint new note · T</text>
+        <circle className="m-token ps-tB" r="5" fill="var(--d-priv)" />
+        <path className="flow-pub m-flow" d="M462,208 V300" markerEnd="url(#pd-arrow-pub)" />
+        <text className="t-tick t-pub" x="396" y="258" fontSize="8" textAnchor="middle">trade A→B</text>
+        <circle className="m-token ps-down" r="5" fill="var(--d-pub)" />
+        <path className="flow-pub m-flow" d="M500,300 V216" markerEnd="url(#pd-arrow-pub)" />
+        <text className="t-tick t-pub" x="566" y="258" fontSize="8" textAnchor="middle">tokens back</text>
+        <circle className="m-token ps-up" r="5" fill="var(--d-pub)" />
+
+        <text className="t-sub" x="480" y="416" fontSize="11.5" textAnchor="middle">No separate private pool — the trade executes against the same public liquidity everyone else uses.</text>
+      </svg>
+    </div>
+  );
+}
+
+/** PS·02 · We hide who, not how much: the honesty split */
+export function HideWhoNotHowMuch() {
+  return (
+    <div className="pampdia">
+      <svg viewBox="0 0 960 420" role="img" aria-label="A one-way mirror down the middle. On the private green side, three facts are hidden: who owns the input note, who owns the output note, and the link between your note and this swap. On the public amber side, three facts are visible: which tokens were traded, the amount swapped, and that a private swap happened. You can read the number through the glass, but not the face behind it.">
+        <g transform="translate(40,44)">
+          <circle cx="8" cy="-4" r="6" className="node-priv" />
+          <text className="t-tick t-priv" x="24" y="0" fontSize="10.5">Private · hidden on-chain</text>
+        </g>
+        <g transform="translate(560,44)">
+          <circle cx="8" cy="-4" r="6" className="node-pub" />
+          <text className="t-tick t-pub" x="24" y="0" fontSize="10.5">Public · visible on-chain</text>
+        </g>
+
+        {/* one-way mirror band */}
+        <rect x="452" y="64" width="56" height="300" rx="10" fill="var(--d-surface-2)" stroke="var(--d-line-hi)" strokeWidth="1.5" />
+        <g className="frost" opacity="0.5">
+          <line x1="458" y1="76" x2="502" y2="120" /><line x1="458" y1="116" x2="502" y2="160" />
+          <line x1="458" y1="156" x2="502" y2="200" /><line x1="458" y1="196" x2="502" y2="240" />
+          <line x1="458" y1="236" x2="502" y2="280" /><line x1="458" y1="276" x2="502" y2="320" />
+          <line x1="458" y1="316" x2="502" y2="360" />
+        </g>
+        <text className="t-tick t-faint" x="480" y="384" fontSize="8" textAnchor="middle">one-way mirror</text>
+
+        {/* PRIVATE rows */}
+        <g fontSize="12">
+          <rect className="node-priv" x="40" y="76" width="392" height="76" rx="13" />
+          <g transform="translate(70,114)">
+            <circle r="15" fill="var(--d-priv-line)" opacity="0.35" />
+            <path d="M-9,0 H9" stroke="var(--d-priv)" strokeWidth="2.4" strokeLinecap="round" />
+          </g>
+          <text className="t-lab" x="104" y="110">Who owns the input note</text>
+          <text className="t-tick t-priv" x="104" y="130" fontSize="8">the spender stays anonymous</text>
+          <rect className="node-priv" x="40" y="164" width="392" height="76" rx="13" />
+          <g transform="translate(70,202)">
+            <circle r="15" fill="var(--d-priv-line)" opacity="0.35" />
+            <path d="M-9,0 H9" stroke="var(--d-priv)" strokeWidth="2.4" strokeLinecap="round" />
+          </g>
+          <text className="t-lab" x="104" y="198">Who owns the output note</text>
+          <text className="t-tick t-priv" x="104" y="218" fontSize="8">recipient identity hidden</text>
+          <rect className="node-priv" x="40" y="252" width="392" height="76" rx="13" />
+          <g transform="translate(70,290)">
+            <circle r="15" fill="var(--d-priv-line)" opacity="0.35" />
+            <path d="M-7,-6 L7,6 M-7,6 L7,-6" stroke="var(--d-priv)" strokeWidth="2.2" strokeLinecap="round" />
+          </g>
+          <text className="t-lab" x="104" y="286">The link between your note</text>
+          <text className="t-lab" x="104" y="304">and this swap</text>
+          <text className="t-tick t-priv" x="104" y="322" fontSize="8">unlinkable to your wallet</text>
+        </g>
+
+        {/* PUBLIC rows */}
+        <g fontSize="12">
+          <rect className="node-pub" x="528" y="76" width="392" height="76" rx="13" />
+          <g transform="translate(558,114)"><circle r="15" fill="none" stroke="var(--d-pub)" strokeWidth="1.6" /><circle r="5" fill="var(--d-pub)" /><path d="M-15,0 a15,11 0 0 0 30,0 a15,11 0 0 0 -30,0" fill="none" stroke="var(--d-pub)" strokeWidth="1.4" /></g>
+          <text className="t-lab" x="592" y="110">Which tokens were traded</text>
+          <text className="t-mono t-pub" x="592" y="130" fontSize="11">Token A → Token B</text>
+          <rect className="node-pub" x="528" y="164" width="392" height="76" rx="13" />
+          <g transform="translate(558,202)"><circle r="15" fill="none" stroke="var(--d-pub)" strokeWidth="1.6" /><circle r="5" fill="var(--d-pub)" /><path d="M-15,0 a15,11 0 0 0 30,0 a15,11 0 0 0 -30,0" fill="none" stroke="var(--d-pub)" strokeWidth="1.4" /></g>
+          <text className="t-lab" x="592" y="198">The amount swapped</text>
+          <text className="t-mono t-pub" x="592" y="218" fontSize="11">readable through the glass</text>
+          <rect className="node-pub" x="528" y="252" width="392" height="76" rx="13" />
+          <g transform="translate(558,290)"><circle r="15" fill="none" stroke="var(--d-pub)" strokeWidth="1.6" /><circle r="5" fill="var(--d-pub)" /><path d="M-15,0 a15,11 0 0 0 30,0 a15,11 0 0 0 -30,0" fill="none" stroke="var(--d-pub)" strokeWidth="1.4" /></g>
+          <text className="t-lab" x="592" y="286">That a private swap happened</text>
+          <text className="t-tick t-pub" x="592" y="306" fontSize="8">the event is on the public chain</text>
+        </g>
+
+        <text className="t-sub" x="480" y="402" fontSize="12.5" textAnchor="middle"><tspan className="t-priv" fontWeight="600">We hide who, not how much.</tspan> Against a public market, the amount has to be public — so we hide everything else.</text>
+      </svg>
+    </div>
+  );
+}
+
+/** PS·03 · Four steps, one atomic transaction */
+export function FourStepsAtomic() {
+  return (
+    <div className="pampdia">
+      <svg viewBox="0 0 960 440" role="img" aria-label="Inside one privateSwap call paid by a relayer: Prove builds a zero-knowledge proof; Verify checks the root and proof and retires the input note; Swap trades the pooled balance on public Uniswap; Mint creates the new private note worth exactly the target T, leaving the surplus in reserves. Any failed check — unknown root, bad proof, or a realized amount below T — drops into a single revert rail and the whole transaction reverts.">
+        <rect className="node-2" x="20" y="34" width="262" height="30" rx="8" />
+        <text className="t-mono" x="36" y="54" fontSize="10.5">privateSwap()</text>
+        <text className="t-tick t-faint" x="266" y="54" fontSize="8" textAnchor="end">relayer pays gas</text>
+        <path className="flow" d="M150,64 V84" markerEnd="url(#pd-arrow)" />
+
+        {/* BEAT 1 · Prove */}
+        <rect className="node-priv" x="20" y="90" width="210" height="150" rx="14" />
+        <text className="t-tick t-priv" x="40" y="116" fontSize="9">Step 1 · client</text>
+        <text className="t-title" x="40" y="142" fontSize="18">Prove</text>
+        <text className="t-sub" x="40" y="168" fontSize="10.5">Build a zero-knowledge</text>
+        <text className="t-sub" x="40" y="184" fontSize="10.5">proof that you own a note —</text>
+        <text className="t-sub" x="40" y="200" fontSize="10.5">without revealing which one.</text>
+        <g transform="translate(40,214)"><rect x="0" y="0" width="13" height="11" rx="2" fill="none" stroke="var(--d-priv)" strokeWidth="1.4" /><path d="M2.5,0 V-1.6 a4,4 0 0 1 8,0 V0" fill="none" stroke="var(--d-priv)" strokeWidth="1.4" /></g>
+        <text className="t-tick t-priv" x="60" y="223" fontSize="8">sealed witnesses</text>
+
+        {/* BEAT 2 · Verify */}
+        <rect className="node" x="262" y="90" width="210" height="150" rx="14" />
+        <text className="t-tick t-faint" x="282" y="116" fontSize="9">Step 2 · contract</text>
+        <text className="t-title" x="282" y="142" fontSize="18">Verify</text>
+        <g fontSize="10">
+          <g transform="translate(290,160)"><circle r="7" className="node-priv" /><path d="M-3.2,0 l2.3,2.5 l4,-4.8" fill="none" stroke="var(--d-priv)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></g>
+          <text className="t-lab" x="306" y="164" fontSize="10.5">root recognised</text>
+          <g transform="translate(290,184)"><circle r="7" className="node-priv" /><path d="M-3.2,0 l2.3,2.5 l4,-4.8" fill="none" stroke="var(--d-priv)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></g>
+          <text className="t-lab" x="306" y="188" fontSize="10.5">proof valid</text>
+          <g transform="translate(290,208)"><circle r="7" className="node-priv" /><path d="M-3.2,0 l2.3,2.5 l4,-4.8" fill="none" stroke="var(--d-priv)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></g>
+          <text className="t-lab" x="306" y="212" fontSize="10.5">retire input note</text>
+        </g>
+
+        {/* BEAT 3 · Swap */}
+        <rect className="node-pub" x="504" y="90" width="210" height="150" rx="14" />
+        <text className="t-tick t-pub" x="524" y="116" fontSize="9">Step 3 · public market</text>
+        <text className="t-title" x="524" y="142" fontSize="18">Swap</text>
+        <text className="t-sub" x="524" y="168" fontSize="10.5">Trade your pooled balance</text>
+        <text className="t-sub" x="524" y="184" fontSize="10.5">on Uniswap for Token B.</text>
+        <g transform="translate(524,198)">
+          <path d="M0,8 V30 A28,7 0 0 0 56,30 V8" className="node-pub" />
+          <ellipse cx="28" cy="8" rx="28" ry="7" className="node-pub" />
+          <text className="t-tick t-pub" x="28" y="24" fontSize="7.5" textAnchor="middle">v4 / v3</text>
+        </g>
+        <text className="t-tick t-pub" x="624" y="214" fontSize="8">realized</text>
+        <text className="t-tick t-pub" x="624" y="226" fontSize="8">amount</text>
+
+        {/* BEAT 4 · Mint */}
+        <rect className="node-priv" x="746" y="90" width="194" height="150" rx="14" />
+        <text className="t-tick t-priv" x="766" y="116" fontSize="9">Step 4 · client note</text>
+        <text className="t-title" x="766" y="142" fontSize="18">Mint</text>
+        <text className="t-sub" x="766" y="168" fontSize="10.5">Create your new private</text>
+        <text className="t-sub" x="766" y="184" fontSize="10.5">note — worth exactly T.</text>
+        <path className="node-priv" d="M766,196 H912 a6,6 0 0 1 6,6 V224 a6,6 0 0 1 -6,6 H766 Z" />
+        <text className="t-mono t-priv" x="778" y="216" fontSize="10">Token B · note = T</text>
+
+        {/* between-beat arrows */}
+        <path className="flow-priv m-flow" d="M230,165 H262" markerEnd="url(#pd-arrow-priv)" />
+        <path className="flow m-flow" d="M472,165 H504" markerEnd="url(#pd-arrow)" />
+        <text className="t-tick t-faint" x="488" y="156" fontSize="7" textAnchor="middle">pooled A</text>
+
+        {/* floor gate between Swap and Mint */}
+        <g transform="translate(730,165)">
+          <polygon points="0,-22 22,0 0,22 -22,0" className="node-2" />
+          <text className="t-tick" x="0" y="-2" fontSize="7" textAnchor="middle">≥ T?</text>
+          <text className="t-tick t-priv" x="0" y="9" fontSize="6.5" textAnchor="middle">floor</text>
+        </g>
+        <path className="flow-priv m-flow" d="M714,165 H708" markerStart="url(#pd-arrow-priv)" />
+        <path className="flow-priv" d="M752,165 H746" markerEnd="url(#pd-arrow-priv)" />
+        <text className="t-tick t-priv" x="734" y="146" fontSize="7.5" textAnchor="middle">yes</text>
+
+        {/* surplus to reserves */}
+        <path className="flow m-flow" d="M843,230 V268" markerEnd="url(#pd-arrow)" />
+        <rect className="node-2" x="746" y="270" width="194" height="40" rx="11" />
+        <text className="t-lab" x="843" y="288" fontSize="10" textAnchor="middle">surplus above T</text>
+        <text className="t-tick t-faint" x="843" y="302" fontSize="7.5" textAnchor="middle">stays in protocol reserves</text>
+
+        {/* REVERT RAIL */}
+        <rect x="20" y="356" width="694" height="58" rx="14" fill="var(--d-dang-soft)" stroke="var(--d-dang-line)" strokeWidth="1.5" strokeDasharray="6 5" />
+        <g transform="translate(56,385)">
+          <circle r="13" fill="none" stroke="var(--d-dang)" strokeWidth="1.6" />
+          <path d="M-5,-5 L5,5 M5,-5 L-5,5" stroke="var(--d-dang)" strokeWidth="2" strokeLinecap="round" />
+        </g>
+        <text className="t-title t-dang" x="86" y="382" fontSize="15">revert</text>
+        <text className="t-tick t-dang" x="86" y="400" fontSize="8.5">nothing happens · all-or-nothing</text>
+        <text className="t-sub t-dang" x="500" y="390" fontSize="11" textAnchor="middle">any failed check unwinds the entire transaction</text>
+
+        <path className="flow-dang dash" d="M367,240 V356" markerEnd="url(#pd-arrow-dang)" />
+        <text className="t-tick t-dang" x="378" y="300" fontSize="7.5">unknown root · bad proof</text>
+        <path className="flow-dang dash" d="M730,188 C730,300 640,310 600,356" markerEnd="url(#pd-arrow-dang)" />
+        <text className="t-tick t-dang" x="700" y="280" fontSize="7.5" textAnchor="middle">realized &lt; T</text>
+      </svg>
+    </div>
+  );
+}
+
+/** PS·04 · You set the floor. You always clear it. */
+export function YouSetTheFloor() {
+  return (
+    <div className="pampdia">
+      <svg viewBox="0 0 960 400" role="img" aria-label="A two-phase timeline. Before, off-chain, you pick a target T and your proof bakes in a new note worth exactly T of token B — the amount you will actually receive does not exist yet. During, on-chain, the swap returns a realized amount. If realized is at or above T, you mint a note worth exactly T and the surplus above it stays in reserves. If realized falls below T, the whole transaction reverts.">
+        <text className="t-tick t-priv" x="24" y="40" fontSize="10">Before — you prove · off-chain</text>
+        <text className="t-tick t-pub" x="512" y="40" fontSize="10">During — it executes · on-chain</text>
+        <line className="hair dash" x1="478" y1="52" x2="478" y2="372" />
+
+        {/* BEFORE */}
+        <rect className="node" x="24" y="64" width="200" height="58" rx="12" />
+        <text className="t-lab" x="124" y="90" fontSize="12" textAnchor="middle">pick target T</text>
+        <text className="t-tick t-priv" x="124" y="108" fontSize="8" textAnchor="middle">your floor price</text>
+        <path className="flow" d="M124,122 V150" markerEnd="url(#pd-arrow)" />
+        <rect className="node-priv" x="24" y="154" width="200" height="76" rx="12" />
+        <text className="t-sub" x="124" y="180" fontSize="10.5" textAnchor="middle">proof bakes in a new note</text>
+        <text className="t-mono t-priv" x="124" y="200" fontSize="12" textAnchor="middle" fontWeight="600">worth exactly T</text>
+        <text className="t-tick t-priv" x="124" y="218" fontSize="8" textAnchor="middle">of Token B</text>
+
+        <text className="t-sub t-faint" x="124" y="266" fontSize="10" textAnchor="middle">the amount you'll receive</text>
+        <text className="t-sub t-faint" x="124" y="282" fontSize="10" textAnchor="middle">doesn't exist yet …</text>
+        <path className="flow dash" d="M224,200 C320,200 320,290 408,290" markerEnd="url(#pd-arrow)" />
+
+        {/* DURING · the floor bar chart */}
+        <g transform="translate(560,0)">
+          <line className="tick" x1="0" y1="320" x2="320" y2="320" />
+          <text className="t-tick t-faint" x="-4" y="324" fontSize="8" textAnchor="end">0</text>
+
+          <rect x="40" y="120" width="92" height="200" rx="4" fill="var(--d-priv-soft)" stroke="var(--d-priv-line)" strokeWidth="1.5" />
+          <rect x="40" y="120" width="92" height="64" rx="4" fill="var(--d-warn-soft)" stroke="var(--d-warn)" strokeWidth="1.3" />
+          <text className="t-tick t-warn" x="86" y="158" fontSize="8" textAnchor="middle">surplus</text>
+          <text className="t-mono t-priv" x="86" y="260" fontSize="13" textAnchor="middle" fontWeight="600">your note</text>
+          <text className="t-tick t-priv" x="86" y="278" fontSize="8" textAnchor="middle">= exactly T</text>
+
+          <line className="tick" x1="30" y1="120" x2="150" y2="120" stroke="var(--d-priv)" />
+          <text className="t-tick t-priv" x="160" y="124" fontSize="8.5">realized</text>
+
+          <line x1="20" y1="184" x2="200" y2="184" stroke="var(--d-warn)" strokeWidth="2" strokeDasharray="5 4" />
+          <text className="t-mono t-warn" x="160" y="180" fontSize="11" fontWeight="600">floor T</text>
+
+          <path className="flow" d="M132,150 H214" markerEnd="url(#pd-arrow)" />
+          <text className="t-tick t-faint" x="220" y="146" fontSize="8">surplus (realized − T)</text>
+          <text className="t-tick t-faint" x="220" y="160" fontSize="8">→ reserves</text>
+        </g>
+
+        <g transform="translate(512,344)">
+          <g transform="translate(12,0)"><circle r="10" className="node-priv" /><path d="M-4.4,0 l3,3.2 l5.4,-6.4" fill="none" stroke="var(--d-priv)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></g>
+          <text className="t-sub t-priv" x="30" y="4" fontSize="11" fontWeight="600">realized ≥ T → you always clear your floor</text>
+        </g>
+        <g transform="translate(512,374)">
+          <g transform="translate(12,-4)"><circle r="10" className="node-dang" /><path d="M-4,-4 L4,4 M4,-4 L-4,4" stroke="var(--d-dang)" strokeWidth="1.8" strokeLinecap="round" /></g>
+          <text className="t-sub t-dang" x="30" y="0" fontSize="11">realized &lt; T → revert · nothing happens</text>
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+/** PS·05 · One flow, any Uniswap: the venue fork */
+export function OneFlowAnyUniswap() {
+  return (
+    <div className="pampdia">
+      <svg viewBox="0 0 960 360" role="img" aria-label="The shared core — verify, retire, swap, mint — forks at the swap step to a venue choice. Uniswap v4 unlocks the PoolManager and swaps through its callback; Uniswap v3 approves the router and calls exactInput. Both return Token B and rejoin the shared core to check the floor and mint the note, routing to whichever pool is deeper.">
+        <rect className="node" x="24" y="116" width="206" height="88" rx="14" />
+        <text className="t-tick t-faint" x="40" y="140" fontSize="8.5">shared core</text>
+        <text className="t-mono" x="40" y="162" fontSize="11">verify → retire</text>
+        <text className="t-mono t-pub" x="40" y="182" fontSize="11">→ SWAP →</text>
+        <text className="t-mono" x="40" y="200" fontSize="11" opacity="0.55">mint</text>
+
+        <g transform="translate(300,160)">
+          <polygon points="0,-30 30,0 0,30 -30,0" className="node-2" />
+          <text className="t-tick" x="0" y="-2" fontSize="8.5" textAnchor="middle">which</text>
+          <text className="t-tick" x="0" y="10" fontSize="8.5" textAnchor="middle">venue?</text>
+        </g>
+        <path className="flow-pub m-flow" d="M230,160 H270" markerEnd="url(#pd-arrow-pub)" />
+
+        {/* v4 lane */}
+        <path className="flow-pub" d="M330,142 C372,118 392,96 430,96" markerEnd="url(#pd-arrow-pub)" />
+        <text className="t-tick t-pub" x="372" y="104" fontSize="8">v4</text>
+        <rect className="node-pub" x="432" y="64" width="244" height="64" rx="13" />
+        <text className="t-mono t-pub" x="450" y="90" fontSize="11" fontWeight="600">Uniswap v4</text>
+        <text className="t-sub" x="450" y="110" fontSize="10">unlock PoolManager · swap in callback</text>
+
+        {/* v3 lane */}
+        <path className="flow-pub" d="M330,178 C372,202 392,224 430,224" markerEnd="url(#pd-arrow-pub)" />
+        <text className="t-tick t-pub" x="372" y="222" fontSize="8">v3</text>
+        <rect className="node-pub" x="432" y="192" width="244" height="64" rx="13" />
+        <text className="t-mono t-pub" x="450" y="218" fontSize="11" fontWeight="600">Uniswap v3</text>
+        <text className="t-sub" x="450" y="238" fontSize="10">approve router · call exactInput</text>
+
+        {/* converge → received */}
+        <path className="flow-pub" d="M676,96 C720,96 728,150 754,158" markerEnd="url(#pd-arrow-pub)" />
+        <path className="flow-pub" d="M676,224 C720,224 728,170 754,162" markerEnd="url(#pd-arrow-pub)" />
+        <rect className="node" x="756" y="132" width="180" height="56" rx="13" />
+        <text className="t-lab" x="846" y="156" fontSize="11" textAnchor="middle">received Token B</text>
+        <text className="t-tick t-faint" x="846" y="174" fontSize="8" textAnchor="middle">back to shared core</text>
+
+        <text className="t-tick t-priv" x="846" y="206" fontSize="8.5" textAnchor="middle">routes to whichever pool is deeper</text>
+
+        <path className="flow m-flow" d="M846,188 C846,312 360,312 130,312 V210" markerEnd="url(#pd-arrow)" />
+        <text className="t-sub" x="468" y="308" fontSize="10.5" textAnchor="middle">… rejoin shared core → check floor T → mint note</text>
+      </svg>
+    </div>
+  );
+}
+
+/** PS·06 · What keeps it safe: three guarantees */
+export function WhatKeepsItSafe() {
+  return (
+    <div className="pampdia">
+      <svg viewBox="0 0 960 290" role="img" aria-label="Three safety guarantees. Nullifier: spending retires the input note so it can't be double-spent, and breaks the trail back to you. Bindings: the proof binds the input token, output token and floor T, so a relayer can pick a bad route but can never steal or redirect your funds. Atomicity: it is all-or-nothing — any failure reverts the whole transaction.">
+        {/* card 1 · nullifier */}
+        <g>
+          <rect className="node" x="20" y="40" width="296" height="220" rx="16" />
+          <text className="t-tick t-priv" x="44" y="70" fontSize="9">01 · double-spend defence</text>
+          <g transform="translate(44,86)">
+            <rect className="node-priv" x="0" y="0" width="60" height="44" rx="8" />
+            <path d="M8,40 L52,4" stroke="var(--d-priv)" strokeWidth="2.4" strokeLinecap="round" />
+          </g>
+          <text className="t-title" x="44" y="160" fontSize="17">Nullifier</text>
+          <text className="t-sub" x="44" y="186" fontSize="11">Spending publishes a one-way</text>
+          <text className="t-sub" x="44" y="204" fontSize="11">fingerprint that retires the note.</text>
+          <text className="t-sub" x="44" y="222" fontSize="11">It can't be reused — and the</text>
+          <text className="t-sub" x="44" y="240" fontSize="11">fingerprint breaks the trail to you.</text>
+        </g>
+
+        {/* card 2 · bindings */}
+        <g>
+          <rect className="node" x="332" y="40" width="296" height="220" rx="16" />
+          <text className="t-tick t-warn" x="356" y="70" fontSize="9">02 · the relayer's ceiling</text>
+          <g transform="translate(356,84)">
+            <rect x="18" y="14" width="30" height="24" rx="5" fill="var(--d-surface)" stroke="var(--d-warn)" strokeWidth="1.8" />
+            <path d="M23,14 V9 a10,10 0 0 1 20,0 V14" fill="none" stroke="var(--d-warn)" strokeWidth="1.8" />
+            <circle cx="33" cy="26" r="3" fill="var(--d-warn)" />
+            <rect className="node-2" x="0" y="46" width="20" height="12" rx="3" />
+            <rect className="node-2" x="23" y="46" width="20" height="12" rx="3" />
+            <rect className="node-2" x="46" y="46" width="20" height="12" rx="3" />
+          </g>
+          <text className="t-title" x="356" y="172" fontSize="17">Bindings</text>
+          <text className="t-sub" x="356" y="198" fontSize="11">The proof binds input token,</text>
+          <text className="t-sub" x="356" y="216" fontSize="11">output token and the floor T.</text>
+          <text className="t-sub" x="356" y="234" fontSize="11">Worst a relayer can do is pick a</text>
+          <text className="t-sub" x="356" y="252" fontSize="11">bad route — never steal or redirect.</text>
+        </g>
+
+        {/* card 3 · atomicity */}
+        <g>
+          <rect className="node" x="644" y="40" width="296" height="220" rx="16" />
+          <text className="t-tick t-dang" x="668" y="70" fontSize="9">03 · all-or-nothing</text>
+          <g transform="translate(668,84)">
+            <rect className="node-2" x="0" y="0" width="56" height="44" rx="8" />
+            <text className="t-mono" x="28" y="27" fontSize="9" textAnchor="middle">1 tx</text>
+            <g transform="translate(74,8)"><circle r="9" className="node-priv" /><path d="M-3.8,0 l2.6,2.8 l4.6,-5.4" fill="none" stroke="var(--d-priv)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></g>
+            <g transform="translate(74,34)"><circle r="9" className="node-dang" /><path d="M-3.6,-3.6 L3.6,3.6 M3.6,-3.6 L-3.6,3.6" stroke="var(--d-dang)" strokeWidth="1.8" strokeLinecap="round" /></g>
+          </g>
+          <text className="t-title" x="668" y="172" fontSize="17">Atomicity</text>
+          <text className="t-sub" x="668" y="198" fontSize="11">It fully works or fully reverts.</text>
+          <text className="t-sub" x="668" y="216" fontSize="11">Any failure — including missing</text>
+          <text className="t-sub" x="668" y="234" fontSize="11">the floor — unwinds everything.</text>
+          <text className="t-sub" x="668" y="252" fontSize="11">No partial state, ever.</text>
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+/** PS·07 · End-to-end, who does what: the sequence */
+export function PrivateSwapSequence() {
+  return (
+    <div className="pampdia">
+      <svg viewBox="0 0 960 540" role="img" aria-label="A sequence across five actors: you and your wallet, the relayer, the Pampalo contract, the proof verifier, and Uniswap. You pick a note, target and route and build a zero-knowledge proof, then hand the proof — not your identity — to the relayer. The relayer submits privateSwap and pays gas. The contract checks the proof with the verifier, retires the input note, swaps pooled A for B on Uniswap, then requires the realized amount to clear T, mints the B note and keeps the surplus. Success returns to the relayer; later you find and spend the new private note.">
+        {/* actor columns */}
+        <g fontSize="10">
+          <rect className="node-priv" x="24" y="34" width="150" height="44" rx="11" /><text className="t-lab t-priv" x="99" y="54" fontSize="11" textAnchor="middle">You · wallet</text><text className="t-tick t-faint" x="99" y="70" fontSize="7.5" textAnchor="middle">private</text>
+          <rect className="node" x="214" y="34" width="150" height="44" rx="11" /><text className="t-lab" x="289" y="54" fontSize="11" textAnchor="middle">Relayer</text><text className="t-tick t-faint" x="289" y="70" fontSize="7.5" textAnchor="middle">pays gas</text>
+          <rect className="node" x="404" y="34" width="150" height="44" rx="11" /><text className="t-lab" x="479" y="54" fontSize="11" textAnchor="middle">Pampalo</text><text className="t-tick t-faint" x="479" y="70" fontSize="7.5" textAnchor="middle">contract</text>
+          <rect className="node" x="594" y="34" width="150" height="44" rx="11" /><text className="t-lab" x="669" y="54" fontSize="11" textAnchor="middle">Proof verifier</text><text className="t-tick t-faint" x="669" y="70" fontSize="7.5" textAnchor="middle">zk</text>
+          <rect className="node-pub" x="784" y="34" width="152" height="44" rx="11" /><text className="t-lab t-pub" x="860" y="54" fontSize="11" textAnchor="middle">Uniswap</text><text className="t-tick t-faint" x="860" y="70" fontSize="7.5" textAnchor="middle">v4 / v3</text>
+        </g>
+        {/* lifelines */}
+        <g className="hair">
+          <line x1="99" y1="78" x2="99" y2="500" />
+          <line x1="289" y1="78" x2="289" y2="500" />
+          <line x1="479" y1="78" x2="479" y2="500" />
+          <line x1="669" y1="78" x2="669" y2="500" />
+          <line x1="860" y1="78" x2="860" y2="500" />
+        </g>
+
+        {/* self-action: pick + prove (on You) */}
+        <rect className="node-priv" x="68" y="98" width="62" height="50" rx="8" />
+        <g fontSize="9">
+          <text className="t-tick t-faint" x="14" y="116" fontSize="8">1</text>
+          <text className="t-sub" x="138" y="116" fontSize="10">pick note + target T + route</text>
+          <text className="t-tick t-faint" x="14" y="140" fontSize="8">2</text>
+          <text className="t-sub" x="138" y="140" fontSize="10">build zero-knowledge proof</text>
+        </g>
+
+        {/* 3 You → Relayer */}
+        <path className="flow-priv" d="M130,170 H289" markerEnd="url(#pd-arrow-priv)" />
+        <text className="t-tick t-faint" x="14" y="166" fontSize="8">3</text>
+        <text className="t-sub" x="138" y="164" fontSize="10">hand over proof — not your identity</text>
+
+        {/* 4 Relayer → Contract */}
+        <path className="flow" d="M289,202 H479" markerEnd="url(#pd-arrow)" />
+        <text className="t-tick t-faint" x="200" y="198" fontSize="8">4</text>
+        <text className="t-sub" x="300" y="196" fontSize="10">submit privateSwap() · pays gas</text>
+
+        {/* 5 Contract → Verifier */}
+        <path className="flow" d="M479 234 H669" markerEnd="url(#pd-arrow)" />
+        <text className="t-tick t-faint" x="390" y="230" fontSize="8">5</text>
+        <text className="t-sub" x="500" y="228" fontSize="10">check proof</text>
+
+        {/* 6 Verifier → Contract (valid) */}
+        <path className="flow-priv dash" d="M669,264 H479" markerEnd="url(#pd-arrow-priv)" />
+        <text className="t-tick t-faint" x="390" y="260" fontSize="8">6</text>
+        <text className="t-tick t-priv" x="500" y="258" fontSize="9">valid ✓</text>
+
+        {/* 7 Contract self: retire note */}
+        <rect className="node" x="448" y="280" width="62" height="34" rx="8" />
+        <text className="t-tick t-faint" x="390" y="298" fontSize="8">7</text>
+        <text className="t-sub" x="520" y="300" fontSize="10">retire input note</text>
+
+        {/* 8 Contract → Uniswap */}
+        <path className="flow-pub" d="M479,336 H860" markerEnd="url(#pd-arrow-pub)" />
+        <text className="t-tick t-faint" x="390" y="332" fontSize="8">8</text>
+        <text className="t-sub t-pub" x="560" y="330" fontSize="10">swap pooled A → B</text>
+
+        {/* 9 Uniswap → Contract */}
+        <path className="flow-pub dash" d="M860,366 H479" markerEnd="url(#pd-arrow-pub)" />
+        <text className="t-tick t-faint" x="390" y="362" fontSize="8">9</text>
+        <text className="t-tick t-pub" x="560" y="360" fontSize="9">realized B</text>
+
+        {/* 10 Contract self: require ≥T, mint, keep surplus */}
+        <rect className="node-priv" x="440" y="382" width="78" height="50" rx="8" />
+        <text className="t-tick t-faint" x="390" y="400" fontSize="8">10</text>
+        <text className="t-sub" x="528" y="400" fontSize="10">require realized ≥ T</text>
+        <text className="t-sub t-priv" x="528" y="416" fontSize="10">mint B note · keep surplus</text>
+
+        {/* 11 Contract → Relayer success */}
+        <path className="flow-priv dash" d="M479,452 H289" markerEnd="url(#pd-arrow-priv)" />
+        <text className="t-tick t-faint" x="200" y="448" fontSize="8">11</text>
+        <text className="t-tick t-priv" x="300" y="446" fontSize="9">success</text>
+
+        {/* 12 You self later */}
+        <rect className="node-priv" x="68" y="468" width="62" height="34" rx="8" />
+        <text className="t-tick t-faint" x="14" y="486" fontSize="8">12</text>
+        <text className="t-sub" x="138" y="488" fontSize="10">later · find &amp; spend the new private note</text>
+
+        {/* privacy boundary annotation */}
+        <line className="hair dash" x1="190" y1="86" x2="190" y2="500" />
+        <text className="t-tick t-priv" x="180" y="516" fontSize="8" textAnchor="end">your identity stays</text>
+        <text className="t-tick t-priv" x="180" y="528" fontSize="8" textAnchor="end">left of this line</text>
       </svg>
     </div>
   );

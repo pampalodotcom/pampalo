@@ -97,6 +97,20 @@ export default defineConfig({
           : {}),
       },
     },
+    // In-process Base mainnet fork — used to dry-run the swap-venue
+    // deploy (scripts/deploy-swap.ts) and the forked-liquidity swap
+    // tests against real Base Uniswap before any live deploy. Keyless
+    // funded signers; no real ETH spent.
+    baseFork: {
+      type: "edr-simulated",
+      chainId: 8453,
+      forking: {
+        url: alchemyUrl("base-mainnet"),
+        ...(process.env.FORK_BLOCK
+          ? { blockNumber: Number(process.env.FORK_BLOCK) }
+          : {}),
+      },
+    },
     // Mainnet + Base + Sepolia mirror the chains the wallet half of
     // this project supports (see convex/uniswap.ts UNISWAP_ADDRESSES
     // and convex/seed.ts NETWORKS). Subdomains match convex's
@@ -109,7 +123,12 @@ export default defineConfig({
     },
     base: {
       type: "http",
-      url: alchemyUrl("base-mainnet"),
+      // BASE_RPC_URL overrides the Alchemy URL. Alchemy's
+      // eth_getTransactionCount lags a just-submitted tx by a few
+      // seconds, which trips Ignition's strict nonce manager mid-deploy;
+      // pointing at the Base sequencer RPC (https://mainnet.base.org)
+      // for deploys avoids that.
+      url: process.env.BASE_RPC_URL || alchemyUrl("base-mainnet"),
       accounts: hdAccountsV2,
       chainId: 8453,
     },

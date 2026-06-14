@@ -48,7 +48,7 @@ export type BroadcastResult = {
 };
 
 /** What the gas-sponsoring relayer can be asked to broadcast. */
-export type RelayKind = "transfer" | "unshield";
+export type RelayKind = "transfer" | "unshield" | "swap";
 
 /** Mirror of `api.relayer.node.relay`'s discriminated return. The client
  *  switches on `reason` to decide: surface (WOULD_REVERT/BAD_PROOF) or
@@ -105,8 +105,10 @@ export interface RpcClient {
     kind: RelayKind;
     proof: string;
     publicInputs: readonly string[];
-    /** transfer only: ECIES NotePayload ciphertexts (0..3). */
+    /** transfer/swap: ECIES NotePayload ciphertexts (0..3). */
     payload?: readonly string[];
+    /** swap only: the opaque Uniswap route bytes. */
+    route?: string;
   }) => Promise<RelayResult>;
 }
 
@@ -163,6 +165,7 @@ class ProxiedRpcClient implements RpcClient {
     proof: string;
     publicInputs: readonly string[];
     payload?: readonly string[];
+    route?: string;
   }): Promise<RelayResult> {
     const sessionToken = getSessionToken();
     if (!sessionToken) {
@@ -180,6 +183,7 @@ class ProxiedRpcClient implements RpcClient {
       proof: req.proof,
       publicInputs: [...req.publicInputs],
       payload: req.payload ? [...req.payload] : undefined,
+      route: req.route,
     });
   }
 }

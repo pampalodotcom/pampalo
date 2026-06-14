@@ -11,6 +11,7 @@ export default defineConfig({
     { text: "Introduction", link: "/" },
     { text: "Account", link: "/account" },
     { text: "How It Works", link: "/how-it-works" },
+    { text: "Private Swaps", link: "/private-swaps" },
     {
       text: "Building on Pampalo",
       collapsed: false,

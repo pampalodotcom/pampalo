@@ -38,6 +38,7 @@ import {
   type UnshieldConfirmPayload,
 } from "@/components/pampalo/shield/UnshieldConfirmSheet";
 import { BalanceCard } from "@/components/pampalo/BalanceCard";
+import { PreviousDeploymentBanner } from "@/components/pampalo/PreviousDeploymentBanner";
 import { DepositSheet } from "@/components/pampalo/deposit/DepositSheet";
 import { ReceiveSheet } from "@/components/pampalo/receive/ReceiveSheet";
 import { BeachScene } from "@/components/pampalo/BeachScene";
@@ -531,20 +532,31 @@ function Dashboard({
       if (filter === "all") return true;
       return t.chainId === filter;
     });
+    // WETH folds into the ETH row (ADR 0024): on the pre-wrap contract a
+    // shielded "ETH" is held as WETH, so we display native ETH + WETH as one
+    // ETH balance. The group key maps WETH → ETH; the row aggregates both.
+    const groupKeyFor = (t: Token) => (t.symbol === "WETH" ? "ETH" : t.symbol);
     const bySymbol = new Map<string, Token[]>();
     for (const t of visible) {
-      const arr = bySymbol.get(t.symbol) ?? [];
+      const key = groupKeyFor(t);
+      const arr = bySymbol.get(key) ?? [];
       arr.push(t);
-      bySymbol.set(t.symbol, arr);
+      bySymbol.set(key, arr);
     }
     return Array.from(bySymbol.entries()).map(([symbol, toks]) => ({
       symbol,
-      tokens: toks,
+      // Native ETH first so the row's symbol/decimals/price come from ETH,
+      // not the folded-in WETH.
+      tokens: [...toks].sort((a, b) =>
+        a.symbol === b.symbol ? 0 : a.symbol === "ETH" ? -1 : 1,
+      ),
     }));
   }, [tokens, filter]);
 
   return (
     <>
+      <PreviousDeploymentBanner evmAddress={evmAddress} />
+
       <BalanceCardConnected
         tokens={tokens ?? null}
         prices={prices ?? null}
@@ -776,6 +788,8 @@ function BalanceCardConnected({
         open={swapOpen}
         onOpenChange={setSwapOpen}
         evmAddress={evmAddress}
+        envelope={envelope}
+        poseidon={poseidon}
       />
       <SendSheet
         open={sendOpen}
@@ -1062,6 +1076,20 @@ function AssetGroupRow({
     chainIds: tokens.map((t) => t.chainId),
   };
 
+  // Folded-in WETH ERC-20 public balance, surfaced as a breakdown line under
+  // the ETH row (ADR 0024). Improbable to be non-zero; AssetRow hides it at 0.
+  let wrappedWei = 0n;
+  let hasWrapped = false;
+  for (const c of chainStates) {
+    if (c.token.symbol === "WETH" && c.pub.data) {
+      wrappedWei += c.pub.data.balanceWei;
+      hasWrapped = true;
+    }
+  }
+  const breakdown = hasWrapped
+    ? { symbol: "WETH", wei: wrappedWei, decimals: 18 }
+    : undefined;
+
   // Shieldable if any token in this group is in the (chainId, address)
   // set. Multi-chain rows show the slider when at least one chain is
   // supported; the active chain is still asset.chainIds[0] for v1 until
@@ -1116,21 +1144,27 @@ function AssetGroupRow({
       onCancel={onCancelPending}
       onFinalise={onFinalisePending}
       finalising={finalising}
+      breakdown={breakdown}
       onMove={(payload) => {
-        // Resolve the on-chain asset address for the active chain.
-        // The slider/AssetRow only knows about chainId + symbol; the
-        // address lives on the catalog Token rows we already have here.
-        const assetAddress =
-          tokens
-            .find((t) => t.chainId === payload.chainId)
-            ?.address.toLowerCase() ?? "";
+        // Resolve the asset the slider actually moves. On the merged ETH row
+        // the native-ETH sentinel isn't shieldable on the (pre-wrap) contract —
+        // WETH is — so prefer the group's shieldable token on this chain
+        // (ADR 0024). Falls back to the first on-chain token otherwise.
+        // payload.chainId is always one of this group's chains, so `onChain`
+        // is non-empty (it always includes `first`'s chain).
+        const onChain = tokens.filter((t) => t.chainId === payload.chainId);
+        const moveToken =
+          onChain.find((t) =>
+            shieldableKeys.has(`${t.chainId}:${t.address.toLowerCase()}`),
+          ) ?? onChain[0];
+        const assetAddress = moveToken.address.toLowerCase();
         if (payload.intent === "shield") {
           onShield({
             intent: "shield",
             amount: payload.amount,
             chainId: payload.chainId,
-            symbol: payload.symbol,
-            decimals: payload.decimals,
+            symbol: moveToken.symbol,
+            decimals: moveToken.decimals,
             assetAddress,
           });
           return;
@@ -1139,8 +1173,9 @@ function AssetGroupRow({
           intent: "unshield",
           amount: payload.amount,
           chainId: payload.chainId,
-          symbol: payload.symbol,
-          decimals: payload.decimals,
+          symbol: moveToken.symbol,
+          decimals: moveToken.decimals,
+          assetAddress,
         });
       }}
     />

@@ -1,0 +1,63 @@
+import {
+  PampaloDefs,
+  PrivateSwapBigPicture,
+  HideWhoNotHowMuch,
+  FourStepsAtomic,
+  YouSetTheFloor,
+  OneFlowAnyUniswap,
+  WhatKeepsItSafe,
+  PrivateSwapSequence,
+} from "../components/diagrams";
+
+<PampaloDefs />
+
+# Private Swaps
+
+Swap one private holding for another against real Uniswap liquidity — _who_ you are stays hidden while the trade clears on public markets. The seven figures below walk the feature end to end: the big picture, the honesty split, the four-step atomic transaction, the target-and-surplus floor, the v4/v3 venue fork, the three safety guarantees, and the full sequence.
+
+## Private swaps on public liquidity
+
+Spend a private holding of one token, receive a private holding of another — traded on real Uniswap markets, with your identity unlinked. You **spend & retire** a note of Token A; the swap dips down to **public** Uniswap liquidity, trades, and comes back; then it **mints** a fresh private note of Token B. The note ends never leave the private rail; only the trade itself touches the public market. There's no separate private pool — the swap executes against the same liquidity everyone else uses.
+
+<PrivateSwapBigPicture />
+
+## We hide who, not how much
+
+This split is the protocol's integrity, not a footnote. Ownership is **private**: who holds the input note, who holds the output note, and any link between your note and this swap. The trade itself is **public**: the token pair, the amount, and the fact a swap happened. The one-way mirror is the model — _you can read the number through the glass, but never the face behind it._ Against a public market the amount has to be public, so we hide everything else.
+
+<HideWhoNotHowMuch />
+
+## Four steps, one atomic transaction
+
+It all happens in one transaction a relayer broadcasts. **Prove** — your wallet builds a zero-knowledge proof that you own a note, without revealing which one. **Verify** — the contract checks the proof and retires the input note so it can't be reused. **Swap** — it trades your pooled balance on public Uniswap. **Mint** — it creates your new private note worth exactly the target `T`, and the surplus stays in reserves. Any failed check — unknown root, bad proof, or a realized amount below `T` — reverts the whole thing.
+
+<FourStepsAtomic />
+
+## You set the floor. You always clear it.
+
+You make the proof _before_ the trade runs, so the exact amount you'll receive doesn't exist yet. You name a **target T** and your note is created for exactly that. When the swap clears, if the realized amount is **at or above T** you get your note and the surplus stays in reserves; if it falls **below T**, the whole thing reverts. You name your floor price — you always get at least it; the bonus above it is the price of keeping the design simple and safe.
+
+<YouSetTheFloor />
+
+## One flow, any Uniswap
+
+The same private swap routes through Uniswap **v4** or **v3** — whichever has the best liquidity for the pair. Only the `SWAP` step differs: v4 unlocks the PoolManager and swaps through its callback; v3 approves the router and calls `exactInput`. Both return Token B and rejoin the shared core to check the floor and mint your note.
+
+<OneFlowAnyUniswap />
+
+## A relayer can route you a bad price — never your funds
+
+Three things keep it honest. The **nullifier** retires the input note so it can't be double-spent and breaks the trail back to you. The proof's **bindings** lock the input token, output token, and floor `T` — a relayer that picks the swap route can get you a bad price but can never steal or redirect your funds. And **atomicity** means any failure reverts the whole transaction — there's no partial state. A private swap keeps value _inside_ the system; it isn't a withdrawal — to get tokens to a normal address you still [unshield](/how-it-works) later.
+
+<WhatKeepsItSafe />
+
+## End-to-end — who does what
+
+The whole arc, actor by actor. You pick a note, target `T` and route, build the proof, and hand it — not your identity — to a **relayer**, who submits `privateSwap` and pays gas. The **contract** checks the proof with the verifier, retires the input note, swaps pooled A for B on **Uniswap**, then requires the realized amount to clear `T`, mints your B note, and keeps the surplus. Success returns to the relayer; later, you find and spend the new private note. Your address never crosses the boundary.
+
+<PrivateSwapSequence />
+
+---
+
+Private swaps build on the same note, nullifier, and relayer model as the rest
+of the protocol — see [How It Works](/how-it-works) for the private-money core.

@@ -68,10 +68,12 @@ contract Pampalo is PoseidonMerkleTree, AccessControlEnumerable {
     keccak256("BOOTH_OPERATOR_ROLE");
 
   // Semantic contract version. Bumped on every deploy; a MAJOR bump means a
-  // breaking redeploy (new tree, no migration — see ADR 0017). Readable
-  // on-chain (pampalo.VERSION()) and surfaced on /sentry so "which contract
-  // is live" is auditable.
-  string public constant VERSION = "2.0.0";
+  // breaking redeploy (new tree, retired-note eject — see ADR 0017/0022).
+  // Readable on-chain (pampalo.VERSION()) and surfaced on /sentry so "which
+  // contract is live" is auditable. 3.0.0 = the private-swap superset
+  // (PampaloSwapV3 on Base mainnet, ADR 0023/0024); inherited by the venue
+  // subclasses, so a fresh deploy bakes this value into their bytecode.
+  string public constant VERSION = "3.0.0";
 
   // ──────────────────────────────────────────────────────────────────────
   // Supported assets + price oracles

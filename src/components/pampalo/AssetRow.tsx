@@ -116,6 +116,10 @@ export function AssetRow({
   onCancel,
   /** Lowercased leafCommitments whose finalise tx is in flight. */
   finalising,
+  /** Optional folded-in sibling balance shown as a breakdown line under the
+   *  name — e.g. WETH folded into the ETH row (ADR 0024). Rendered only when
+   *  `wei > 0` (the improbable case where the user holds WETH ERC-20). */
+  breakdown,
   className,
 }: {
   asset: AssetRowData;
@@ -128,6 +132,7 @@ export function AssetRow({
   onFinalise?: (note: PendingNote) => void;
   onCancel?: (req: CancelRequest) => void;
   finalising?: Set<string>;
+  breakdown?: { symbol: string; wei: bigint; decimals: number };
   className?: string;
 }) {
   const dp = asset.roundTo ?? DEFAULT_ROUND_TO[asset.symbol] ?? 4;
@@ -177,6 +182,12 @@ export function AssetRow({
       <span className="text-[12.5px] text-ink-mute leading-snug break-words">
         {asset.name}
       </span>
+      {breakdown && breakdown.wei > 0n && (
+        <span className="text-[11px] text-ink-mute leading-snug tabular-nums">
+          incl. {fmtToken(weiToNumber(breakdown.wei, breakdown.decimals), dp)}{" "}
+          {breakdown.symbol}
+        </span>
+      )}
     </div>
   );
   const chips = (

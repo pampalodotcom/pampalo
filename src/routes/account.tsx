@@ -236,9 +236,10 @@ function AccountPage() {
         {/* Per-network monthly shield/unshield limit usage (on-chain caps). */}
         {addresses && <MonthlyCapCard evm={addresses.evm} />}
 
-        {/* Read-only history of notes from redeployed-away contracts.
-            Renders nothing unless the user holds retired notes (ADR 0018). */}
-        <RetiredNotesHistory />
+        {/* History of notes from redeployed-away contracts. Renders nothing
+            unless the user holds retired notes (ADR 0018); withdrawable ones
+            get a Withdraw action (ADR 0022) when addresses are unlocked. */}
+        <RetiredNotesHistory addresses={addresses ?? undefined} />
       </div>
     </PageLayout>
   );

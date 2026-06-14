@@ -81,12 +81,32 @@ Every account exposes its public identifiers:
 ```ts
 account.addresses;
 // {
-//   evm:              "0x…",  // public Ethereum address
+//   evm:              "0x…",  // public Ethereum address (m/44'/60'/0'/0/0)
 //   poseidon:         "0x…",  // unlinkable on-chain note identifier
-//   envelope:         "0x04…",// ECIES key others encrypt notes to
-//   envelopeIsolated: "0x04…",
+//   envelope:         "0x04…",// SHARED envelope: path-0 ECIES key (= the EVM key)
+//   envelopeIsolated: "0x04…",// ISOLATED envelope: slot-420 ECIES key (m/44'/60'/0'/0/420)
 // }
 ```
+
+### Two envelope keys
+
+The **envelope key** is the secp256k1 key others ECIES-encrypt your notes
+to. A mnemonic has two of them:
+
+- **Shared envelope** (`envelope`) — derived at path 0, the *same* key as
+  your EVM address. Used on chains where the deployment's
+  `separateDerivationKey` is `false` (today: Base Sepolia).
+- **Isolated envelope** (`envelopeIsolated`) — derived at the dedicated
+  slot-420 path. Used on chains where `separateDerivationKey` is `true`
+  (mainnets, and the default for an unset flag). Isolating it means a
+  compromise of the always-warm shared/EVM key on testnet can't decrypt
+  mainnet notes.
+
+`separateDerivationKey` only decides which key a recipient *publishes* and
+a sender *encrypts to*. It never gates decryption: **`account.sync()`
+trial-decrypts every on-chain payload against _both_ envelope private
+keys**, so you recover your notes regardless of which envelope the sender
+used. See ADR 0021.
 
 :::tip[Custody]
 The recovery phrase is encrypted at rest with **scrypt + AES-256-GCM** and only

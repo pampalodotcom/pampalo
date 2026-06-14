@@ -50,7 +50,7 @@ Private witnesses enter the **sealed** side and never leave the client. The proo
 
 ## Sending a note's secret
 
-The note's creator generates the **secret** and ECIES-encrypts it to the recipient's **Envelope key**. Only the ciphertext rides on-chain with the leaf, so the server and relayer never see the plaintext. The recipient's wallet **scans** events, decrypts with its Envelope private key, and files the note in local storage.
+The note's creator generates the **secret** and ECIES-encrypts it to the recipient's **Envelope key**. Only the ciphertext rides on-chain with the leaf, so the server and relayer never see the plaintext. The recipient's wallet **scans** events and decrypts with its Envelope private key, then files the note in local storage. A wallet actually holds two envelope keys — a shared one and an isolated one for mainnets — and scanning trial-decrypts against both, so a note arrives no matter which the sender used. ([SDK docs](/building/sdk#two-envelope-keys).)
 
 <SendingASecret />
 

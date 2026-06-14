@@ -56,7 +56,8 @@ what the server **does** in transit. Specifically:
   plaintext server columns.
 
 The cost of this stance is some duplication (e.g. the Uniswap address
-book in `src/lib/uniswap-swap.ts` mirrors the one in `convex/uniswap.ts`)
+book in `src/lib/uniswap-swap.ts` mirrors the one in
+`convex/swap/actions.ts`)
 and occasional reach-back to the user (preferences sync needs a passkey
 ceremony to push). We pay it deliberately: the smaller the server's role,
 the smaller the surface where the privacy invariant can be quietly
@@ -104,7 +105,7 @@ default for an unset value: **isolated** (`!== false`). Every note-scanning
 **Sync** trial-decrypts against *both* envelope private keys regardless of
 this flag, so a wallet recovers notes no matter which envelope a sender
 used — the flag only decides which key a *recipient publishes* and a
-*sender encrypts to*.
+*sender encrypts to*. See ADR 0021.
 
 **Poseidon identifier**:
 `poseidon2([BigInt(privateKey)])` over BN254, zero-padded to 64 hex chars.
@@ -284,13 +285,37 @@ A locally-stored note whose `deploymentAddress` is no longer the
 currently-enabled **Pampalo deployment** for its chain (i.e. it was
 shielded on a previous, redeployed contract version). Pampalo is
 non-upgradeable (ADR 0017), so a retired note's leaf lives in the old
-contract's abandoned tree and can never be spent against the current
-verifiers. Retirement is **derived, not stored** — a note is retired
-iff its `(networkChainId, deploymentAddress)` is absent from the live
+contract's tree and can never be **spent within** the protocol
+(transferred, or re-inserted) against the current verifiers.
+Retirement is **derived, not stored** — a note is retired iff its
+`(networkChainId, deploymentAddress)` is absent from the live
 `enabledDeployments()` set — so no per-note flag or migration pass is
 needed, and any future vN redeploy retires vN-1 notes automatically.
-Retired notes are **retained and visible** (read-only history), never
-deleted; they are excluded from spendable-balance and the spend picker.
+Retired notes are **retained and visible** history, never deleted, and
+excluded from spendable-balance and the (current-deployment) spend
+picker. They are **not** read-only, though: a retired note can still be
+**withdrawn** to public — see **Retired-note withdrawal** (ADR 0022).
+
+**Retired-note withdrawal** ("Withdraw to wallet"):
+The one path that still acts on a **Retired note**: a client-side
+`unshield` against the *old* contract, exiting the note's full amount
+to the user's own public EVM address. It is **not** a migration and
+touches no new contract surface — the old contract is immutable and its
+only value-exit is `unshield`, so withdrawal routes through the public
+layer (re-shielding into the current deployment is then the user's
+normal Shield flow). Surfaced as a **Withdraw** button on the
+**Previous deployments** card. Three constraints define it (ADR 0022):
+(1) the web client rebuilds the *old* tree from a server-side leaf
+snapshot (`archivedLeaves`, taken at cutover before the ADR-0017 wipe) —
+the live `pampaloLeaves` mirror is wiped, and the reused per-chain
+deployment row makes leaving them in place collide; (2) it is offered
+**only** when the old deployment's `transfer_external` circuit vk
+matches the client's bundled circuit (the web unshield path uses
+`unshieldBundled`) — a circuit-breaking redeploy leaves its notes
+read-only; (3) the old contract is put into **retirement wind-down** at
+cutover (`weAreFull()` halts further deposits; `setDefaultMonthlyCap(huge)`
+lifts the unshield cap so any-size note exits), so the only remaining
+limit is the circuit's input-note count per proof.
 
 **Shieldable asset**:
 A `(deployment, ERC-20 address)` pair currently registered in the
@@ -386,9 +411,12 @@ shield event is what the protocol breaks.
 
 **Private swap**:
 Private note of asset A → private note of asset B, with the trade
-executing against **public Uniswap v4 liquidity** in one atomic call
-(`privateSwap` → `poolManager.unlock` → `unlockCallback`). Pampalo is a
-**caller** of the v4 `PoolManager`, not a hook author. The privacy
+executing against **public Uniswap liquidity** through a **Swap venue**
+(see below) in one atomic `privateSwap` call. The **mainnet (8453)
+deployment uses the v3 venue** (`SwapRouter02.exactInputSingle`); the v4
+venue (`poolManager.unlock` → `unlockCallback`, where Pampalo is a
+**caller** of the `PoolManager`, not a hook author) is deployed but
+**parked** until Base v4 liquidity matures (ADR 0024). The privacy
 model is **ownership-private, amount-public**: the nullifier breaks the
 input note's lineage and the output note's owner is hidden, but
 `(assetA, assetB, amount)` is observable at the AMM — the only model
@@ -397,15 +425,50 @@ external recipient), so **no Monthly cap is charged** — extraction stays
 gated at **Unshield**. Broadcast is **relayer-sponsored** like
 **Transfer** / **Unshield** (ADR 0015) so the spender's EVM address isn't
 linked to the swap; unlike those, a swap can genuinely revert on
-`realized < T` if price moves before inclusion. v1 routes **ERC-20 pools
-only** — native-ETH (`0xEeee…eEeE`) notes must wrap to WETH first; v4's
-native `address(0)` legs are deferred. Verified by a new `swap` ZK
+`realized < T` if price moves before inclusion. **Native-ETH notes
+(`0xEeee…eEeE`) swap directly**: the v3 venue **wraps ETH↔WETH inside
+`_executeSwap`** (deposit the input ETH to WETH for the router, unwrap a
+WETH output back to native ETH), so WETH is a **venue-internal** detail —
+notes, balances, and the asset set stay ETH-denominated and the client
+never holds WETH (ADR 0024). Verified by a new `swap` ZK
 circuit, which mints the asset-B output note at **Target output** `T`
 plus an optional same-asset asset-A change note (multi-hop routes are
 supported; the path is untrusted calldata, safe only because
 `input_asset`, `output_asset`, and `T` are bound in the proof).
+**`privateSwap` and its `unlockCallback` live on the immutable core
+`Pampalo.sol`** — the core stays the sole writer of its tree/nullifiers,
+and a v4 bug is fixed by a clean-break redeploy, not a hot-swap (ADR
+0023). **v1 scope**: **single-hop WETH↔USDC only** (so `unlockCallback`
+hits one known PoolKey, no untrusted multi-hop executor yet); the output
+note is **self-owned** (no external recipient, mirroring shield-to-self,
+ADR 0008); **WETH is *not* a user-facing asset** — the v3 venue wraps
+ETH↔WETH internally, so ETH stays the only ETH-side asset users hold
+(reverses the earlier "WETH joins the Shieldable-asset set" plan, ADR
+0024); `T` defaults to
+**quote × (1 − 0.5%)** with the forfeit surfaced honestly; broadcast is
+relayer-sponsored with the **monthly-cap gate dropped** (no cap charged)
+and rare `realized < T` reverts accepted (the relayer eats that gas).
 _Avoid_: bare "Swap" — reserved for the client-side public EVM-layer
 swap (`uniswap-swap.ts`), no privacy.
+
+**Swap venue**:
+The specific public-AMM integration a swap-enabled deployment trades
+against, supplied by a venue subclass (`PampaloSwapV3` /
+`PampaloSwapV4`) of the abstract `PampaloSwapBase` — which is itself a
+**superset of `Pampalo`** (you deploy a venue subclass *instead of*
+Pampalo; it carries the full note machinery plus `privateSwap`, ADR 0017
+clean-break). The venue is **fixed per deployment**: there is one venue
+per **Pampalo deployment**, so choosing it couples *both* the wallet's
+note tree *and* the sole liquidity source for every **Private swap** — a
+note shielded into a v3-venue contract can only ever swap against v3
+liquidity. Base mainnet (8453) runs the **v3 venue** (`SwapRouter02`,
+deployed fresh at `VERSION 3.0.0` — ADR 0024) — which wraps **ETH↔WETH
+inside `_executeSwap`** (with a `receive()` to take the unwrap) so
+native-ETH notes swap with no user-facing WETH asset; the **v4 venue** is
+**parked** until Base v4 liquidity matures. (The agent's earlier
+`0x940b…`/`0x6655…` deploys in `8453-swap.json` are validation artifacts
+that report `2.0.0` on-chain — not the live deployment.) Switching venues
+later is a redeploy + migration, not a config flip.
 
 **Target output (`T`)**:
 The fixed output-note amount a **Private swap** mints, chosen by the
@@ -420,6 +483,26 @@ all favourable price movement above `T`; downside is revert-protected,
 upside is donated to reserves. This avoids any on-chain Poseidon — the
 commitment is still computed in-circuit. See ADR for the trade-off
 against on-chain note construction.
+
+**Swap** (public):
+Client-side, EVM-layer ERC-20 ↔ ERC-20 swap against **public Uniswap
+v2/v3 liquidity** — the public sibling of **Private swap**, exactly as
+**Send** is the public sibling of **Transfer (Pampalo)**. A **permanent
+first-class feature**, not a stepping stone: some trades are public by
+intent (e.g. rebalancing a public balance before a Shield). Operates
+**only on the public (Sun) balance** (`usePublicBalance`) and **self-
+broadcasts** via the §6.6 passkey path, so the user's **EVM address** is
+linked to the swap on-chain — the same linkage **Send** carries and the
+one **Private swap** exists to break. Quotes come from read-only Convex
+actions (`convex/swap/actions.ts`: `getAllQuotes` / `getQuote` /
+`getPool`) that carry `(chainId, tokenIn, tokenOut, amount)` but **never
+the user address** and persist nothing; the client assembles its own
+calldata in `src/lib/uniswap-swap.ts` (ADR 0004 — the server never sees a
+pre-broadcast unsigned tx). Because it is public yet reads like an
+internal wallet action, the Swap UI **wears the Sun "Public" marker**
+(the balance-card vocabulary) so a privacy-minded user is never misled
+into thinking a swap is shielded. _Avoid_: bare "Swap" for the ZK flow —
+that is **Private swap**.
 
 **Shield wait**:
 The mandatory holding period (default 1 hour) between a user calling

@@ -36,6 +36,8 @@ export async function broadcastPrivate(opts: {
   publicInputs: readonly string[];
   /** transfer + unshieldBundled both carry NotePayload ciphertexts. */
   payload?: readonly string[];
+  /** swap only: the opaque Uniswap route bytes. */
+  route?: string;
   /** Signed self-broadcast tx, pre-built in the unlock as the fallback. */
   signedSelfBroadcast: string;
   /** Resolves true if the user accepts self-broadcast, false to cancel. */
@@ -57,6 +59,7 @@ export async function broadcastPrivate(opts: {
     proof: opts.proof,
     publicInputs: opts.publicInputs,
     payload: opts.payload,
+    route: opts.route,
   });
 
   if (res.ok) return { txHash: res.txHash, via: "relay" };

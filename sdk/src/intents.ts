@@ -10,6 +10,7 @@
 import { Interface } from "ethers";
 import { poseidon2Hash } from "@zkpassport/poseidon2";
 import { Shield } from "@pampalo/shared/classes/Shield";
+import { Swap } from "@pampalo/shared/classes/Swap";
 import { Transfer } from "@pampalo/shared/classes/Transfer";
 import { UnshieldBundled } from "@pampalo/shared/classes/UnshieldBundled";
 import { NoteEncryption } from "@pampalo/shared/classes/Note";
@@ -31,6 +32,9 @@ const TRANSFER = new Interface([
 ]);
 const UNSHIELD_BUNDLED = new Interface([
   "function unshieldBundled(bytes proof, bytes32[] publicInputs, bytes[] payload) external",
+]);
+const PRIVATE_SWAP = new Interface([
+  "function privateSwap(bytes proof, bytes32[] publicInputs, bytes route, bytes[] payload) external",
 ]);
 
 const hex64 = (v: bigint): string => "0x" + v.toString(16).padStart(64, "0");
@@ -455,6 +459,176 @@ export async function buildUnshield(args: {
       amount: exitAmount.toString(),
       address: args.exitAddress.toLowerCase(),
     },
+  };
+}
+
+// ── Private swap (note A → note B against public Uniswap liquidity) ──────
+
+export type PrivateSwapIntent = {
+  to: string;
+  data: string;
+  value: string;
+  chainId: number;
+  /** The fixed-output asset-B note minted at T (owner = self). */
+  outputNote: OutputNote;
+  /** The same-asset asset-A change note, when inputs exceed inputAmount. */
+  changeOutput?: OutputNote;
+  spentNullifiers: string[];
+};
+
+export async function buildPrivateSwap(args: {
+  chainId: number;
+  pampalo: string;
+  /** asset-A notes to spend; all must be `inputAsset`. */
+  inputNotes: TransferInputNote[];
+  /** asset-A amount sent into the pool (<= sum of inputNotes). */
+  inputAmount: bigint;
+  /** asset-B token the swap outputs. */
+  outputAsset: string;
+  /** B-note amount + slippage/sandwich floor T (ADR 0020). */
+  targetOutput: bigint;
+  /** Opaque venue route: v4 abi.encode(Hop[]) or a v3 packed path. */
+  route: string;
+  /** Owner of the minted B note + change note (this wallet). */
+  selfPoseidon: string;
+  selfEnvelopePubKey: string;
+  walletPrivateKey: string;
+  tree: PoseidonMerkleTree;
+}): Promise<PrivateSwapIntent> {
+  const { inputNotes, inputAmount, targetOutput, tree } = args;
+  if (inputNotes.length === 0 || inputNotes.length > NOTE_COUNT) {
+    throw new Error(`inputNotes.length must be 1..${NOTE_COUNT}`);
+  }
+  if (inputAmount <= 0n) throw new Error("inputAmount must be > 0");
+  if (targetOutput <= 0n) throw new Error("targetOutput must be > 0");
+
+  const inputAsset = inputNotes[0].asset.toLowerCase();
+  let inSum = 0n;
+  for (const n of inputNotes) {
+    if (n.asset.toLowerCase() !== inputAsset) {
+      throw new Error("all input notes must share one asset");
+    }
+    inSum += n.amount;
+  }
+  if (inputAmount > inSum) throw new Error("inputAmount exceeds notes total");
+  const changeAmount = inSum - inputAmount;
+
+  const ownerSecret = BigInt(args.walletPrivateKey) % POSEIDON_MAX;
+  const root = await tree.getRoot();
+  const inputAssetBig = BigInt(inputAsset);
+  const outputAssetBig = BigInt(args.outputAsset);
+
+  // Spent input notes → nullifiers + circuit witnesses.
+  const circuitInputs: CircuitInput[] = [];
+  const nullifiers: bigint[] = [];
+  const spentNullifiers: string[] = [];
+  for (const n of inputNotes) {
+    const proof = await tree.getProof(n.leafIndex);
+    if (proof.siblings.length !== TREE_HEIGHT - 1) {
+      throw new Error(`bad merkle proof length for leaf ${n.leafIndex}`);
+    }
+    const nf = poseidon2Hash([
+      BigInt(n.leafIndex),
+      BigInt(n.owner),
+      BigInt(n.secret),
+      BigInt(n.asset),
+      n.amount,
+    ]);
+    nullifiers.push(nf);
+    spentNullifiers.push(nf.toString());
+    circuitInputs.push({
+      asset_id: BigInt(n.asset).toString(),
+      asset_amount: n.amount.toString(),
+      owner: BigInt(n.owner).toString(),
+      owner_secret: ownerSecret.toString(),
+      secret: BigInt(n.secret).toString(),
+      leaf_index: n.leafIndex.toString(),
+      path: proof.siblings.map(String),
+      path_indices: proof.indices.map(String),
+    });
+  }
+  padInputs(circuitInputs, nullifiers);
+
+  const owner = BigInt(args.selfPoseidon);
+
+  // Output B note @ T (committed in-circuit; the realized amount is never
+  // seen — the contract enforces realized >= T and forfeits the surplus).
+  const swapSecret = randomSecret();
+  const swapLeaf = poseidon2Hash([outputAssetBig, targetOutput, owner, swapSecret]);
+  const swapBlob = await NoteEncryption.encryptNoteData(
+    { secret: swapSecret, owner, asset_id: outputAssetBig, asset_amount: targetOutput },
+    args.selfEnvelopePubKey,
+  );
+  const outputNote: OutputNote = {
+    secret: swapSecret.toString(),
+    owner: hex64(owner),
+    asset: args.outputAsset.toLowerCase(),
+    amount: targetOutput.toString(),
+    leafCommitment: hex64(swapLeaf),
+    encryptedPayload: swapBlob,
+  };
+
+  // Optional same-asset (asset-A) change note.
+  let changeLeaf = 0n;
+  let changeSecret = 0n;
+  let changeBlob = "0x";
+  let changeOutput: OutputNote | undefined;
+  if (changeAmount > 0n) {
+    changeSecret = randomSecret();
+    changeLeaf = poseidon2Hash([inputAssetBig, changeAmount, owner, changeSecret]);
+    changeBlob = await NoteEncryption.encryptNoteData(
+      { secret: changeSecret, owner, asset_id: inputAssetBig, asset_amount: changeAmount },
+      args.selfEnvelopePubKey,
+    );
+    changeOutput = {
+      secret: changeSecret.toString(),
+      owner: hex64(owner),
+      asset: inputAsset,
+      amount: changeAmount.toString(),
+      leafCommitment: hex64(changeLeaf),
+      encryptedPayload: changeBlob,
+    };
+  }
+
+  const outputHashes = [swapLeaf, changeLeaf, 0n];
+  const blobs = [swapBlob, changeBlob, "0x"];
+
+  const swap = new Swap();
+  await swap.init();
+  const { witness } = await swap.swapNoir.execute({
+    root: root.toString(),
+    input_notes: circuitInputs,
+    nullifiers: nullifiers.map(String),
+    output_hashes: outputHashes.map(String),
+    input_asset: inputAssetBig.toString(),
+    input_amount: inputAmount.toString(),
+    output_asset: outputAssetBig.toString(),
+    target_output: targetOutput.toString(),
+    swap_output_owner: owner.toString(),
+    swap_output_secret: swapSecret.toString(),
+    change_amount: changeAmount.toString(),
+    change_owner: changeAmount > 0n ? owner.toString() : "0",
+    change_secret: changeAmount > 0n ? changeSecret.toString() : "0",
+  });
+  const proof = await swap.swapBackend.generateProof(witness, {
+    keccakZK: true,
+  });
+
+  const data = PRIVATE_SWAP.encodeFunctionData("privateSwap", [
+    normalizeProof(proof.proof),
+    proof.publicInputs as string[],
+    args.route,
+    blobs,
+  ]);
+
+  return {
+    to: args.pampalo,
+    data,
+    value: "0",
+    chainId: args.chainId,
+    outputNote,
+    changeOutput,
+    spentNullifiers,
   };
 }
 

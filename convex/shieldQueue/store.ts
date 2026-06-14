@@ -807,6 +807,37 @@ export const listArchivedDeployments = query({
   },
 });
 
+// Leaf snapshot of a retired deployment (ADR 0022). The client rebuilds the
+// OLD merkle tree from these to generate a Withdraw (`unshieldBundled`) proof
+// against the old contract — the live `leavesForChain` only serves the active
+// deployment, and the old leaves were wiped from `pampaloLeaves` at cutover.
+// Returns the full set ascending by leafIndex so the rebuilt root matches the
+// old contract's final root (which is in its `isKnownRoot` window).
+export const listArchivedLeaves = query({
+  args: { chainId: v.number(), pampalo: v.string() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    Array<{ epoch: number; leafIndex: number; leafCommitment: string }>
+  > => {
+    const address = lowerAddress(args.pampalo);
+    const rows = await ctx.db
+      .query("archivedLeaves")
+      .withIndex("by_chain_and_address", (q) =>
+        q.eq("chainId", args.chainId).eq("archivedDeploymentAddress", address),
+      )
+      .collect();
+    return rows
+      .map((r) => ({
+        epoch: r.epoch,
+        leafIndex: r.leafIndex,
+        leafCommitment: r.leafCommitment,
+      }))
+      .sort((a, b) => a.epoch - b.epoch || a.leafIndex - b.leafIndex);
+  },
+});
+
 // ─── /sentry block-explorer lookups ──────────────────────────────────────
 // Cross-chain by design: each query searches every deployment and tags
 // results with their chain, mirroring `byShielder`. Only PUBLIC on-chain
