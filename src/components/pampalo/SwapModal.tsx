@@ -27,6 +27,9 @@ import {
 } from "./AssetSelect";
 import { NetworkChip, networkSlugForChainId } from "./NetworkChip";
 import { ReviewSwap } from "./ReviewSwap";
+import { ModeSegmented } from "./deposit/ModeSegmented";
+import type { DepositMode } from "./deposit/DepositSheet";
+import { PrivateSwapPanel } from "./PrivateSwapPanel";
 
 // Chains where we have Uniswap support wired up server-side (see
 // `UNISWAP_ADDRESSES` in convex/swap/actions.ts). Anything outside this set
@@ -130,11 +133,17 @@ export function SwapModal({
   open,
   onOpenChange,
   evmAddress,
+  envelope,
+  poseidon,
 }: {
   open: boolean;
   onOpenChange: (next: boolean) => void;
   /** User's EVM address — needed by the asset picker to show live balances. */
   evmAddress: string;
+  /** Envelope (ECIES) pubkey + Poseidon owner — required by the private
+   *  swap to mint the output/change notes to self. */
+  envelope: string;
+  poseidon: string;
 }) {
   const tokensRaw = useQuery(api.catalog.tokens.list, {});
   const prices = useQuery(api.prices.feeds.listLatest, {});
@@ -168,6 +177,10 @@ export function SwapModal({
         }),
       );
   }, [tokensRaw]);
+
+  // Public (EVM-layer, address-linked) vs Private (ZK note swap on the
+  // active Pampalo deployment). Mirrors the Deposit sheet's segmented toggle.
+  const [mode, setMode] = useState<DepositMode>("public");
 
   // Selection state. Each side starts unset — the user picks.
   const [tokenIn, setTokenIn] = useState<TokenPair | null>(null);
@@ -469,7 +482,30 @@ export function SwapModal({
           </DialogTitle>
         </DialogHeader>
 
-        {!pairs ? (
+        {phase !== "review" && (
+          <div className="mb-1">
+            <ModeSegmented value={mode} onChange={setMode} />
+            <p
+              className={cn(
+                "mt-1.5 text-[12px]",
+                mode === "public" ? "text-[var(--pub)]" : "text-[var(--priv)]",
+              )}
+            >
+              {mode === "public"
+                ? "On-chain swap from your public balance — visible, address-linked."
+                : "Shielded swap between your private notes — ownership stays hidden."}
+            </p>
+          </div>
+        )}
+
+        {mode === "private" ? (
+          <PrivateSwapPanel
+            evmAddress={evmAddress}
+            envelope={envelope}
+            poseidon={poseidon}
+            onClose={() => onOpenChange(false)}
+          />
+        ) : !pairs ? (
           <div className="flex h-32 items-center justify-center text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
           </div>

@@ -30,6 +30,9 @@
   --d-priv-line:  rgba(28,138,94,0.42);
   --d-warn:       #B07814;
   --d-warn-soft:  rgba(176,120,20,0.12);
+  --d-dang:       #C0392B;
+  --d-dang-soft:  rgba(192,57,43,0.12);
+  --d-dang-line:  rgba(192,57,43,0.44);
 }
 /* dark: driven by Vocs's `.dark` class toggle on <html>. The wider
    selector list is kept so the same stylesheet still works if these
@@ -54,6 +57,9 @@
   --d-priv-line:  rgba(79,194,138,0.46);
   --d-warn:       #FFCE78;
   --d-warn-soft:  rgba(255,206,120,0.12);
+  --d-dang:       #FF8A7A;
+  --d-dang-soft:  rgba(255,138,122,0.16);
+  --d-dang-line:  rgba(255,138,122,0.48);
 }
 
 .pampdia {
@@ -74,6 +80,7 @@
 .pampdia .t-pub   { fill: var(--d-pub); }
 .pampdia .t-priv  { fill: var(--d-priv); }
 .pampdia .t-warn  { fill: var(--d-warn); }
+.pampdia .t-dang  { fill: var(--d-dang); }
 .pampdia .t-mute  { fill: var(--d-ink-mute); }
 .pampdia .t-faint { fill: var(--d-ink-faint); }
 
@@ -82,17 +89,21 @@
 .pampdia .node-2    { fill: var(--d-surface-2); stroke: var(--d-line-hi); stroke-width: 1.5; }
 .pampdia .node-pub  { fill: var(--d-pub-soft);  stroke: var(--d-pub-line);  stroke-width: 1.5; }
 .pampdia .node-priv { fill: var(--d-priv-soft); stroke: var(--d-priv-line); stroke-width: 1.5; }
+.pampdia .node-dang { fill: var(--d-dang-soft); stroke: var(--d-dang-line); stroke-width: 1.5; }
 .pampdia .hair      { stroke: var(--d-line); stroke-width: 1; fill: none; }
 .pampdia .tick      { stroke: var(--d-line-hi); stroke-width: 1.2; }
 .pampdia .flow      { fill: none; stroke: var(--d-ink-mute); stroke-width: 1.6; }
 .pampdia .flow-pub  { fill: none; stroke: var(--d-pub);  stroke-width: 1.6; }
 .pampdia .flow-priv { fill: none; stroke: var(--d-priv); stroke-width: 1.6; }
+.pampdia .flow-dang { fill: none; stroke: var(--d-dang); stroke-width: 1.6; }
 .pampdia .dash      { stroke-dasharray: 4 4; }
+.pampdia .frost     { stroke: var(--d-priv-line); stroke-width: 1; opacity: 0.30; }
 
 /* shared arrowhead markers (defined once in the hidden defs svg) */
 #pd-arrow polygon      { fill: var(--d-ink-mute); }
 #pd-arrow-pub polygon  { fill: var(--d-pub); }
 #pd-arrow-priv polygon { fill: var(--d-priv); }
+#pd-arrow-dang polygon { fill: var(--d-dang); }
 
 /* ---- motion (teaching only; off for reduced-motion / print) ---- */
 @media (prefers-reduced-motion: no-preference) {
@@ -130,6 +141,12 @@
 .pampdia .pd-t1c { offset-path: path('M556,188 C610,210 650,234 708,238'); --dur:4s; animation-delay:1.3s; }
 .pampdia .pd-t4  { offset-path: path('M470,108 C560,118 600,118 668,118'); --dur:2.8s; }
 .pampdia .pd-t6  { offset-path: path('M556,118 H600'); --dur:2.4s; }
+
+/* private-swap per-token motion paths (Fig · the big picture) */
+.pampdia .ps-tA   { offset-path: path('M250,150 H404'); --dur:3.2s; }
+.pampdia .ps-tB   { offset-path: path('M556,150 H716'); --dur:3.2s; animation-delay:1.5s; }
+.pampdia .ps-down { offset-path: path('M462,208 V306'); --dur:3.2s; animation-delay:.4s; }
+.pampdia .ps-up   { offset-path: path('M500,306 V208'); --dur:3.2s; animation-delay:1.1s; }
 
 /* hidden markers container */
 .pd-defs { position: absolute; width: 0; height: 0; }

@@ -67,6 +67,10 @@ export type UnshieldConfirmPayload = {
   chainId: number;
   symbol: string;
   decimals: number;
+  /** Lowercased asset address of the note being unshielded. The ETH row
+   *  folds in WETH (ADR 0024), so this is WETH on the pre-wrap contract,
+   *  not the native sentinel. */
+  assetAddress: string;
 };
 
 type Props = {
@@ -183,7 +187,7 @@ export function UnshieldConfirmSheet({
           n.networkChainId === payload.chainId &&
           // Retired-deployment notes are unspendable (ADR 0018).
           isNoteOnActiveDeployment(n, deployments) &&
-          n.asset === ETH_SENTINEL &&
+          n.asset === payload.assetAddress &&
           n.leafIndex !== undefined &&
           BigInt(n.amount) >= payload.amount,
       ) ?? null
@@ -305,7 +309,7 @@ export function UnshieldConfirmSheet({
       setBroadcastedTxHash(txHash);
       onBroadcasted?.({
         chainId: payload.chainId,
-        assetAddress: ETH_SENTINEL,
+        assetAddress: payload.assetAddress,
         txHash,
       });
 
