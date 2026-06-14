@@ -5,7 +5,7 @@ import { Interface } from "ethers";
 // the `getQuote` action plus user-side params (recipient, slippage,
 // deadline) and returns `{to, data, value}` the wallet can sign.
 //
-// Address book is duplicated from convex/uniswap.ts because:
+// Address book is duplicated from convex/swap/actions.ts because:
 //   1. The client can't import from convex/* without dragging in
 //      convex/server in some bundler configs, and
 //   2. The two paths (server quoting + client signing) genuinely care

@@ -56,7 +56,8 @@ what the server **does** in transit. Specifically:
   plaintext server columns.
 
 The cost of this stance is some duplication (e.g. the Uniswap address
-book in `src/lib/uniswap-swap.ts` mirrors the one in `convex/uniswap.ts`)
+book in `src/lib/uniswap-swap.ts` mirrors the one in
+`convex/swap/actions.ts`)
 and occasional reach-back to the user (preferences sync needs a passkey
 ceremony to push). We pay it deliberately: the smaller the server's role,
 the smaller the surface where the privacy invariant can be quietly
@@ -304,16 +305,17 @@ only value-exit is `unshield`, so withdrawal routes through the public
 layer (re-shielding into the current deployment is then the user's
 normal Shield flow). Surfaced as a **Withdraw** button on the
 **Previous deployments** card. Three constraints define it (ADR 0022):
-(1) the web client rebuilds the *old* tree from chain (`LeafInserted`
-events from the old contract's `fromBlock`), since the Convex leaf
-mirror was wiped at cutover (ADR 0017); (2) it is offered **only** when
-the old deployment's withdraw-circuit vk matches the client's bundled
-circuit (circuit-compatible bump) — a circuit-breaking redeploy leaves
-its notes read-only; (3) the old contract is put into **retirement
-wind-down** at cutover (`weAreFull()` halts further deposits;
-`setDefaultMonthlyCap(huge)` lifts the unshield cap so any-size note
-exits), so the only remaining limit is the circuit's ≤3 input notes per
-proof.
+(1) the web client rebuilds the *old* tree from a server-side leaf
+snapshot (`archivedLeaves`, taken at cutover before the ADR-0017 wipe) —
+the live `pampaloLeaves` mirror is wiped, and the reused per-chain
+deployment row makes leaving them in place collide; (2) it is offered
+**only** when the old deployment's `transfer_external` circuit vk
+matches the client's bundled circuit (the web unshield path uses
+`unshieldBundled`) — a circuit-breaking redeploy leaves its notes
+read-only; (3) the old contract is put into **retirement wind-down** at
+cutover (`weAreFull()` halts further deposits; `setDefaultMonthlyCap(huge)`
+lifts the unshield cap so any-size note exits), so the only remaining
+limit is the circuit's input-note count per proof.
 
 **Shieldable asset**:
 A `(deployment, ERC-20 address)` pair currently registered in the
@@ -427,6 +429,17 @@ circuit, which mints the asset-B output note at **Target output** `T`
 plus an optional same-asset asset-A change note (multi-hop routes are
 supported; the path is untrusted calldata, safe only because
 `input_asset`, `output_asset`, and `T` are bound in the proof).
+**`privateSwap` and its `unlockCallback` live on the immutable core
+`Pampalo.sol`** — the core stays the sole writer of its tree/nullifiers,
+and a v4 bug is fixed by a clean-break redeploy, not a hot-swap (ADR
+0023). **v1 scope**: **single-hop WETH↔USDC only** (so `unlockCallback`
+hits one known PoolKey, no untrusted multi-hop executor yet); the output
+note is **self-owned** (no external recipient, mirroring shield-to-self,
+ADR 0008); **WETH joins the Shieldable-asset set** so users hold WETH
+notes (native-ETH stays out — no in-protocol wrap in v1); `T` defaults to
+**quote × (1 − 0.5%)** with the forfeit surfaced honestly; broadcast is
+relayer-sponsored with the **monthly-cap gate dropped** (no cap charged)
+and rare `realized < T` reverts accepted (the relayer eats that gas).
 _Avoid_: bare "Swap" — reserved for the client-side public EVM-layer
 swap (`uniswap-swap.ts`), no privacy.
 
@@ -443,6 +456,26 @@ all favourable price movement above `T`; downside is revert-protected,
 upside is donated to reserves. This avoids any on-chain Poseidon — the
 commitment is still computed in-circuit. See ADR for the trade-off
 against on-chain note construction.
+
+**Swap** (public):
+Client-side, EVM-layer ERC-20 ↔ ERC-20 swap against **public Uniswap
+v2/v3 liquidity** — the public sibling of **Private swap**, exactly as
+**Send** is the public sibling of **Transfer (Pampalo)**. A **permanent
+first-class feature**, not a stepping stone: some trades are public by
+intent (e.g. rebalancing a public balance before a Shield). Operates
+**only on the public (Sun) balance** (`usePublicBalance`) and **self-
+broadcasts** via the §6.6 passkey path, so the user's **EVM address** is
+linked to the swap on-chain — the same linkage **Send** carries and the
+one **Private swap** exists to break. Quotes come from read-only Convex
+actions (`convex/swap/actions.ts`: `getAllQuotes` / `getQuote` /
+`getPool`) that carry `(chainId, tokenIn, tokenOut, amount)` but **never
+the user address** and persist nothing; the client assembles its own
+calldata in `src/lib/uniswap-swap.ts` (ADR 0004 — the server never sees a
+pre-broadcast unsigned tx). Because it is public yet reads like an
+internal wallet action, the Swap UI **wears the Sun "Public" marker**
+(the balance-card vocabulary) so a privacy-minded user is never misled
+into thinking a swap is shielded. _Avoid_: bare "Swap" for the ZK flow —
+that is **Private swap**.
 
 **Shield wait**:
 The mandatory holding period (default 1 hour) between a user calling
