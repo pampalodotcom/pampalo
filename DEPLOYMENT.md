@@ -82,7 +82,7 @@ pnpm --filter @pampalo/contracts exec hardhat ignition verify pampalo --network 
 
 Every value below comes from `contracts/deployments/<chainId>.json` (plus the
 `fromBlock` you captured in A1 and, for a circuit-breaking-aware gate, the
-withdraw vk). The artifact for the current Base Sepolia deploy looks like:
+transfer_external vk). The artifact for the current Base Sepolia deploy looks like:
 
 ```jsonc
 {
@@ -101,7 +101,7 @@ withdraw vk). The artifact for the current Base Sepolia deploy looks like:
 > **TODO (tooling):** `pnpm sync-deployment` to codegen these three sites
 > from `<chainId>.json` in one command (chosen approach, not yet built — do
 > it manually for now). When built, it should also fold in `fromBlock` and
-> the withdraw `circuitVkHash`, which the artifact doesn't currently carry.
+> the `transfer_external` `circuitVkHash`, which the artifact doesn't carry.
 
 **Full field accounting** — artifact key → destination → field:
 
@@ -131,7 +131,7 @@ Values **not** from the artifact (set/confirm by hand):
 | `assets[*].assetDecimals` | shieldQueue `DEPLOYMENTS` | USDC `6`, ETH `18`. Must match the on-chain `addSupportedAsset` decimals. |
 | `separateDerivationKey` | sdk `DEPLOYMENTS` | Base Sepolia `false`; mainnets `true` (isolated slot-420 envelope key). |
 | `name / symbol / decimals / roundTo` | catalog `TOKENS` | static token metadata; carry over from the prior row. |
-| **`circuitVkHash`** *(ADR 0022 — see B3)* | shieldQueue `DEPLOYMENTS` | hex of `circuits/withdraw/target/vk_hash`. Gates the Withdraw button on a circuit-compat match. |
+| **`circuitVkHash`** *(ADR 0022 — see B3)* | shieldQueue `DEPLOYMENTS` | hex of `circuits/transfer_external/target/vk_hash` (the web unshield path uses `unshieldBundled`). Gates the Withdraw button on a circuit-compat match. |
 
 ### B2. Re-seed Convex
 
@@ -157,25 +157,32 @@ and resets the indexer cursor. The wipe is **required** — without it the new
 tree's leaf 0 collides with the stale old leaf 0 and proofs break (ADR 0017).
 Look for the `[seed] redeploy … archived … then wiped …` log line.
 
-### B3. (ADR 0022) Persist what the Withdraw path needs
+### B3. (ADR 0022) Snapshot + persist what the Withdraw path needs
 
-The ADR-0022 **Withdraw** button rebuilds the *old* tree from chain and only
-shows on a circuit-compatible bump. That needs two values to survive into the
-**old** deployment's archive marker:
+The ADR-0022 **Withdraw** button rebuilds the *old* tree from a server-side
+**leaf snapshot** and only shows on a circuit-compatible bump. `seedAll`'s
+archive step (B2) must therefore, on an address change, also:
 
-- **`fromBlock`** — the old contract's deploy block, so the client chain-sync
-  knows where to start (the Convex leaf mirror is wiped). *Currently
-  `pampaloDeployments` only stores `lastIndexedBlock`*, so persist `fromBlock`
-  on the deployment row (seeded from `DEPLOYMENTS[chainId].fromBlock`) and
-  copy it into `archivedDeployments` in `archiveDeploymentChildren`.
-- **`circuitVkHash`** — the old withdraw-circuit vk identity, so the client
-  can compare it to its bundled circuit and offer Withdraw only on a match.
-  Seed it on the deployment row and copy it into `archivedDeployments`.
+- **Snapshot the old leaves into `archivedLeaves`** *before* the wipe — the
+  old `(epoch, leafIndex, leafCommitment)` rows, keyed by the old address.
+  Collision-safe (separate table), and the only place they can live queryable
+  since the live `pampaloLeaves` is wiped and the reused per-chain row makes
+  leaving them in place corrupt the new tree. **Ordering:** the snapshot's root
+  must equal the old contract's final root, so freeze the old tree first —
+  `weAreFull()` + drain the pending-shield queue (Phase C1) **before** running
+  `seedAll`.
+- **Persist `fromBlock`** (provenance) — `pampaloDeployments` currently stores
+  only `lastIndexedBlock`, so add `fromBlock` to the row (seeded from
+  `DEPLOYMENTS[chainId].fromBlock`) and copy it into `archivedDeployments`.
+- **Persist `circuitVkHash`** — the old `transfer_external` circuit vk (hex of
+  `circuits/transfer_external/target/vk_hash`; the web unshield path uses
+  `unshieldBundled`), so the client offers Withdraw only on a vk match. Seed it
+  on the deployment row and copy it into `archivedDeployments`.
 
-> These two fields + the `archivedDeployments` schema additions are the only
-> code the ADR-0022 Withdraw feature adds to the **deploy** path. Rows
+> `archivedLeaves` + these two `archivedDeployments` fields are the only code
+> the ADR-0022 Withdraw feature adds to the **deploy** path. Deployments
 > archived before they exist simply show read-only (status quo) — it degrades
-> safely.
+> safely (so the already-wiped v1 stays read-only).
 
 ---
 

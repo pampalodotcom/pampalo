@@ -244,6 +244,14 @@ export default defineSchema({
     sponsoringTxs: v.optional(v.boolean()),
     minRelayerBalanceWei: v.optional(v.string()),
     minRelayerBalanceUsdCents: v.optional(v.number()),
+    // ADR 0022 — carried so that when THIS deployment is later retired, the
+    // archive step can stamp the retired marker (`archivedDeployments`) with
+    // its provenance + circuit identity for the Withdraw gate. fromBlock is
+    // the deploy block (also the indexer cold-start; previously only the
+    // moving `lastIndexedBlock` was stored). circuitVkHash is the
+    // `transfer_external` circuit vk. Both optional for schema migration.
+    fromBlock: v.optional(v.number()),
+    circuitVkHash: v.optional(v.string()),
   }).index("by_networkId", ["networkId"]),
 
   // Relayer pool (gas sponsors). Five derived EOAs per sponsoring chain,
@@ -487,9 +495,32 @@ export default defineSchema({
     pampalo: v.string(), // lowercased old Pampalo address
     version: v.optional(v.string()), // on-chain VERSION at retirement, if known
     retiredAt: v.number(), // ms — when seedAll archived + wiped it
+    // ADR 0022 — what the retired-note Withdraw path needs. fromBlock is the
+    // old contract's deploy block (provenance); circuitVkHash is the old
+    // `transfer_external` circuit vk, so the client offers Withdraw only when
+    // its bundled circuit matches (a circuit-compatible bump). Both optional:
+    // markers written before ADR 0022 shipped (or for a circuit-breaking bump)
+    // lack them and stay read-only.
+    fromBlock: v.optional(v.number()),
+    circuitVkHash: v.optional(v.string()),
   })
     .index("by_chain", ["chainId"])
     .index("by_chain_and_address", ["chainId", "pampalo"]),
+
+  // Snapshot of `pampaloLeaves` for a retired deployment (ADR 0022). Taken at
+  // cutover BEFORE the ADR-0017 wipe, so the retired-note Withdraw path can
+  // rebuild the old tree. We can't leave leaves in `pampaloLeaves`: `seedAll`
+  // reuses the one per-chain deployment row, so the new tree's leaf 0 would
+  // collide with the stale old leaf 0. Keyed by old address — collision-safe.
+  // The snapshot's root must equal the old contract's final root, so the old
+  // tree must be frozen (deposits halted + queue drained) before the archive.
+  archivedLeaves: defineTable({
+    chainId: v.number(),
+    archivedDeploymentAddress: v.string(), // lowercased old Pampalo address
+    epoch: v.number(),
+    leafIndex: v.number(),
+    leafCommitment: v.string(), // 0x + 64 hex (lowercased)
+  }).index("by_chain_and_address", ["chainId", "archivedDeploymentAddress"]),
 
   // Snapshot of `shieldQueueEntries` for a retired deployment. The client
   // queries by `shielder` and trial-decrypts `encryptedPayload` with the

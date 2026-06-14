@@ -29,7 +29,7 @@ import { NetworkChip, networkSlugForChainId } from "./NetworkChip";
 import { ReviewSwap } from "./ReviewSwap";
 
 // Chains where we have Uniswap support wired up server-side (see
-// `UNISWAP_ADDRESSES` in convex/uniswap.ts). Anything outside this set
+// `UNISWAP_ADDRESSES` in convex/swap/actions.ts). Anything outside this set
 // is hidden from the picker — the convex action would throw and the
 // user would have no path to a liquid pool.
 const SWAP_CHAIN_IDS = new Set([1, 8453]);

@@ -54,19 +54,24 @@ async function wipeDeploymentChildren(
 }
 
 // Copy the user-recoverable rows of a soon-to-be-wiped deployment into the
-// archive tables (ADR 0018) so a user's pre-redeploy notes survive
-// cross-device as read-only history. MUST run BEFORE wipeDeploymentChildren
-// and BEFORE the deployment row is replaced (we need the OLD address). Only
-// shieldQueueEntries (self-shields) + transferNotes (received notes) carry
-// envelope-decryptable material; leaves/activity are positional/public and
-// intentionally not archived. Testnet-scale only (collect-then-insert).
+// archive tables (ADR 0018/0022) so a user's pre-redeploy notes survive
+// cross-device as read-only history AND can be withdrawn. MUST run BEFORE
+// wipeDeploymentChildren and BEFORE the deployment row is replaced (we need
+// the OLD address + the old row's fromBlock/circuitVkHash). shieldQueueEntries
+// (self-shields) + transferNotes (received notes) carry envelope-decryptable
+// material; `pampaloLeaves` are snapshotted too (ADR 0022 — needed to rebuild
+// the old tree for a Withdraw proof; can't stay in `pampaloLeaves` because the
+// reused per-chain deployment row would make the new tree collide). pampalo
+// activity stays out (public Sentry feed). Testnet-scale (collect-then-insert).
 async function archiveDeploymentChildren(
   ctx: MutationCtx,
   deploymentId: Id<"pampaloDeployments">,
   chainId: number,
   oldPampalo: string,
   version: string | undefined,
-): Promise<{ shields: number; notes: number }> {
+  fromBlock: number | undefined,
+  circuitVkHash: string | undefined,
+): Promise<{ shields: number; notes: number; leaves: number }> {
   const archivedDeploymentAddress = lowerAddress(oldPampalo);
   const now = Date.now();
 
@@ -106,8 +111,26 @@ async function archiveDeploymentChildren(
     });
   }
 
+  // Leaf snapshot (ADR 0022). Still keyed by the (reused) deploymentId at this
+  // point — read fine pre-wipe. Copy into archivedLeaves keyed by old address.
+  const leaves = await ctx.db
+    .query("pampaloLeaves")
+    .withIndex("by_deployment", (q) => q.eq("deploymentId", deploymentId))
+    .collect();
+  for (const l of leaves) {
+    await ctx.db.insert("archivedLeaves", {
+      chainId,
+      archivedDeploymentAddress,
+      epoch: l.epoch,
+      leafIndex: l.leafIndex,
+      leafCommitment: l.leafCommitment,
+    });
+  }
+
   // Identity marker — one row per retired deployment (idempotent on
-  // (chainId, address), so a re-seed doesn't duplicate it).
+  // (chainId, address), so a re-seed doesn't duplicate it). fromBlock +
+  // circuitVkHash come from the OLD deployment row (ADR 0022) and gate/locate
+  // the Withdraw path; absent ⇒ that deployment's notes stay read-only.
   const existingMarker = await ctx.db
     .query("archivedDeployments")
     .withIndex("by_chain_and_address", (q) =>
@@ -120,10 +143,12 @@ async function archiveDeploymentChildren(
       pampalo: archivedDeploymentAddress,
       version,
       retiredAt: now,
+      fromBlock,
+      circuitVkHash,
     });
   }
 
-  return { shields: queue.length, notes: notes.length };
+  return { shields: queue.length, notes: notes.length, leaves: leaves.length };
 }
 
 // Gas-sponsoring defaults (TRANSFERS.md §2.4). Base Sepolia is the only
@@ -174,6 +199,12 @@ type SeedDeployment = {
   // eth/usd price, so it stays a fixed dollar amount as ETH moves. Omit on
   // testnet (valueless gas) to use the static wei fallback.
   minRelayerBalanceUsdCents?: number;
+  // ADR 0022 — the `transfer_external` circuit vk for this deployment (hex of
+  // circuits/transfer_external/target/vk_hash). Carried so that when this
+  // deployment is later retired, the archive marker can gate the Withdraw
+  // button on a circuit match. Omit ⇒ retired notes from this deployment stay
+  // read-only (treated as a circuit-breaking bump).
+  circuitVkHash?: string;
   assets: Array<{
     tokenAddress: string;
     oracle: string;
@@ -204,6 +235,11 @@ const DEPLOYMENTS: SeedDeployment[] = [
     // Base Sepolia is fast-finality; 5 blocks ≈ 10s of trail.
     confirmationDepth: 5,
     fromBlock: 42746800, // v2 deploy block (mirrors sdk/src/deployments.ts)
+    // ADR 0022 — transfer_external vk (circuits/transfer_external/target/vk_hash).
+    // Stamped onto the retired marker if/when this deployment is redeployed
+    // away from, to gate the Withdraw button on a circuit match.
+    circuitVkHash:
+      "0x20c678968aada721f23c931227f996a37eb05407959b27f6e6119f6b1faf7085",
     assets: [
       {
         // Native ETH sentinel — matches the Pampalo contract's ETH_ADDRESS.
@@ -239,6 +275,9 @@ const DEPLOYMENTS: SeedDeployment[] = [
     // ample. Bump if you ever want more reorg headroom for real value.
     confirmationDepth: 5,
     fromBlock: 47237162, // deploy block (mirrors sdk/src/deployments.ts)
+    // ADR 0022 — same transfer_external circuit as Base Sepolia (same contract).
+    circuitVkHash:
+      "0x20c678968aada721f23c931227f996a37eb05407959b27f6e6119f6b1faf7085",
     // Turn relayer sponsoring on for mainnet at seed time.
     sponsoringTxs: true,
     // $10 of gas per account — resolved to wei via the live eth/usd price.
@@ -318,6 +357,10 @@ export const addDeployment = internalMutation({
         existing?.sponsoringTxs ?? args.chainId === BASE_SEPOLIA_CHAIN_ID,
       minRelayerBalanceWei:
         existing?.minRelayerBalanceWei ?? DEFAULT_MIN_RELAYER_BALANCE_WEI,
+      // ADR 0022 — preserve across a full replace (this manual mutation has no
+      // args for them; seedAll is the path that sets them from DEPLOYMENTS).
+      fromBlock: existing?.fromBlock,
+      circuitVkHash: existing?.circuitVkHash,
     };
     if (existing) {
       await ctx.db.replace(existing._id, payload);
@@ -477,32 +520,44 @@ export const seedAll = internalMutation({
         // (undefined on testnet → static wei fallback is used).
         minRelayerBalanceUsdCents:
           existing?.minRelayerBalanceUsdCents ?? d.minRelayerBalanceUsdCents,
+        // ADR 0022 — deploy block + transfer_external vk, carried on the row
+        // so a FUTURE redeploy's archive can stamp the retired marker. Take
+        // the seed entry's value (static per deployment); the deploy block is
+        // also reflected in lastIndexedBlock above for the indexer cursor.
+        fromBlock: d.fromBlock,
+        circuitVkHash: d.circuitVkHash,
       };
 
       let deploymentId: Id<"pampaloDeployments">;
       if (existing) {
-        // Capture the OLD address before replace overwrites the row.
+        // Capture the OLD address + provenance before replace overwrites the
+        // row — the archive marker describes the OLD (retiring) deployment.
         const oldPampalo = existing.pampalo;
+        const oldFromBlock = existing.fromBlock;
+        const oldCircuitVkHash = existing.circuitVkHash;
         await ctx.db.replace(existing._id, deploymentPayload);
         deploymentId = existing._id;
         if (addressChanged) {
-          // Archive the user-recoverable rows BEFORE wiping (ADR 0018), so
-          // retired notes survive cross-device. Child rows are still keyed
-          // by the (reused) deploymentId, so they read fine post-replace.
+          // Archive the user-recoverable rows + leaf snapshot BEFORE wiping
+          // (ADR 0018/0022), so retired notes survive cross-device and can be
+          // withdrawn. Child rows are still keyed by the (reused) deploymentId,
+          // so they read fine post-replace.
           const archived = await archiveDeploymentChildren(
             ctx,
             deploymentId,
             d.chainId,
             oldPampalo,
             undefined, // on-chain VERSION not known server-side
+            oldFromBlock,
+            oldCircuitVkHash,
           );
           const wiped = await wipeDeploymentChildren(ctx, deploymentId);
           console.warn(
             `[seed] redeploy on chain ${d.chainId}: archived ` +
-              `(${archived.shields} shields, ${archived.notes} notes) from ` +
-              `${oldPampalo} then wiped orphaned rows (${wiped.leaves} leaves, ` +
-              `${wiped.queue} queue, ${wiped.notes} notes, ` +
-              `${wiped.activity} activity) + reset cursor.`,
+              `(${archived.shields} shields, ${archived.notes} notes, ` +
+              `${archived.leaves} leaves) from ${oldPampalo} then wiped ` +
+              `orphaned rows (${wiped.leaves} leaves, ${wiped.queue} queue, ` +
+              `${wiped.notes} notes, ${wiped.activity} activity) + reset cursor.`,
           );
         }
       } else {
