@@ -7,7 +7,6 @@ import {
   type MutationCtx,
 } from "../_generated/server";
 import { lowerAddress } from "../lib/normalize";
-import { ETH_ADDRESS } from "../catalog/seed";
 
 // Delete every indexed child row tied to a deployment — used when a
 // redeploy abandons the old contract (ADR 0017). Returns per-table counts.
@@ -52,6 +51,20 @@ async function wipeDeploymentChildren(
   );
   return { leaves, queue, notes, activity };
 }
+
+// ADR 0024 — the bundled `transfer_external` vk. Used as the known-vk
+// fallback for LEGACY deployments retired before `circuitVkHash` was persisted
+// on their row (their circuit never changed, so their vk is this one). Lets the
+// cutover be a single safe `seedAll` instead of a fragile two-phase stamp:
+// archiveDeploymentChildren stamps an ejectable marker even if the old row was
+// never pre-stamped. Going forward every deployment carries its own
+// circuitVkHash, so the fallback only ever applies to these known legacy rows.
+const TRANSFER_EXTERNAL_VK =
+  "0x20c678968aada721f23c931227f996a37eb05407959b27f6e6119f6b1faf7085";
+const KNOWN_RETIRED_VK: Record<string, string> = {
+  "8453:0x86cc802b2d5a9ef41194e68ed69eecc37adaaf59": TRANSFER_EXTERNAL_VK,
+  "84532:0x86cc802b2d5a9ef41194e68ed69eecc37adaaf59": TRANSFER_EXTERNAL_VK,
+};
 
 // Copy the user-recoverable rows of a soon-to-be-wiped deployment into the
 // archive tables (ADR 0018/0022) so a user's pre-redeploy notes survive
@@ -144,7 +157,11 @@ async function archiveDeploymentChildren(
       version,
       retiredAt: now,
       fromBlock,
-      circuitVkHash,
+      // Prefer the old row's stamped vk; fall back to the known legacy vk so a
+      // single-pass cutover still yields an ejectable marker (ADR 0024).
+      circuitVkHash:
+        circuitVkHash ??
+        KNOWN_RETIRED_VK[`${chainId}:${archivedDeploymentAddress}`],
     });
   }
 
@@ -217,86 +234,77 @@ type SeedDeployment = {
 const DEPLOYMENTS: SeedDeployment[] = [
   {
     chainId: 84532,
-    // v2.0.0 — deployed 2026-06-12 from index-1 (0x77c2…f054). See
-    // contracts/deployments/84532.json + DEPLOYMENT.md ledger.
-    pampalo: "0x86cC802B2d5a9EF41194E68ed69EeCC37AdAAf59",
-    poseidon2Huff: "0x55edf41867bA8F18f68c2E42614465f86C35AE4E",
+    // 3.0.0 (v3 swap) — DEV MIGRATION REHEARSAL TARGET (ADR 0024). Replaces
+    // the v2 0x86cC… (which retires + becomes ejectable). Deployed
+    // 2026-06-14 from 0x77c2…f054; verbatim from 84532-swap.json (v3 venue).
+    // NOTE: this is the *pre-wrap* contract — supported assets are USDC + WETH
+    // (no ETH sentinel) until the ETH↔WETH wrap ships. DEV-ONLY: must NOT be
+    // deployed to prod (prod 84532 would wrongly cut over to a testnet addr).
+    pampalo: "0x20D8a25CAD5eF26d98aa9e9710C7CAeB37789b10",
+    poseidon2Huff: "0x56ff4E648521C8926a391e0C2acc213bbF825b4b",
     verifiers: {
-      deposit: "0x04D2D2B7D4345714D0451D4446E5C2dca049Ce33",
-      transfer: "0xEDE22DBb1C48FAb78079924e60038b0E74c51357",
-      withdraw: "0x09e3f6f4A67F5C8818c634137AeA181acCa392A3",
-      transferExternal: "0x98f54Fb3fB1BA577344aFfd9222B5100aCB35e1D",
+      deposit: "0x26b7312180d033229F52618DD8cea7FFe6d83AA1",
+      transfer: "0x69a94B2B7221702a237b5994e195Dd9eA6b5057A",
+      withdraw: "0xaF23A85FCF0Cf149EEd284c610291c295470019a",
+      transferExternal: "0x8882f568e537f387b9440A6539BFEec723f6bC1f",
     },
-    // Mirror the on-chain constants — re-read by the catalog-refresh
-    // cron once that lands. Tightening these doesn't break anything;
-    // they're display caches, not enforcement.
     shieldWaitSeconds: 3600,
     defaultMonthlyCapUsdCents: 200_00, // $200.00 (display cache; chain enforces)
-    // Base Sepolia is fast-finality; 5 blocks ≈ 10s of trail.
     confirmationDepth: 5,
-    fromBlock: 42746800, // v2 deploy block (mirrors sdk/src/deployments.ts)
-    // ADR 0022 — transfer_external vk (circuits/transfer_external/target/vk_hash).
-    // Stamped onto the retired marker if/when this deployment is redeployed
-    // away from, to gate the Withdraw button on a circuit match.
+    fromBlock: 42830589, // v3 deploy block (pampalo-swap-v3-84532 journal)
+    // Unchanged transfer_external circuit → same vk as the retired 0x86cC.
     circuitVkHash:
       "0x20c678968aada721f23c931227f996a37eb05407959b27f6e6119f6b1faf7085",
     assets: [
       {
-        // Native ETH sentinel — matches the Pampalo contract's ETH_ADDRESS.
-        tokenAddress: ETH_ADDRESS,
-        oracle: "0x84A490A5f77C202aa89687c9105f8cf0e7485bE9",
-        assetDecimals: 18,
+        // USDC mock (unchanged across the redeploy).
+        tokenAddress: "0x445b24Cf4Ac9AC20ecc417Ac41160Fdc8088520d",
+        oracle: "0x0d2C416D0B305F4C7922A16EcEC8B2616B48944B",
+        assetDecimals: 6,
       },
       {
-        // USDC mock — respins with every deploy. Update alongside the
-        // address in catalog/seed.ts TOKENS.
-        tokenAddress: "0x445b24Cf4Ac9AC20ecc417Ac41160Fdc8088520d",
-        oracle: "0xF1bCFbb62F3337295C2f33CCe0662574F4687b2A",
-        assetDecimals: 6,
+        // WETH — the swap-side asset on the pre-wrap contract.
+        tokenAddress: "0x4200000000000000000000000000000000000006",
+        oracle: "0x4b20A2aE592070F487C298Dab0dFA966782d4968",
+        assetDecimals: 18,
       },
     ],
   },
   {
-    // Base mainnet (8453). Same contract addresses as Base Sepolia
-    // (deployed from the index-1 nonce-0 deployer for cross-chain parity —
-    // DEPLOYMENT.md ledger). Verbatim from contracts/deployments/8453.json.
+    // Base mainnet (8453) — 3.0.0 (v3 swap), the CUTOVER target (ADR 0024).
+    // Replaces v2 0x86cC… (which retires + becomes ejectable). Verbatim from
+    // contracts/deployments/8453-swap.json (v3 venue). PRE-WRAP: supported
+    // assets are USDC + WETH (no ETH sentinel) until the ETH↔WETH wrap ships.
     chainId: 8453,
-    pampalo: "0x86cC802B2d5a9EF41194E68ed69EeCC37AdAAf59",
-    poseidon2Huff: "0x55edf41867bA8F18f68c2E42614465f86C35AE4E",
+    pampalo: "0x9a1c67F60636805B6A7f9973F5cC55cba8292de4",
+    poseidon2Huff: "0x37f2D756454a98218C20d673eb8264CBD9c85D58",
     verifiers: {
-      deposit: "0x04D2D2B7D4345714D0451D4446E5C2dca049Ce33",
-      transfer: "0xEDE22DBb1C48FAb78079924e60038b0E74c51357",
-      withdraw: "0x09e3f6f4A67F5C8818c634137AeA181acCa392A3",
-      transferExternal: "0x98f54Fb3fB1BA577344aFfd9222B5100aCB35e1D",
+      deposit: "0x2629Cbd0bb6375acbcEd113Eb7344Ab24B63d28B",
+      transfer: "0xB2Bc0f16A9f28F92cb2B8D17B691FD979D71bcAc",
+      withdraw: "0xBF17748D2C10D113683001928b9d8141cdce42B4",
+      transferExternal: "0x4b20A2aE592070F487C298Dab0dFA966782d4968",
     },
     shieldWaitSeconds: 3600,
     defaultMonthlyCapUsdCents: 200_00, // $200.00 (display cache; chain enforces)
-    // Base mainnet has a single sequencer; 5 blocks (~10s) of trail is
-    // ample. Bump if you ever want more reorg headroom for real value.
     confirmationDepth: 5,
-    fromBlock: 47237162, // deploy block (mirrors sdk/src/deployments.ts)
-    // ADR 0022 — same transfer_external circuit as Base Sepolia (same contract).
+    fromBlock: 47319551, // v3 deploy block (pampalo-swap-v3-8453 journal)
+    // Unchanged transfer_external circuit → same vk as the retired 0x86cC.
     circuitVkHash:
       "0x20c678968aada721f23c931227f996a37eb05407959b27f6e6119f6b1faf7085",
-    // Turn relayer sponsoring on for mainnet at seed time.
     sponsoringTxs: true,
-    // $10 of gas per account — resolved to wei via the live eth/usd price.
     minRelayerBalanceUsdCents: 10_00,
     assets: [
       {
-        // Native ETH sentinel.
-        tokenAddress: ETH_ADDRESS,
-        oracle: "0x84A490A5f77C202aa89687c9105f8cf0e7485bE9",
-        assetDecimals: 18,
+        // Real Circle-issued USDC on Base.
+        tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        oracle: "0x236f8F9bB973cb49199A80d1Ed9aEA7c7E409eb5",
+        assetDecimals: 6,
       },
       {
-        // Real Circle-issued USDC on Base (NOT the mock). Must be
-        // registered on the Pampalo contract on-chain first —
-        // scripts/add-base-usdc.ts. Oracle wraps Base's Chainlink
-        // USDC/USD feed, so it prices real USDC correctly.
-        tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        oracle: "0xF1bCFbb62F3337295C2f33CCe0662574F4687b2A",
-        assetDecimals: 6,
+        // WETH — swap-side asset on the pre-wrap contract.
+        tokenAddress: "0x4200000000000000000000000000000000000006",
+        oracle: "0xd022E5963282225618Ae723d60F15B1c7f8739E2",
+        assetDecimals: 18,
       },
     ],
   },

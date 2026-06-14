@@ -38,6 +38,7 @@ import {
   type UnshieldConfirmPayload,
 } from "@/components/pampalo/shield/UnshieldConfirmSheet";
 import { BalanceCard } from "@/components/pampalo/BalanceCard";
+import { PreviousDeploymentBanner } from "@/components/pampalo/PreviousDeploymentBanner";
 import { DepositSheet } from "@/components/pampalo/deposit/DepositSheet";
 import { ReceiveSheet } from "@/components/pampalo/receive/ReceiveSheet";
 import { BeachScene } from "@/components/pampalo/BeachScene";
@@ -545,6 +546,8 @@ function Dashboard({
 
   return (
     <>
+      <PreviousDeploymentBanner evmAddress={evmAddress} />
+
       <BalanceCardConnected
         tokens={tokens ?? null}
         prices={prices ?? null}

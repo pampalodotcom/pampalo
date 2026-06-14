@@ -1,7 +1,7 @@
 {
   "chainId": 8453,
   "network": "base",
-  "deployer": "0x22A920cC5e6b55D3330237c4CB69ef474B0580AA",
+  "deployer": "0x77c2D739A68A086e359B6be91B72a2533c53f054",
   "tokens": {
     "usdc": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
     "weth": "0x4200000000000000000000000000000000000006"
@@ -9,38 +9,21 @@
   "venues": [
     {
       "venue": "v3",
-      "pampalo": "0x940b920609b6219B288069f00D5b08090ED46882",
-      "poseidon2Huff": "0x1B3d4C0e73f495834D1f6AF81fFcB72a425009de",
-      "venueAddress": "0x2626664c2603336E57B271c5C0b26F421741e481",
-      "swapVerifier": "0x72614341F3B87D962916ca59d1f37ea6D6B05eB7",
+      "pampalo": "0x9a1c67F60636805B6A7f9973F5cC55cba8292de4",
+      "poseidon2Huff": "0x37f2D756454a98218C20d673eb8264CBD9c85D58",
+      "venueAddress": "0x2626664c2603336e57b271c5c0b26f421741e481",
+      "swapVerifier": "0x0d2C416D0B305F4C7922A16EcEC8B2616B48944B",
       "verifiers": {
-        "deposit": "0x94b187319344671d74846c68548A1FD6259bc3b5",
-        "transfer": "0x4B4aa76D3bAA064422f469Eb87cE095400bbc153",
-        "withdraw": "0xf35757a0439EF75DE64894b1b630664bf536Aa12",
-        "transferExternal": "0xc09A555E9160AfFbe308185bC1B804283Ba0250d"
+        "deposit": "0x2629Cbd0bb6375acbcEd113Eb7344Ab24B63d28B",
+        "transfer": "0xB2Bc0f16A9f28F92cb2B8D17B691FD979D71bcAc",
+        "withdraw": "0xBF17748D2C10D113683001928b9d8141cdce42B4",
+        "transferExternal": "0x4b20A2aE592070F487C298Dab0dFA966782d4968"
       },
       "oracles": {
-        "usdc": "0xd69d8Cc434523815C59cf7b1070d819D9B5a6b06",
-        "eth": "0x8b88a061753f6a51DFe59e5D9C8741518612b587"
-      }
-    },
-    {
-      "venue": "v4",
-      "pampalo": "0x6655ecCC66a081a3f4648d405C4aE662396283E7",
-      "poseidon2Huff": "0xCFf4DD54a741B07472A68A3c5e4f9867BA3c570F",
-      "venueAddress": "0x498581fF718922c3f8e6A244956aF099B2652b2b",
-      "swapVerifier": "0x821908Fc59a914a94682c6FB8a58f3eA7bce5826",
-      "verifiers": {
-        "deposit": "0x21ae6bb08937b223f44c31E9c155da535C1ed93d",
-        "transfer": "0xE00dd4Da378A92D63b09f2B2ceBA1c5E1346b00A",
-        "withdraw": "0x94F668db018D6F40b31a1E377732fcB3495D27A1",
-        "transferExternal": "0x29F0719Bf74E7767B91c0bb933c247C8bdE43eFc"
-      },
-      "oracles": {
-        "usdc": "0xA0cef8bEa107d4847173B1De8f45078fa81d4D89",
-        "eth": "0xcd879c3769d31439c47874e767dD52d47B5ee073"
+        "usdc": "0x236f8F9bB973cb49199A80d1Ed9aEA7c7E409eb5",
+        "eth": "0xd022E5963282225618Ae723d60F15B1c7f8739E2"
       }
     }
   ],
-  "timestamp": "2026-06-14T01:41:08.516Z"
+  "timestamp": "2026-06-14T09:16:40.353Z"
 }

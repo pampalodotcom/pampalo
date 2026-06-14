@@ -40,6 +40,23 @@ type ChainConfig = {
 };
 
 const CHAINS: Record<number, ChainConfig> = {
+  // Base Sepolia — for the dev MIGRATION rehearsal only (ADR 0024). Private
+  // swaps don't function here (no real WETH/USDC liquidity), so v3Router is a
+  // placeholder (the mainnet router address) and is never called; we only
+  // exercise shield/transfer/unshield + the retired-note cutover + eject.
+  84532: {
+    usdc: "0x445b24Cf4Ac9AC20ecc417Ac41160Fdc8088520d", // Base Sepolia USDC mock
+    weth: "0x4200000000000000000000000000000000000006",
+    v3Router: "0x2626664c2603336e57b271c5c0b26f421741e481", // placeholder — inert on testnet
+    v4PoolManager: "0x498581ff718922c3f8e6a244956af099b2652b2b", // placeholder (v4 not deployed here)
+    feeds: {
+      eth: { feed: "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1", maxAge: 7200 },
+      usdc: {
+        feed: "0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165",
+        maxAge: 172800,
+      },
+    },
+  },
   // Base mainnet
   8453: {
     usdc: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
