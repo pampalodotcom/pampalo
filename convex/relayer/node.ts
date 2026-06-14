@@ -26,6 +26,10 @@ const RELAYER_POOL_SIZE = 5;
 const GAS_LIMIT: Record<RelayKind, bigint> = {
   transfer: 8_000_000n,
   unshield: 8_000_000n,
+  // A swap carries the swap verifier plus a Uniswap leg (v4 unlock
+  // callback or v3 exactInput), so it needs more headroom than the
+  // note-only flows.
+  swap: 10_000_000n,
 };
 
 // Minimal human-readable ABI for the two relayed entrypoints. Note the
@@ -35,9 +39,10 @@ const GAS_LIMIT: Record<RelayKind, bigint> = {
 const PAMPALO_IFACE = new Interface([
   "function transfer(bytes proof, bytes32[] publicInputs, bytes[] payload)",
   "function unshieldBundled(bytes proof, bytes32[] publicInputs, bytes[] payload)",
+  "function privateSwap(bytes proof, bytes32[] publicInputs, bytes route, bytes[] payload)",
 ]);
 
-type RelayKind = "transfer" | "unshield";
+type RelayKind = "transfer" | "unshield" | "swap";
 
 export type RelayResult =
   | { ok: true; chainId: number; txHash: string }
@@ -72,12 +77,18 @@ export const relay = action({
   args: {
     sessionToken: v.string(),
     chainId: v.number(),
-    kind: v.union(v.literal("transfer"), v.literal("unshield")),
+    kind: v.union(
+      v.literal("transfer"),
+      v.literal("unshield"),
+      v.literal("swap"),
+    ),
     proof: v.string(),
     publicInputs: v.array(v.string()),
-    // Required for transfer (ECIES NotePayload ciphertexts, 0..3); ignored
-    // for unshield, which emits no payload.
+    // Required for transfer/swap (ECIES NotePayload ciphertexts, 0..3);
+    // ignored for unshield, which emits no payload.
     payload: v.optional(v.array(v.string())),
+    // Required for swap only: the opaque Uniswap route bytes.
+    route: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<RelayResult> => {
     // 1. Auth gate (rate-limit only; no userId→tx row is written).
@@ -133,15 +144,36 @@ export const relay = action({
         };
       }
 
-      // 6. Encode calldata for the requested entrypoint. Both entrypoints
-      //    carry the (proof, publicInputs, payload) shape; only the
-      //    function selector differs.
-      const fn = kind === "transfer" ? "transfer" : "unshieldBundled";
-      const data = PAMPALO_IFACE.encodeFunctionData(fn, [
-        args.proof,
-        args.publicInputs,
-        args.payload ?? [],
-      ]);
+      // 6. Encode calldata for the requested entrypoint. transfer +
+      //    unshieldBundled carry (proof, publicInputs, payload); swap
+      //    inserts the opaque route between publicInputs and payload.
+      let data: string;
+      if (kind === "swap") {
+        if (args.route === undefined) {
+          await ctx.runMutation(internal.relayer.store.releaseLockNoCharge, {
+            chainId: args.chainId,
+            accountIndex: lock.accountIndex,
+          });
+          return {
+            ok: false,
+            reason: "UNKNOWN",
+            message: "swap relay requires a route",
+          };
+        }
+        data = PAMPALO_IFACE.encodeFunctionData("privateSwap", [
+          args.proof,
+          args.publicInputs,
+          args.route,
+          args.payload ?? [],
+        ]);
+      } else {
+        const fn = kind === "transfer" ? "transfer" : "unshieldBundled";
+        data = PAMPALO_IFACE.encodeFunctionData(fn, [
+          args.proof,
+          args.publicInputs,
+          args.payload ?? [],
+        ]);
+      }
 
       // 7. Pre-broadcast simulation — never spend gas on a tx that reverts.
       try {

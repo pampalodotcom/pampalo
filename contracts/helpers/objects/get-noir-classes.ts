@@ -1,4 +1,5 @@
 import { Shield } from "@pampalo/shared/classes/Shield";
+import { Swap } from "@pampalo/shared/classes/Swap";
 import { Transfer } from "@pampalo/shared/classes/Transfer";
 import { Unshield } from "@pampalo/shared/classes/Unshield";
 import { UnshieldBundled } from "@pampalo/shared/classes/UnshieldBundled";
@@ -14,12 +15,14 @@ export const getNoirClasses = async () => {
   const transfer = new Transfer();
   const unshield = new Unshield();
   const unshieldBundled = new UnshieldBundled();
+  const swap = new Swap();
 
   await Promise.all([
     shield.init(),
     transfer.init(),
     unshield.init(),
     unshieldBundled.init(),
+    swap.init(),
   ]);
 
   return {
@@ -31,6 +34,8 @@ export const getNoirClasses = async () => {
     unshieldBackend: unshield.unshieldBackend,
     unshieldBundledNoir: unshieldBundled.unshieldBundledNoir,
     unshieldBundledBackend: unshieldBundled.unshieldBundledBackend,
+    swapNoir: swap.swapNoir,
+    swapBackend: swap.swapBackend,
   };
 };
 

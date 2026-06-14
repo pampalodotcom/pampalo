@@ -1,0 +1,29 @@
+{
+  "chainId": 84532,
+  "network": "baseSepolia",
+  "deployer": "0x77c2D739A68A086e359B6be91B72a2533c53f054",
+  "tokens": {
+    "usdc": "0x445b24Cf4Ac9AC20ecc417Ac41160Fdc8088520d",
+    "weth": "0x4200000000000000000000000000000000000006"
+  },
+  "venues": [
+    {
+      "venue": "v3",
+      "pampalo": "0x20D8a25CAD5eF26d98aa9e9710C7CAeB37789b10",
+      "poseidon2Huff": "0x56ff4E648521C8926a391e0C2acc213bbF825b4b",
+      "venueAddress": "0x2626664c2603336e57b271c5c0b26f421741e481",
+      "swapVerifier": "0x3D9d04c14B970457E55C3925eBDF8BF611AfEb12",
+      "verifiers": {
+        "deposit": "0x26b7312180d033229F52618DD8cea7FFe6d83AA1",
+        "transfer": "0x69a94B2B7221702a237b5994e195Dd9eA6b5057A",
+        "withdraw": "0xaF23A85FCF0Cf149EEd284c610291c295470019a",
+        "transferExternal": "0x8882f568e537f387b9440A6539BFEec723f6bC1f"
+      },
+      "oracles": {
+        "usdc": "0x0d2C416D0B305F4C7922A16EcEC8B2616B48944B",
+        "eth": "0x4b20A2aE592070F487C298Dab0dFA966782d4968"
+      }
+    }
+  ],
+  "timestamp": "2026-06-14T09:32:21.253Z"
+}

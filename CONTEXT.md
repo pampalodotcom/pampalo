@@ -411,9 +411,12 @@ shield event is what the protocol breaks.
 
 **Private swap**:
 Private note of asset A → private note of asset B, with the trade
-executing against **public Uniswap v4 liquidity** in one atomic call
-(`privateSwap` → `poolManager.unlock` → `unlockCallback`). Pampalo is a
-**caller** of the v4 `PoolManager`, not a hook author. The privacy
+executing against **public Uniswap liquidity** through a **Swap venue**
+(see below) in one atomic `privateSwap` call. The **mainnet (8453)
+deployment uses the v3 venue** (`SwapRouter02.exactInputSingle`); the v4
+venue (`poolManager.unlock` → `unlockCallback`, where Pampalo is a
+**caller** of the `PoolManager`, not a hook author) is deployed but
+**parked** until Base v4 liquidity matures (ADR 0024). The privacy
 model is **ownership-private, amount-public**: the nullifier breaks the
 input note's lineage and the output note's owner is hidden, but
 `(assetA, assetB, amount)` is observable at the AMM — the only model
@@ -422,9 +425,12 @@ external recipient), so **no Monthly cap is charged** — extraction stays
 gated at **Unshield**. Broadcast is **relayer-sponsored** like
 **Transfer** / **Unshield** (ADR 0015) so the spender's EVM address isn't
 linked to the swap; unlike those, a swap can genuinely revert on
-`realized < T` if price moves before inclusion. v1 routes **ERC-20 pools
-only** — native-ETH (`0xEeee…eEeE`) notes must wrap to WETH first; v4's
-native `address(0)` legs are deferred. Verified by a new `swap` ZK
+`realized < T` if price moves before inclusion. **Native-ETH notes
+(`0xEeee…eEeE`) swap directly**: the v3 venue **wraps ETH↔WETH inside
+`_executeSwap`** (deposit the input ETH to WETH for the router, unwrap a
+WETH output back to native ETH), so WETH is a **venue-internal** detail —
+notes, balances, and the asset set stay ETH-denominated and the client
+never holds WETH (ADR 0024). Verified by a new `swap` ZK
 circuit, which mints the asset-B output note at **Target output** `T`
 plus an optional same-asset asset-A change note (multi-hop routes are
 supported; the path is untrusted calldata, safe only because
@@ -435,13 +441,34 @@ and a v4 bug is fixed by a clean-break redeploy, not a hot-swap (ADR
 0023). **v1 scope**: **single-hop WETH↔USDC only** (so `unlockCallback`
 hits one known PoolKey, no untrusted multi-hop executor yet); the output
 note is **self-owned** (no external recipient, mirroring shield-to-self,
-ADR 0008); **WETH joins the Shieldable-asset set** so users hold WETH
-notes (native-ETH stays out — no in-protocol wrap in v1); `T` defaults to
+ADR 0008); **WETH is *not* a user-facing asset** — the v3 venue wraps
+ETH↔WETH internally, so ETH stays the only ETH-side asset users hold
+(reverses the earlier "WETH joins the Shieldable-asset set" plan, ADR
+0024); `T` defaults to
 **quote × (1 − 0.5%)** with the forfeit surfaced honestly; broadcast is
 relayer-sponsored with the **monthly-cap gate dropped** (no cap charged)
 and rare `realized < T` reverts accepted (the relayer eats that gas).
 _Avoid_: bare "Swap" — reserved for the client-side public EVM-layer
 swap (`uniswap-swap.ts`), no privacy.
+
+**Swap venue**:
+The specific public-AMM integration a swap-enabled deployment trades
+against, supplied by a venue subclass (`PampaloSwapV3` /
+`PampaloSwapV4`) of the abstract `PampaloSwapBase` — which is itself a
+**superset of `Pampalo`** (you deploy a venue subclass *instead of*
+Pampalo; it carries the full note machinery plus `privateSwap`, ADR 0017
+clean-break). The venue is **fixed per deployment**: there is one venue
+per **Pampalo deployment**, so choosing it couples *both* the wallet's
+note tree *and* the sole liquidity source for every **Private swap** — a
+note shielded into a v3-venue contract can only ever swap against v3
+liquidity. Base mainnet (8453) runs the **v3 venue** (`SwapRouter02`,
+deployed fresh at `VERSION 3.0.0` — ADR 0024) — which wraps **ETH↔WETH
+inside `_executeSwap`** (with a `receive()` to take the unwrap) so
+native-ETH notes swap with no user-facing WETH asset; the **v4 venue** is
+**parked** until Base v4 liquidity matures. (The agent's earlier
+`0x940b…`/`0x6655…` deploys in `8453-swap.json` are validation artifacts
+that report `2.0.0` on-chain — not the live deployment.) Switching venues
+later is a redeploy + migration, not a config flip.
 
 **Target output (`T`)**:
 The fixed output-note amount a **Private swap** mints, chosen by the

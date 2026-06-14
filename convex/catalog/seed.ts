@@ -266,6 +266,17 @@ const TOKENS: SeedToken[] = [
     decimals: 6,
     roundTo: 2,
   },
+  {
+    // WETH on Base — the swap-side asset on the pre-wrap 3.0.0 contract
+    // (ADR 0024). Prices off the ETH/USD feed (WETH tracks ETH 1:1).
+    chainId: 8453,
+    address: "0x4200000000000000000000000000000000000006",
+    name: "Wrapped Ether",
+    symbol: "WETH",
+    decimals: 18,
+    roundTo: 5,
+    priceFeedShortId: "eth/usd",
+  },
   // ── Sepolia ──
   {
     chainId: 11155111,

@@ -19,6 +19,7 @@ export {
   buildShield,
   buildTransfer,
   buildUnshield,
+  buildPrivateSwap,
   buildTree,
   randomSecret,
 } from "./intents.js";
@@ -26,6 +27,7 @@ export type {
   ShieldIntent,
   TransferIntent,
   UnshieldIntent,
+  PrivateSwapIntent,
   OutputNote,
   TransferRecipient,
   TransferInputNote,

@@ -1,0 +1,15 @@
+[package]
+name = "swap"
+type = "bin"
+authors = [""]
+
+# Private-swap circuit. Like `transfer`, it leans on `pum_lib` for the
+# cross-circuit hash helpers (reconstruct_leaf, compute_merkle_root,
+# compute_nullifier) and the HEIGHT constant so the note-commitment and
+# nullifier schemes stay byte-identical to every other flow. The
+# balance side differs: there is no cross-asset conservation (the AMM
+# fills the other leg on-chain), only a same-asset input conservation
+# (Σ inputs == input_amount + change).
+[dependencies]
+poseidon = { tag = "v0.3.0", git = "https://github.com/noir-lang/poseidon" }
+pum_lib = { path = "../pum_lib" }

@@ -259,3 +259,75 @@ store.
 |---|---|---|---|---|---|
 | 1.x | Base Sepolia (84532) | `0x3E6dfc4c233486A44e26A548e191c839f069037f` | `0x19fD…c95c` (idx 0) | 2026-05-29 | initial |
 | 2.0.0 | Base Sepolia (84532) | `0x86cC802B2d5a9EF41194E68ed69EeCC37AdAAf59` | `0x77c2…f054` (idx 1) | 2026-06-12 | $200 cap, `unshieldBudget()`, fast-track, `cancelShield` relaxation, Base-only networks. Index-1 nonce-0 deployer so Base mainnet gets the same address. |
+| 3.0.0 (v3 swap) | Base (8453) | `0x9a1c67F60636805B6A7f9973F5cC55cba8292de4` | `0x77c2…f054` (idx 1) | 2026-06-14 | `PampaloSwapV3` superset, on-chain `VERSION()=3.0.0` (private swap, ADR 0023/0024). Deployed fresh from the standard ops key (admin from constructor, no rotation). swapVerifier `0x0d2C…944B`, poseidon2 `0x37f2…5D58`; verifiers/oracles in `8453-swap.json`. v4 parked. **Deployed but not yet cut over** — 8453 still points at `0x86cC` pending the prod two-phase seed. |
+
+---
+
+## Appendix: Base mainnet v3 private-swap cutover (ADR 0024)
+
+A worked instance of the runbook above for taking **`PampaloSwapV3` (`VERSION
+3.0.0`)** live on **Base mainnet (8453)**, replacing the non-swap `0x86cC…`. It
+differs from a vanilla redeploy in two ways: it's a **real-money** cutover
+over an active deployment (the operator's own funds); and the **eject snapshot
+is one-shot**. (WETH is *not* a user-facing asset — the v3 venue wraps ETH↔WETH
+internally, ADR 0024.) The earlier agent deploys in
+`8453-swap.json` are **validation artifacts only** — we deploy fresh so the
+on-chain `VERSION()` is a true `3.0.0` and roles are correct from the
+constructor (no key rotation).
+
+> **Eject ordering (ADR 0024):** the funds on `0x86cC` are self-only, so the
+> retired-note **eject** UI (ADR 0022) may be verified *after* this cutover.
+> But the **`archivedLeaves` snapshot is one-shot** — steps 2–4 must be right
+> *before* the repoint (step 6) or in-app eject for `0x86cC` becomes impossible.
+
+1. **Deploy + reverify the new contract.** `VERSION` is already bumped to
+   `3.0.0` in `Pampalo.sol`. Deploy the v3 venue with `SWAP_VENUES=v3 …
+   hardhat run scripts/deploy-swap.ts --network base`. **No config or key
+   change needed**: the `base` network uses `hdAccountsV2`
+   (`{ mnemonic: MNEMONIC, initialIndex: 1 }`), so `getSigners()[0]` is your
+   **standard `MNEMONIC` idx 1 = `0x77c2…`** (the v2 deployer) — which the
+   constructor then grants `DEFAULT_ADMIN` + all roles. Just make sure
+   `process.env.MNEMONIC` is the **standard** phrase (not `AGENT_MNEMONIC`) and
+   **fund `0x77c2` with Base ETH** for gas (the contract lands at nonce ≥1 → a
+   fresh address, no parity — fine for a mainnet-only swap contract). Record the
+   fresh addresses. Then **reverify**: `pnpm --filter @pampalo/contracts test`
+   (incl. private-swap + forked-liquidity suites) and Basescan-verify the
+   deployed sources (PampaloSwapV3 + the four standard verifiers + `SwapVerifier`
+   + the Poseidon2 hasher). Confirm `pampalo.VERSION()` returns `3.0.0` on-chain.
+2. **WS1 live on *prod* Convex.** Confirm prod carries `archivedLeaves` +
+   `pampaloDeployments.{fromBlock,circuitVkHash}` +
+   `archivedDeployments.{fromBlock,circuitVkHash}` + `listArchivedLeaves`.
+   (Codegen alone doesn't push — `npx convex deploy` against prod.)
+3. **Two-phase seed — phase 1 (stamp the old row).** With the 8453 entry still
+   pointing at `0x86cC`, run `shieldQueue/seed:seedAll` so the live `0x86cC` row
+   gets `circuitVkHash` (`0x20c6…7085`, unchanged `transfer_external` vk) +
+   `fromBlock`. Confirm the indexer has caught up so all `0x86cC` leaves are in
+   `pampaloLeaves` before the snapshot.
+4. **Freeze + wind down `0x86cC`** (admin = `0x77c2…`): `weAreFull()` (halt
+   deposits) and `setDefaultMonthlyCap(<huge>)` (so any self note can later eject
+   past the $200 cap), and cancel/finalise pending shields so the tree is final.
+5. **Point the 8453 seeder at the new v3 contract.** In
+   `convex/shieldQueue/seed.ts` `DEPLOYMENTS[8453]`: `pampalo`, `poseidon2Huff`,
+   the four verifiers, oracles, `fromBlock` (new deploy block), `circuitVkHash`
+   (`0x20c6…7085`) — all from the **fresh** deploy artifact. Add `swapEnabled:
+   true` (+ optional `swapVerifier`/`venueAddress` for Sentry). **No WETH asset
+   row** — the v3 venue wraps ETH↔WETH internally (ADR 0024), so the 8453 asset
+   set stays ETH + USDC.
+6. **Two-phase seed — phase 2 (cut over).** Run `catalog/seed:seedAll` then
+   `shieldQueue/seed:seedAll`. The address change triggers archive-before-wipe:
+   confirm the `[seed] redeploy … archived (… leaves) … then wiped …` line shows
+   a non-zero **leaf** count for `0x86cC`.
+7. **Grant roles (normal per-deploy — no rotation).** `grant-roles.ts` against
+   the new address: ops roles → `0x3017…`, `VIGILANT_CITIZEN` → compliance signer
+   (RELAYER_MNEMONIC idx 5). `DEFAULT_ADMIN` is already on `0x77c2…` from the
+   constructor — nothing to rotate or renounce.
+8. **Backend accounts on mainnet.** `relayer/node:seedRelayerAccounts
+   {"chainId":8453}` + `compliance/node:seedComplianceSigner {"chainId":8453}`.
+   Fund the relayer pool with **real ETH** (mainnet gas).
+9. **Verify.** Standard shield → transfer → unshield round-trips on the new
+   contract; a private swap (WETH↔USDC) executes; `/sentry` shows `3.0.0`.
+   Confirm the new contract's four standard verifiers match the bundled vks.
+10. **Eject (trailing).** Once ready, verify a real `0x86cC` note ejects from
+    **Account → Previous deployments** to the signed-in address.
+
+> Update the ledger row above with the fresh addresses + date once deployed.
