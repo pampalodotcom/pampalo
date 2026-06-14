@@ -70,12 +70,18 @@ async function deployVenue(args: {
   console.log(`\n=== Deploying Pampalo${venue.toUpperCase()} ===`);
 
   const venueAddr = venue === "v3" ? cfg.v3Router : cfg.v4PoolManager;
+  // Each venue gets its own Ignition deployment id (its own journal).
+  // Mixing two venue modules + the script's direct config txs under one
+  // journal trips Ignition's external-nonce guard (HHE10402); isolating
+  // them keeps each venue's deploy self-contained and resumable.
   const result =
     venue === "v3"
       ? await connection.ignition.deploy(PampaloSwapV3Module, {
+          deploymentId: `pampalo-swap-v3-${chainId}`,
           parameters: { pampaloSwapV3: { swapRouter: venueAddr } },
         })
       : await connection.ignition.deploy(PampaloSwapV4Module, {
+          deploymentId: `pampalo-swap-v4-${chainId}`,
           parameters: { pampaloSwapV4: { poolManager: venueAddr } },
         });
 
