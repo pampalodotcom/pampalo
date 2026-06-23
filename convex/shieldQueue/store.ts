@@ -1,5 +1,6 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import {
   internalMutation,
@@ -191,11 +192,12 @@ export const _upsertShieldQueueEntry = internalMutation({
       // Already indexed; nothing to do. Replay-safety.
       return existing._id;
     }
-    return await ctx.db.insert("shieldQueueEntries", {
+    const asset = lowerAddress(args.asset);
+    const newId = await ctx.db.insert("shieldQueueEntries", {
       deploymentId: args.deploymentId,
       pendingId: args.pendingId,
       shielder: lowerAddress(args.shielder),
-      asset: lowerAddress(args.asset),
+      asset,
       amount: args.amount,
       leafCommitment: args.leafCommitment,
       unlockTime: args.unlockTime,
@@ -205,6 +207,57 @@ export const _upsertShieldQueueEntry = internalMutation({
       queuedAt: Date.now(),
       state: "queued",
     });
+
+    // Deposit Monitor (CONTEXT.md): fire an operator email for this new
+    // deposit. This insert branch runs exactly once per (deployment,
+    // pendingId) — re-orgs/replays hit the early-return above — so it's the
+    // natural, deduplicated "new deposit" signal. The send is scheduled
+    // out-of-band (notify.ts), so a failure there never touches indexing.
+    //
+    // Backlog guard: a *live* queued shield always has its unlock in the
+    // future. Cold-start (head − 5000), seed, and backfill ingests are
+    // historical (unlock already elapsed), so this skips them without any
+    // extra "already notified" state.
+    if (args.unlockTime * 1000 > Date.now()) {
+      const dep = await ctx.db.get(args.deploymentId);
+      const network = dep ? await ctx.db.get(dep.networkId) : null;
+      // Decimals: canonical from pampaloAssets (non-optional assetDecimals).
+      const assetRow = await ctx.db
+        .query("pampaloAssets")
+        .withIndex("by_deployment_and_token", (q) =>
+          q.eq("deploymentId", args.deploymentId).eq("tokenAddress", asset),
+        )
+        .unique();
+      // Symbol: best-effort from supportedTokens; absent for testnet mocks.
+      let symbol: string | undefined;
+      if (network) {
+        const token = await ctx.db
+          .query("supportedTokens")
+          .withIndex("by_networkId_and_address", (q) =>
+            q.eq("networkId", network._id).eq("address", asset),
+          )
+          .unique();
+        symbol = token?.symbol;
+      }
+      await ctx.scheduler.runAfter(
+        0,
+        internal.shieldQueue.notify.sendDepositAlert,
+        {
+          chainId: network?.chainId,
+          chainName: network?.name,
+          shielder: lowerAddress(args.shielder),
+          asset,
+          amount: args.amount,
+          assetDecimals: assetRow?.assetDecimals,
+          symbol,
+          pendingId: args.pendingId,
+          unlockTime: args.unlockTime,
+          queuedTxHash: args.queuedTxHash.toLowerCase(),
+        },
+      );
+    }
+
+    return newId;
   },
 });
 

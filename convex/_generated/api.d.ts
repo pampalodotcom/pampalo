@@ -34,6 +34,7 @@ import type * as relayer_store from "../relayer/store.js";
 import type * as send_proxy from "../send/proxy.js";
 import type * as send_types from "../send/types.js";
 import type * as shieldQueue_events from "../shieldQueue/events.js";
+import type * as shieldQueue_notify from "../shieldQueue/notify.js";
 import type * as shieldQueue_proxy from "../shieldQueue/proxy.js";
 import type * as shieldQueue_refresh from "../shieldQueue/refresh.js";
 import type * as shieldQueue_seed from "../shieldQueue/seed.js";
@@ -75,6 +76,7 @@ declare const fullApi: ApiFromModules<{
   "send/proxy": typeof send_proxy;
   "send/types": typeof send_types;
   "shieldQueue/events": typeof shieldQueue_events;
+  "shieldQueue/notify": typeof shieldQueue_notify;
   "shieldQueue/proxy": typeof shieldQueue_proxy;
   "shieldQueue/refresh": typeof shieldQueue_refresh;
   "shieldQueue/seed": typeof shieldQueue_seed;
