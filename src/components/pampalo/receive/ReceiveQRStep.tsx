@@ -59,9 +59,8 @@ export function ReceiveQRStep({
     setDeriving(true);
     try {
       await auth.reAuth();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      toast.error(`Couldn't derive — ${msg}`);
+    } catch {
+      toast.error("Couldn't set up your key — please try again.");
     } finally {
       setDeriving(false);
     }
@@ -125,9 +124,9 @@ export function ReceiveQRStep({
           Your share code
         </h2>
         <p className="text-[13px] text-ink-mute">
-          This is a link that contains all of your address details easily
-          copyable for Private Money on Pampalo{" "}
-          <span className="font-semibold text-ink">({network.name})</span>.
+          A single link with all your receiving addresses for{" "}
+          <span className="font-semibold text-ink">{network.name}</span> — easy
+          to share so others can pay you on Pampalo.
         </p>
       </div>
 
@@ -145,12 +144,12 @@ export function ReceiveQRStep({
           </span>
           <div className="flex flex-col gap-1">
             <p className="text-[14px] font-semibold text-ink">
-              Derive your {network.name} envelope
+              Set up your {network.name} private key
             </p>
             <p className="max-w-[320px] text-[12.5px] leading-relaxed text-ink-mute">
-              {network.name} uses an isolated envelope key (slot 420) so a
-              future hot-Sync compromise can&apos;t reach it. Unlock once to
-              derive and cache it locally.
+              {network.name} uses a separate key for extra protection of your
+              private payments. Unlock once to create it — it&apos;s stored only
+              on this device.
             </p>
           </div>
           <button
@@ -171,7 +170,7 @@ export function ReceiveQRStep({
             ) : (
               <>
                 <KeyRound className="size-4" aria-hidden />
-                Unlock to derive
+                Unlock to set up
               </>
             )}
           </button>
@@ -229,13 +228,13 @@ export function ReceiveQRStep({
             </div>
             <div className="flex flex-col">
               <AddressRow
-                label="EVM"
+                label="Ethereum"
                 value={evm}
                 showFull={showFull}
                 onToggleFull={() => setShowFull((v) => !v)}
               />
-              <AddressRow label="Envelope" value={envelope} />
-              <AddressRow label="Poseidon" value={poseidon} />
+              <AddressRow label="Encryption key" value={envelope} />
+              <AddressRow label="Private address" value={poseidon} />
             </div>
           </div>
 
@@ -260,9 +259,9 @@ export function ReceiveQRStep({
           <div className="flex items-start gap-2.5 rounded-2xl bg-[color-mix(in_oklab,var(--priv-soft)_60%,transparent)] px-4 py-3">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--priv)]" />
             <p className="text-[12.5px] leading-relaxed text-ink">
-              This code includes your public + shielded addresses together.
-              Anyone you share it with can link your EVM identity to your
-              shielded identifiers.
+              This code includes your public and private addresses together.
+              Anyone you share it with can connect your public wallet to your
+              private one.
             </p>
           </div>
         </>

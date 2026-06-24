@@ -839,13 +839,15 @@ function NetworkCell({
   name: string | null;
 }) {
   if (chainId === null) {
-    return <span className="font-mono text-[12px] text-ink-mute">unknown</span>;
+    return (
+      <span className="font-mono text-[12px] text-ink-mute">Unknown network</span>
+    );
   }
   return (
     <span className="inline-flex items-center gap-1.5">
       <NetworkLogo chainId={chainId} size={18} />
       <span className="text-[12.5px] font-medium text-ink">
-        {name ?? `chain ${chainId}`}
+        {name ?? "Unknown network"}
       </span>
     </span>
   );
@@ -913,7 +915,7 @@ function AmountCell({
             <>
               {usd && <span aria-hidden>·</span>}
               <NetworkLogo chainId={chainId} size={13} />
-              <span>{networkName ?? `chain ${chainId}`}</span>
+              <span>{networkName ?? "Unknown network"}</span>
             </>
           ) : (
             token?.name && (

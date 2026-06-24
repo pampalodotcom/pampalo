@@ -226,7 +226,7 @@ function ValidationHint({ result }: { result: ParseResult }) {
     result.status === "wrong-count"
       ? `Should be 12 words; got ${result.count}.`
       : result.status === "invalid-word"
-        ? `“${result.badWord}” isn’t in the BIP-39 word list. Check for typos.`
+        ? `“${result.badWord}” isn’t a valid recovery word. Check for typos.`
         : "These words don’t form a valid phrase. Double-check spelling and word order.";
 
   return <span className="text-[12px] text-warn-fg">{message}</span>;
@@ -265,14 +265,14 @@ function AddressPreview({ mnemonic }: { mnemonic: string }) {
         ) : (
           <ChevronRight className="size-3.5" />
         )}
-        Show envelope key and Poseidon identifier
+        Show encryption key and private address
       </button>
 
       {showMore && (
         <>
-          <AddressField label="Envelope key" value={addresses.envelope} mono />
+          <AddressField label="Encryption key" value={addresses.envelope} mono />
           <AddressField
-            label="Poseidon identifier"
+            label="Private address"
             value={addresses.poseidon}
             mono
           />

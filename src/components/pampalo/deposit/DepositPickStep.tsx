@@ -61,8 +61,8 @@ export function DepositPickStep({
 
   const helperCopy =
     mode === "public"
-      ? "Visible on-chain. Anyone can see it."
-      : "Shielded the moment it lands. Only you can see it.";
+      ? "Visible on the public blockchain. Anyone can see it."
+      : "Private the moment it lands. Only you can see it.";
 
   const continueDisabled = !selectedNetworkId;
 
@@ -73,7 +73,7 @@ export function DepositPickStep({
           Choose a network
         </h2>
         <p className="text-[13px] text-ink-mute">
-          Deposit funds into your {mode === "public" ? "public" : "shielded"}{" "}
+          Deposit funds into your {mode === "public" ? "public" : "private"}{" "}
           balance.
         </p>
       </div>
@@ -103,8 +103,8 @@ export function DepositPickStep({
           <div className="rounded-2xl border border-dashed border-line bg-paper-lo px-5 py-7 text-center">
             <p className="text-[13px] text-ink-mute">
               {mode === "private"
-                ? "No private networks available yet. Enable testnets in Account → Settings if you're developing locally."
-                : "No networks available. Enable testnets in Account → Settings if you're developing locally."}
+                ? "No networks available yet. If you're testing, enable testnets in Account → Settings."
+                : "No networks available yet. If you're testing, enable testnets in Account → Settings."}
             </p>
           </div>
         ) : (

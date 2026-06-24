@@ -243,12 +243,11 @@ function Landing() {
                 Money.
               </h1>
               <p className="mb-5 text-[14.5px] leading-relaxed text-ink-soft">
-                Pampalo uses passkey PRF (Pseudo-Random Function) to encrypt and
-                decrypt all application data.
+                Pampalo uses your passkey to encrypt and decrypt everything in
+                the app.
               </p>
               <p className="mb-5 text-[14.5px] leading-relaxed text-ink-soft">
-                Any data stored in the database is encrypted with (pass)keys
-                that you control.{" "}
+                Anything we store is encrypted with keys only you control.{" "}
                 <a
                   href="https://docs.pampalo.com"
                   target="_blank"
@@ -397,8 +396,8 @@ function PasskeyHelp({ kind, onBack }: { kind: HelpKind; onBack: () => void }) {
       <p className="text-[14px] leading-relaxed text-ink-soft">
         {isPrf ? (
           <>
-            Pampalo encrypts your wallet with a feature called the WebAuthn{" "}
-            <em>PRF extension</em>. Apple Passwords (iCloud Keychain) and Google
+            Pampalo needs a passkey security feature (the WebAuthn{" "}
+            <em>PRF extension</em>) to encrypt your wallet. Apple Passwords (iCloud Keychain) and Google
             Password Manager support it. 1Password is still rolling out support
             and isn’t reliable yet - so we can’t use it.
           </>

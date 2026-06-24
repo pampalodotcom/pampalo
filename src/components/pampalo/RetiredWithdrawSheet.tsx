@@ -101,7 +101,7 @@ export function RetiredWithdrawSheet({
       return;
     }
     if (!retired.tree) {
-      setError("Rebuilding the previous contract's tree — try again shortly.");
+      setError("Still loading your previous balances — try again shortly.");
       return;
     }
     setError(null);
@@ -240,7 +240,7 @@ export function RetiredWithdrawSheet({
               </div>
               <div className="text-[11.5px] text-ink-mute">
                 From a previous contract version back to your public wallet
-                {count > 1 ? ` · ${count} notes (one tx each)` : ""}.
+                {count > 1 ? ` · ${count} withdrawals` : ""}.
               </div>
             </div>
           </div>

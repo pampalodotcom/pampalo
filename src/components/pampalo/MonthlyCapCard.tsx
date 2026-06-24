@@ -101,13 +101,13 @@ function ChainCapSection({
       <p className="mb-2.5 text-[13px] font-semibold text-ink">{networkName}</p>
       <div className="flex flex-col gap-3">
         <CapBar
-          label="Shielded this month"
+          label="Made private this month"
           used={shield?.usdCentsUsedThisMonth ?? null}
           cap={shield?.effectiveCapUsdCents ?? null}
           tone="private"
         />
         <CapBar
-          label="Unshielded this month"
+          label="Made public this month"
           used={unshield?.usdCentsUsedThisMonth ?? null}
           cap={unshield?.effectiveCapUsdCents ?? null}
           tone="public"

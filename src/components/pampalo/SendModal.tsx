@@ -1004,7 +1004,7 @@ function StatusBanner({ status }: { status: TrackingStatus }) {
       <div className="flex items-center gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-[13px] text-ink">
         <XCircle className="size-4 text-destructive" />
         <span className="flex-1">
-          The transaction reverted on-chain. No funds moved.
+          The transaction failed. No funds were moved.
         </span>
       </div>
     );
@@ -1013,7 +1013,7 @@ function StatusBanner({ status }: { status: TrackingStatus }) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-[13px] text-ink">
         <Loader2 className="size-4 animate-spin text-muted-foreground" />
-        <span className="flex-1">Mined - waiting for confirmations.</span>
+        <span className="flex-1">In a block — waiting for confirmation.</span>
         <span className="font-mono text-[11px] text-ink-mute">
           {status.confirmations}/{CONFIRMATIONS_THRESHOLD}
         </span>

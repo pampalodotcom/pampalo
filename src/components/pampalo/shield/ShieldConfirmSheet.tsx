@@ -244,8 +244,8 @@ export function ShieldConfirmSheet({
       payload.assetAddress.toLowerCase() === ETH_ADDRESS.toLowerCase();
     if (!isNative && payload.symbol.toUpperCase() === "ETH") {
       setError(
-        "ETH/asset address mismatch detected. Refusing to shield to avoid a " +
-          "wrong-decimals broadcast.",
+        "Something looks off with this asset, so we've stopped to keep your " +
+          "funds safe. Reload and try again.",
       );
       setPhase("error");
       return;
@@ -493,8 +493,8 @@ export function ShieldConfirmSheet({
                 {payload ? `${amountFmt} ${payload.symbol}` : "—"}
               </div>
               <div className="text-[11.5px] text-ink-mute">
-                Moving from public balance into a private note on{" "}
-                {deployment ? `chain ${deployment.chainId}` : "this chain"}.
+                Moving from your public balance into your private balance on{" "}
+                {deployment?.networkName ?? "this network"}.
               </div>
             </div>
             <Moon className="size-5 shrink-0 text-[var(--priv)]" aria-hidden />
@@ -508,8 +508,8 @@ export function ShieldConfirmSheet({
             </div>
             <div>
               <div className="text-ink-mute">
-                Recipient (Your {deployment?.networkName ?? "network"} Poseidon
-                Address)
+                Recipient (your {deployment?.networkName ?? "network"} private
+                address)
               </div>
               <div className="mt-0.5 break-all font-mono text-[11px] text-ink">
                 {addresses.poseidon}

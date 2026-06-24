@@ -357,7 +357,7 @@ export function AssetRow({
         aria-live="polite"
       >
         <Loader2 className="size-3.5 animate-spin" aria-hidden />
-        {confirmingKind === "shield" ? "Shielding…" : "Unshielding…"} on-chain
+        {confirmingKind === "shield" ? "Making private…" : "Making public…"}
       </div>
     );
   } else if (!shieldable) {

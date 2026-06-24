@@ -317,7 +317,9 @@ export function SendReviewStep({
         const res = await rpc.getTransactionStatus(chainId, txHash);
         if (cancelled) return;
         if (res.status === false) {
-          setError("Transaction reverted on-chain.");
+          setError(
+            "The transaction failed and didn't go through. No funds were sent.",
+          );
           setPhase("error");
           return;
         }
@@ -387,13 +389,14 @@ export function SendReviewStep({
     ) {
       throw new Error("Private send not ready");
     }
-    if (!merkle.tree) throw new Error("Merkle tree still loading");
+    if (!merkle.tree)
+      throw new Error("Still getting things ready — try again in a moment.");
     // Capture into a local so TS preserves the non-null narrowing
     // inside the async closure that runs the proof gen.
     const tree = merkle.tree;
     if (!inputNote) {
       throw new Error(
-        "No spendable shielded note covers this amount yet. Try a smaller amount, or shield more first.",
+        "Your private balance isn't large enough for this amount. Try a smaller amount, or add more to your private balance first.",
       );
     }
 
@@ -624,11 +627,11 @@ export function SendReviewStep({
   const confirmLabel = (() => {
     switch (phase) {
       case "preparing":
-        return "Preparing proof…";
+        return "Getting things ready…";
       case "signing":
-        return "Awaiting passkey…";
+        return "Confirm with your passkey…";
       case "broadcasting":
-        return "Broadcasting…";
+        return "Sending…";
       case "error":
         return "Try again";
       default:
@@ -702,7 +705,7 @@ export function SendReviewStep({
                 ) : (
                   <SunIcon className="size-3" />
                 )}
-                {mode === "private" ? "Shielded balance" : "Public balance"}
+                {mode === "private" ? "Private balance" : "Public balance"}
               </dd>
               <dt className="text-ink-mute">Network</dt>
               <dd className="justify-self-end inline-flex items-center gap-1.5">
@@ -722,10 +725,10 @@ export function SendReviewStep({
               ) : recipient?.kind === "private" ? (
                 <dd className="justify-self-end flex flex-col items-end gap-0.5 font-mono text-ink">
                   <span className="text-[11px] text-ink-mute">
-                    Poseidon · {shortKey(recipient.poseidon)}
+                    Private address · {shortKey(recipient.poseidon)}
                   </span>
                   <span className="text-[11px] text-ink-mute">
-                    Envelope · {shortKey(recipient.envelope)}
+                    Encryption key · {shortKey(recipient.envelope)}
                   </span>
                 </dd>
               ) : (
@@ -744,11 +747,11 @@ export function SendReviewStep({
           >
             {mode === "private" ? (
               <>
-                Shielded — only the recipient can decrypt this. Amount and
-                recipient stay hidden on-chain.
+                Private — only the recipient can see this. The amount and who
+                you sent to stay hidden.
               </>
             ) : (
-              <>This transfer is visible on-chain and can&apos;t be reversed.</>
+              <>This transfer is public and can&apos;t be reversed.</>
             )}
           </div>
 
@@ -847,7 +850,7 @@ function SuccessPanel({
   const subcopy = isConfirmed
     ? mode === "private"
       ? "Tell whomever you sent this to to resync their Pampalo account."
-      : "Transfer mined."
+      : "Transfer complete."
     : "Awaiting confirmation - should land in a few seconds.";
 
   return (

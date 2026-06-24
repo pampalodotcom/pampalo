@@ -190,14 +190,14 @@ function AccountPage() {
                   value={addresses.evm}
                 />
                 <LabeledAddress
-                  label="Envelope"
-                  hint="Note encryption (secp256k1 public key)"
+                  label="Encryption key"
+                  hint="Used to encrypt your private transfers"
                   value={addresses.envelope}
                   className="mt-3"
                 />
                 <LabeledAddress
-                  label="Private"
-                  hint="Poseidon2 (ZK identity)"
+                  label="Private address"
+                  hint="Your address for private transfers"
                   value={addresses.poseidon}
                   className="mt-3"
                 />
