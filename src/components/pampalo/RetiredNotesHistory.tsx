@@ -251,8 +251,8 @@ export function RetiredNotesHistory({ addresses }: Props) {
             </ul>
             {!g.withdrawable && (
               <p className="mt-2 text-[11.5px] text-ink-mute">
-                Read-only — this contract was redeployed with a circuit change,
-                so these notes can’t be withdrawn here.
+                Read-only — this older contract isn’t compatible with the
+                current one, so these balances can’t be withdrawn here.
               </p>
             )}
           </div>

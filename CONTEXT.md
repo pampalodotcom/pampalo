@@ -573,6 +573,22 @@ public read; row-level actions (`Contest`, `Fast-track`) are
 role-gated by the contract, and the UI hides or reveals them based on
 `hasRole(...)` reads for the connected wallet.
 
+**Deposit Monitor**:
+An operator-facing alert: when a new **Pending shield** is first indexed
+into the **Shield queue** (the `ShieldQueued` event, i.e. a "Deposit" in
+user-facing terms), an email is sent to a configured operator list so the
+team has live visibility into incoming deposits across every active
+**Pampalo deployment**. Fires on _queue_, not _execute_ — the earliest
+signal, before the **Shield wait** elapses (and so before any
+_Automated Contest_ would act). Best-effort and out-of-band: the email
+send is decoupled from indexing and never blocks or fails the indexer; a
+lost alert is tolerated (a future redundancy layer — e.g. SMS fallback —
+is planned). The alert carries only data that is already public on-chain
+(chain, shielder EVM address, asset, amount, `pendingId`, queued tx). It
+is gated entirely on operator-set Convex env vars and is silent (skipped,
+never errored) when they are absent or malformed — so local/preview
+deployments that don't set them send nothing.
+
 **Contest**:
 A `VIGILANT_CITIZEN_ROLE` action that cancels a pending shield, refunding
 the shielder's escrow. Used for compliance review (e.g. OFAC-listed

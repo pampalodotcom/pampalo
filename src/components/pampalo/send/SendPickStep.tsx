@@ -62,7 +62,7 @@ export function SendPickStep({
               accent === "priv" ? "text-[var(--priv)]" : "text-[var(--pub)]",
             )}
           >
-            {accent === "priv" ? "shielded" : "public"}
+            {accent === "priv" ? "private" : "public"}
           </span>{" "}
           balance.
         </p>
@@ -101,13 +101,13 @@ export function SendPickStep({
       >
         {mode === "private" ? (
           <>
-            <MoonIcon className="inline size-3 mr-1" /> Shielded — only the
-            recipient can decrypt it.
+            <MoonIcon className="inline size-3 mr-1" /> Private — only the
+            person you send to can see it.
           </>
         ) : (
           <>
-            <SunIcon className="inline size-3 mr-1" /> Visible on-chain. Anyone
-            can see it.
+            <SunIcon className="inline size-3 mr-1" /> Visible on the public
+            blockchain — anyone can see it.
           </>
         )}
       </p>
@@ -119,7 +119,7 @@ export function SendPickStep({
         {choices.length === 0 ? (
           <div className="rounded-2xl border border-line bg-paper-lo px-4 py-6 text-center text-[12.5px] text-ink-mute">
             {mode === "private"
-              ? "No shielded-send networks available yet."
+              ? "No networks support private sends yet."
               : "Loading networks…"}
           </div>
         ) : (

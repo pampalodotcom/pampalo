@@ -201,12 +201,12 @@ export function UnshieldConfirmSheet({
       return;
     }
     if (!merkle.tree) {
-      setError("Merkle tree still loading — try again in a moment.");
+      setError("Still preparing your private balance — try again in a moment.");
       return;
     }
     if (!inputNote) {
       setError(
-        "No spendable shielded note covers this amount. Try a smaller drag or shield more first.",
+        "None of your private balances is large enough for this amount. Try a smaller amount, or add more first.",
       );
       return;
     }
@@ -436,7 +436,7 @@ export function UnshieldConfirmSheet({
               </div>
               <div className="text-[11.5px] text-ink-mute">
                 Moving from your shielded balance back to your public wallet on{" "}
-                {deployment ? `chain ${deployment.chainId}` : "this chain"}.
+                {deployment?.networkName ?? "this network"}.
               </div>
             </div>
             <Sun className="size-5 shrink-0 text-[var(--pub)]" aria-hidden />
@@ -578,7 +578,7 @@ function StatusLine({ phase, error }: { phase: Phase; error: string | null }) {
     return (
       <ProgressLine
         label="Generating proof"
-        sub="First run on a fresh tab pays the bb.js WASM warm-up (a few seconds)."
+        sub="The first time can take a few seconds while the prover loads."
       />
     );
   }

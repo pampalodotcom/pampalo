@@ -502,16 +502,16 @@ function PrivateRecipient({
   return (
     <div className="flex flex-col gap-3">
       <Field
-        label="Poseidon address"
-        hint="Spend / stealth address (0x + 64 hex)"
+        label="Private address"
+        hint="Their private receiving address (0x + 64 characters)"
         value={poseidon}
         onChange={(v) => onChange(v.trim(), envelope)}
         valid={poseidonValid}
         placeholder="0x…"
       />
       <Field
-        label="Envelope key"
-        hint="Note encryption key (0x04 + 128 hex, uncompressed secp)"
+        label="Encryption key"
+        hint="Encrypts the payment to them (0x04 + 128 characters)"
         value={envelope}
         onChange={(v) => onChange(poseidon, v.trim())}
         valid={envelopeValid}

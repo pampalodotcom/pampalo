@@ -42,7 +42,7 @@ export const Route = createRootRouteWithContext<{
       {
         name: "description",
         content:
-          "Pampalo uses passkey PRF to encrypt and decrypt all application data. Any data stored in the database is encrypted with (pass)keys that you control.",
+          "Pampalo encrypts and decrypts all your data with your passkey. Anything stored is encrypted with keys only you control.",
       },
 
       { property: "og:type", content: "website" },
@@ -51,7 +51,7 @@ export const Route = createRootRouteWithContext<{
       {
         property: "og:description",
         content:
-          "Passkey-encrypted private money. Your keys, your data - encrypted client-side, stored as ciphertext.",
+          "Passkey-encrypted private money. Your keys, your data — encrypted on your device before it's ever stored.",
       },
       { property: "og:image", content: "/og-image.png" },
       { property: "og:image:type", content: "image/png" },

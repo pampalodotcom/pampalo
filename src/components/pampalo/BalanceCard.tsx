@@ -174,7 +174,7 @@ export function BalanceCard({
                 onClick={onSync}
                 disabled={syncing}
                 aria-label={
-                  syncing ? "Syncing notes" : "Sync notes from Convex"
+                  syncing ? "Syncing balances" : "Sync balances"
                 }
                 className={cn(
                   "inline-flex items-center justify-center gap-1.5",

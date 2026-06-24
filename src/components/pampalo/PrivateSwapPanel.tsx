@@ -478,7 +478,7 @@ export function PrivateSwapPanel({
           <p className="max-w-[340px] text-[13px] text-ink-mute">
             {confirmed
               ? "Your new private balance is ready."
-              : "Submitted — syncing your private notes as they’re decrypted. You can keep this open."}
+              : "Submitted — updating your private balance. You can keep this open."}
           </p>
         </div>
         <button
@@ -577,7 +577,7 @@ export function PrivateSwapPanel({
         {targetOut !== null && (
           <p className="mt-1 text-[11.5px] text-ink-mute">
             Minimum received {minOutDisplay} {disp(tokenOut.symbol)} (0.5% floor) ·
-            surplus is forfeited (ADR 0020)
+            Anything above this stays in the pool.
           </p>
         )}
       </div>
@@ -589,7 +589,7 @@ export function PrivateSwapPanel({
       )}
       {amountWei && !insufficient && !coveringNote && (
         <p className="text-[12.5px] text-[var(--pub)]">
-          No single note covers this amount yet (multi-note swaps coming soon).
+          No single private balance is large enough yet (combining balances is coming soon).
         </p>
       )}
       {error && (

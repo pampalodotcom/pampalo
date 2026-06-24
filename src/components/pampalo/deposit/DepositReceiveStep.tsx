@@ -131,7 +131,7 @@ export function DepositReceiveStep({
               isPrivate ? "text-[var(--priv)]" : "text-[var(--pub)]",
             )}
           >
-            {isPrivate ? "shielded" : "public"}
+            {isPrivate ? "private" : "public"}
           </span>{" "}
           balance on{" "}
           <span className="font-semibold text-ink">{network.name}</span>.
@@ -185,7 +185,7 @@ export function DepositReceiveStep({
         <div className="flex items-center gap-3 px-3 pt-3 pb-2">
           <NetworkLogo chainId={network.chainId} size={28} />
           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-ink-mute">
-            {network.name} · {isPrivate ? "Shielded" : "Public"}
+            {network.name} · {isPrivate ? "Private" : "Public"}
           </p>
         </div>
         <div className="flex flex-col">
@@ -196,7 +196,7 @@ export function DepositReceiveStep({
             onToggleFull={() => setShowFull((v) => !v)}
           />
           {isPrivate && envelope && (
-            <AddressRow label="Envelope" value={envelope} />
+            <AddressRow label="Encryption key" value={envelope} />
           )}
           {isPrivate && poseidon && (
             <AddressRow label="Private" value={poseidon} />

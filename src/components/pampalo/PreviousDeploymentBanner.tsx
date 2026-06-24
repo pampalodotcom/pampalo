@@ -83,7 +83,7 @@ export function PreviousDeploymentBanner({
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-[14px] font-semibold text-ink">
-          You have notes in a previous Pampalo deployment
+          You have funds in a previous Pampalo contract
         </p>
         <p className="text-[12.5px] text-ink-soft">
           The contract was upgraded. Withdraw them to your wallet from your

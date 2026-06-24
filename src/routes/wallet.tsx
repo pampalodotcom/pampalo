@@ -262,7 +262,9 @@ function Dashboard({
     const pendingId = pendingIdByLeaf.get(req.leafCommitment.toLowerCase());
     const dep = deploymentRows?.find((d) => d.chainId === req.chainId);
     if (!pendingId || !dep) {
-      toast.error("Couldn't resolve this shield yet — tap Sync and try again.");
+      toast.error(
+        "We couldn't find that private transfer yet — tap Sync and try again.",
+      );
       return;
     }
     setCancelPayload({
@@ -287,7 +289,9 @@ function Dashboard({
         r.leafCommitment.toLowerCase() === note.leafCommitment.toLowerCase(),
     );
     if (!row) {
-      toast.error("Couldn't resolve this shield yet — tap Sync and try again.");
+      toast.error(
+        "We couldn't find that private transfer yet — tap Sync and try again.",
+      );
       return;
     }
     setFinalisePayload({ kind: "sponsor", row });
@@ -576,8 +580,7 @@ function Dashboard({
               Your assets
             </h2>
             <p className="text-[12px] text-ink-mute">
-              Each balance is split between what’s visible on-chain and what’s
-              shielded.
+              Each balance is split between what’s public and what’s private.
             </p>
           </div>
           <NetworkFilterTabs
@@ -735,7 +738,9 @@ function BalanceCardConnected({
       const total =
         result.added + result.skippedAlreadyPresent + result.skippedByCursor;
       if (result.added > 0) {
-        toast(`Synced ${result.added} note${result.added === 1 ? "" : "s"}.`);
+        toast(
+          `Sync complete — ${result.added} update${result.added === 1 ? "" : "s"}.`,
+        );
       } else if (total === 0) {
         toast("Nothing to sync.");
       } else {

@@ -226,16 +226,16 @@ function SharePage() {
               )}
               {search.envelope && (
                 <LabeledAddress
-                  label="Envelope"
-                  hint="Note encryption (secp256k1 public key)"
+                  label="Encryption key"
+                  hint="Used to send this person private transfers"
                   value={search.envelope}
                   className={search.evm ? "mt-3" : undefined}
                 />
               )}
               {search.poseidon && (
                 <LabeledAddress
-                  label="Private"
-                  hint="Poseidon2 (ZK identity)"
+                  label="Private address"
+                  hint="Their address for private transfers"
                   value={search.poseidon}
                   className={search.evm || search.envelope ? "mt-3" : undefined}
                 />
@@ -297,8 +297,8 @@ function SharePage() {
             <div className="flex flex-col gap-2 text-[13.5px] text-ink-soft">
               <p>No address details on this link.</p>
               <p className="text-[12px] text-ink-mute">
-                The page expects at least an <code>evm</code> query parameter,
-                e.g. <code>/share?evm=0xabc…</code>.
+                This link doesn't include an address to show. Ask the sender
+                for a new link.
               </p>
             </div>
           )}
