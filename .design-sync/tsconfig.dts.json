@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["entry.tsx"],
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "../types",
+    "rootDir": "..",
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "types": []
+  }
+}

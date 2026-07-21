@@ -1,0 +1,4 @@
+/* design-sync Tailwind entry: the app stylesheet plus an explicit @source
+   for the authored preview files (Tailwind auto-scan skips dot-dirs). */
+@import "../src/styles.css";
+@source "./previews";
